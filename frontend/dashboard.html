@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard · Project Tracker DBS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { mocha: { base:'#1e1e2e', mantle:'#181825', crust:'#11111b', text:'#cdd6f4', subtext:'#a6adc8', surface:'#313244', overlay:'#6c7086', peach:'#fab387', green:'#a6e3a1', mauve:'#cba6f7', red:'#f38ba8', yellow:'#f9e2af' } } } } };
+  </script>
+</head>
+<body class="min-h-screen bg-mocha-base text-mocha-text">
+  <main class="mx-auto max-w-7xl p-6">
+    <header class="mb-6 flex items-center justify-between">
+      <div><p class="text-xs uppercase tracking-[0.35em] text-mocha-peach">Project Tracker DBS</p><h1 class="text-4xl font-bold">Dashboard</h1></div>
+      <nav class="flex gap-2 text-sm text-mocha-subtext"><a href="project_detail.html">Detail</a><a href="settings.html">Settings</a><a href="automations.html">Automations</a><a href="report.html">Report</a><a href="second_brain.html">Second Brain</a></nav>
+    </header>
+    <section class="grid gap-4 md:grid-cols-4">
+      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">UAT Prepare</p><p class="mt-2 text-3xl font-bold text-mocha-peach">8</p></article>
+      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">Prod Ready</p><p class="mt-2 text-3xl font-bold text-mocha-mauve">5</p></article>
+      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">Implemented</p><p class="mt-2 text-3xl font-bold text-mocha-green">21</p></article>
+      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">T-10 Alerts</p><p class="mt-2 text-3xl font-bold text-mocha-red">2</p></article>
+    </section>
+    <section class="mt-6 rounded-2xl bg-mocha-mantle p-5">
+      <div class="mb-4 flex items-center justify-between"><h2 class="text-xl font-semibold">Projects</h2><button onclick="bridge('refresh_projects')" class="rounded-xl bg-mocha-peach px-4 py-2 text-mocha-crust">Refresh</button></div>
+      <div class="overflow-hidden rounded-xl border border-mocha-surface"><table class="w-full text-left text-sm"><thead class="bg-mocha-crust text-mocha-subtext"><tr><th class="p-3">Project</th><th>CR</th><th>Drone</th><th>State</th><th>Owner</th></tr></thead><tbody id="projectRows"></tbody></table></div>
+    </section>
+  </main>
+  <script>
+    const projects = [{name:'Core Banking Refresh',cr:'CR-2026-001',drone:'DRN-1142',state:'UAT_PREPARE',owner:'Ops'}, {name:'ATM Monitoring Drone',cr:'CR-2026-014',drone:'DRN-1201',state:'PROD_READY',owner:'Automation'}, {name:'Branch Rollout',cr:'CR-2026-021',drone:'DRN-1288',state:'IMPLEMENTED',owner:'Release'}];
+    document.getElementById('projectRows').innerHTML = projects.map(p => `<tr class="border-t border-mocha-surface"><td class="p-3 font-medium">${p.name}</td><td>${p.cr}</td><td>${p.drone}</td><td><span class="rounded-full bg-mocha-surface px-2 py-1 text-mocha-peach">${p.state}</span></td><td>${p.owner}</td></tr>`).join('');
+    function bridge(action, payload = {}) { if (window.pywebview?.api?.[action]) return window.pywebview.api[action](payload); console.log('pywebview fallback', action, payload); }
+  </script>
+</body>
+</html>

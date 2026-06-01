@@ -1,0 +1,8 @@
+pywebview>=6.2.1
+pywin32>=306
+pyinstaller>=6.0.0
+pyautogui>=0.9.54
+pyperclip>=1.8.2
+send2trash>=1.8.3
+watchdog>=4.0.0
+python-dateutil>=2.9.0

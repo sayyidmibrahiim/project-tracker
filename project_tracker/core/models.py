@@ -1,0 +1,436 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from project_tracker.core.enums import CRState, DroneState, EmailMode, Language, Theme
+
+PROJECT_DATA_SCHEMA = "project_data_v1"
+
+
+def local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
+def datetime_to_json(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise ValueError("Datetime must be timezone-aware")
+    return value.isoformat()
+
+
+def datetime_from_json(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    result = datetime.fromisoformat(value)
+    if result.tzinfo is None or result.tzinfo.utcoffset(result) is None:
+        raise ValueError("Datetime must be timezone-aware")
+    return result
+
+
+def _string_list(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [str(value) for value in values]
+
+
+def _conditions(values: Any) -> list[dict[str, Any]]:
+    if not isinstance(values, list):
+        return []
+    return [dict(value) for value in values if isinstance(value, dict)]
+
+
+@dataclass(slots=True)
+class HistoryEntry:
+    timestamp: datetime
+    action: str
+    detail: str
+    user: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> HistoryEntry:
+        timestamp = datetime_from_json(data.get("timestamp"))
+        if timestamp is None:
+            raise ValueError("History timestamp is required")
+        return cls(
+            timestamp=timestamp,
+            action=str(data.get("action", "")),
+            detail=str(data.get("detail", "")),
+            user=str(data.get("user", "")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": datetime_to_json(self.timestamp),
+            "action": self.action,
+            "detail": self.detail,
+            "user": self.user,
+        }
+
+
+@dataclass(slots=True)
+class EmailFlags:
+    ack_sent: bool = False
+    approval_sent: bool = False
+    last_cr_link_when_sent: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EmailFlags:
+        return cls(
+            ack_sent=bool(data.get("ack_sent", False)),
+            approval_sent=bool(data.get("approval_sent", False)),
+            last_cr_link_when_sent=data.get("last_cr_link_when_sent"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ack_sent": self.ack_sent,
+            "approval_sent": self.approval_sent,
+            "last_cr_link_when_sent": self.last_cr_link_when_sent,
+        }
+
+
+@dataclass(slots=True)
+class DroneTicket:
+    subfolder_name: str | None = None
+    drone_link: str = ""
+    drone_state: DroneState = DroneState.UAT
+    drone_state_updated_at: datetime | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DroneTicket:
+        subfolder_name = data.get("subfolder_name")
+        return cls(
+            subfolder_name=str(subfolder_name) if subfolder_name else None,
+            drone_link=str(data.get("drone_link", "")),
+            drone_state=DroneState(data.get("drone_state", DroneState.UAT.value)),
+            drone_state_updated_at=datetime_from_json(data.get("drone_state_updated_at")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "subfolder_name": self.subfolder_name,
+            "drone_link": self.drone_link,
+            "drone_state": self.drone_state.value,
+            "drone_state_updated_at": datetime_to_json(self.drone_state_updated_at),
+        }
+
+
+@dataclass(slots=True)
+class ProjectMetadata:
+    project_name: str = ""
+    start_datetime: datetime | None = None
+    end_datetime: datetime | None = None
+    cr_link: str = ""
+    cr_state: CRState = CRState.PENDING_SUBMISSION
+    cr_state_updated_at: datetime | None = None
+    cr_pending_approval_at: datetime | None = None
+    drone_tickets: list[DroneTicket] = field(default_factory=list)
+    notes: str = ""
+    implementation_plan: str = ""
+    email_flags: EmailFlags = field(default_factory=EmailFlags)
+    history: list[HistoryEntry] = field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
+        return cls(
+            project_name=str(data.get("project_name", "")),
+            start_datetime=datetime_from_json(data.get("start_datetime")),
+            end_datetime=datetime_from_json(data.get("end_datetime")),
+            cr_link=str(data.get("cr_link", "")),
+            cr_state=CRState(data.get("cr_state", CRState.PENDING_SUBMISSION.value)),
+            cr_state_updated_at=datetime_from_json(data.get("cr_state_updated_at")),
+            cr_pending_approval_at=datetime_from_json(data.get("cr_pending_approval_at")),
+            drone_tickets=[DroneTicket.from_dict(item) for item in data.get("drone_tickets", [])],
+            notes=str(data.get("notes", "")),
+            implementation_plan=str(data.get("implementation_plan", "")),
+            email_flags=EmailFlags.from_dict(data.get("email_flags", {})),
+            history=[HistoryEntry.from_dict(item) for item in data.get("history", [])],
+            created_at=datetime_from_json(data.get("created_at")),
+            updated_at=datetime_from_json(data.get("updated_at")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "$schema": PROJECT_DATA_SCHEMA,
+            "project_name": self.project_name,
+            "start_datetime": datetime_to_json(self.start_datetime),
+            "end_datetime": datetime_to_json(self.end_datetime),
+            "cr_link": self.cr_link,
+            "cr_state": self.cr_state.value,
+            "cr_state_updated_at": datetime_to_json(self.cr_state_updated_at),
+            "cr_pending_approval_at": datetime_to_json(self.cr_pending_approval_at),
+            "drone_tickets": [ticket.to_dict() for ticket in self.drone_tickets],
+            "notes": self.notes,
+            "implementation_plan": self.implementation_plan,
+            "email_flags": self.email_flags.to_dict(),
+            "history": [entry.to_dict() for entry in self.history],
+            "created_at": datetime_to_json(self.created_at),
+            "updated_at": datetime_to_json(self.updated_at),
+        }
+
+
+@dataclass(slots=True)
+class AutomationCondition:
+    type: str = ""
+    operator: str = "equals"
+    value: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AutomationCondition:
+        return cls(
+            type=str(data.get("type", "")),
+            operator=str(data.get("operator", "equals")),
+            value=str(data.get("value", "")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.type, "operator": self.operator, "value": self.value}
+
+
+@dataclass(slots=True)
+class AutomationRule:
+    name: str = ""
+    description: str = ""
+    warning_only: bool = False
+    conditions: list[AutomationCondition] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AutomationRule:
+        return cls(
+            name=str(data.get("name", "")),
+            description=str(data.get("description", "")),
+            warning_only=bool(data.get("warning_only", False)),
+            conditions=[AutomationCondition.from_dict(item) for item in data.get("conditions", [])],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "warning_only": self.warning_only,
+            "conditions": [condition.to_dict() for condition in self.conditions],
+        }
+
+
+@dataclass(slots=True)
+class EmailCategorySettings:
+    to: str = ""
+    cc: str = ""
+    subject_template: str = ""
+    body_template: str = ""
+    attachment_template_file: str = ""
+    mode_override: EmailMode | None = None
+    conditions: list[dict[str, Any]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EmailCategorySettings:
+        mode_override = data.get("mode_override")
+        return cls(
+            to=str(data.get("to", "")),
+            cc=str(data.get("cc", "")),
+            subject_template=str(data.get("subject_template", "")),
+            body_template=str(data.get("body_template", "")),
+            attachment_template_file=str(data.get("attachment_template_file", "")),
+            mode_override=EmailMode(mode_override) if mode_override else None,
+            conditions=_conditions(data.get("conditions", [])),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "to": self.to,
+            "cc": self.cc,
+            "subject_template": self.subject_template,
+            "body_template": self.body_template,
+            "attachment_template_file": self.attachment_template_file,
+            "mode_override": self.mode_override.value if self.mode_override else None,
+            "conditions": self.conditions,
+        }
+
+
+@dataclass(slots=True)
+class EmailSettings:
+    global_mode: EmailMode = EmailMode.DRAFT
+    template_folder_path: Path | None = None
+    download_poll_interval_seconds: int = 10
+    download_timeout_hours: int = 3
+    categories: dict[str, EmailCategorySettings] = field(default_factory=dict)
+
+    @classmethod
+    def default(cls) -> EmailSettings:
+        return cls(
+            categories={
+                "ACK_UAT": EmailCategorySettings(),
+                "ACK_SOP": EmailCategorySettings(),
+                "APRVL_CR": EmailCategorySettings(),
+                "APRVL_SOP": EmailCategorySettings(),
+            }
+        )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EmailSettings:
+        categories = data.get("categories", {})
+        default_categories = cls.default().categories
+        parsed_categories = {
+            name: EmailCategorySettings.from_dict(categories.get(name, {}))
+            for name in default_categories
+        }
+        template_folder_path = data.get("template_folder_path", "")
+        return cls(
+            global_mode=EmailMode(data.get("global_mode", EmailMode.DRAFT.value)),
+            template_folder_path=Path(template_folder_path) if template_folder_path else None,
+            download_poll_interval_seconds=int(data.get("download_poll_interval_seconds", 10)),
+            download_timeout_hours=int(data.get("download_timeout_hours", 3)),
+            categories=parsed_categories,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "global_mode": self.global_mode.value,
+            "template_folder_path": str(self.template_folder_path) if self.template_folder_path else "",
+            "download_poll_interval_seconds": self.download_poll_interval_seconds,
+            "download_timeout_hours": self.download_timeout_hours,
+            "categories": {name: settings.to_dict() for name, settings in self.categories.items()},
+        }
+
+
+@dataclass(slots=True)
+class TeamsAutomation:
+    name: str = ""
+    target_email: str = ""
+    target_group: str = ""
+    mentions: list[str] = field(default_factory=list)
+    message_template: str = ""
+    attachment_paths: list[Path] = field(default_factory=list)
+    conditions: list[dict[str, Any]] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TeamsAutomation:
+        return cls(
+            name=str(data.get("name", "")),
+            target_email=str(data.get("target_email", "")),
+            target_group=str(data.get("target_group", "")),
+            mentions=_string_list(data.get("mentions", [])),
+            message_template=str(data.get("message_template", "")),
+            attachment_paths=[Path(value) for value in _string_list(data.get("attachment_paths", []))],
+            conditions=_conditions(data.get("conditions", [])),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "target_email": self.target_email,
+            "target_group": self.target_group,
+            "mentions": self.mentions,
+            "message_template": self.message_template,
+            "attachment_paths": [str(path) for path in self.attachment_paths],
+            "conditions": self.conditions,
+        }
+
+
+@dataclass(slots=True)
+class TeamsSettings:
+    countdown_seconds: int = 3
+    teams_auto_send: bool = False
+    webhook_url: str = ""
+    automations: list[TeamsAutomation] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TeamsSettings:
+        return cls(
+            countdown_seconds=int(data.get("countdown_seconds", 3)),
+            teams_auto_send=bool(data.get("teams_auto_send", False)),
+            webhook_url=str(data.get("webhook_url", "")),
+            automations=[TeamsAutomation.from_dict(item) for item in data.get("automations", [])],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "countdown_seconds": self.countdown_seconds,
+            "teams_auto_send": self.teams_auto_send,
+            "webhook_url": self.webhook_url,
+            "automations": [automation.to_dict() for automation in self.automations],
+        }
+
+
+@dataclass(slots=True)
+class AppSettings:
+    root_folder: Path | None = None
+    display_name: str = ""
+    language: Language = Language.ENGLISH
+    datetime_format: str = "ddd, dd MMM yyyy HH:mm"
+    t10_threshold_days: int = 10
+    auto_refresh_interval: str = "off"
+    theme: Theme = Theme.DARK
+    startup_behavior: str = "current_year_dashboard"
+    second_brain_folder: Path | None = None
+    file_template_folder: Path | None = None
+    automation_rules: list[AutomationRule] = field(default_factory=list)
+    email: EmailSettings = field(default_factory=EmailSettings.default)
+    teams: TeamsSettings = field(default_factory=TeamsSettings)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AppSettings:
+        root_folder = data.get("root_folder", "")
+        second_brain_folder = data.get("second_brain_folder", "")
+        file_template_folder = data.get("file_template_folder", "")
+        return cls(
+            root_folder=Path(root_folder) if root_folder else None,
+            display_name=str(data.get("display_name", "")),
+            language=Language(data.get("language", Language.ENGLISH.value)),
+            datetime_format=str(data.get("datetime_format", "ddd, dd MMM yyyy HH:mm")),
+            t10_threshold_days=int(data.get("t10_threshold_days", 10)),
+            auto_refresh_interval=str(data.get("auto_refresh_interval", "off")),
+            theme=Theme(data.get("theme", Theme.DARK.value)),
+            startup_behavior=str(data.get("startup_behavior", "current_year_dashboard")),
+            second_brain_folder=Path(second_brain_folder) if second_brain_folder else None,
+            file_template_folder=Path(file_template_folder) if file_template_folder else None,
+            automation_rules=[AutomationRule.from_dict(item) for item in data.get("automation_rules", [])],
+            email=EmailSettings.from_dict(data.get("email", {})),
+            teams=TeamsSettings.from_dict(data.get("teams", {})),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "root_folder": str(self.root_folder) if self.root_folder else "",
+            "display_name": self.display_name,
+            "language": self.language.value,
+            "datetime_format": self.datetime_format,
+            "t10_threshold_days": self.t10_threshold_days,
+            "auto_refresh_interval": self.auto_refresh_interval,
+            "theme": self.theme.value,
+            "startup_behavior": self.startup_behavior,
+            "second_brain_folder": str(self.second_brain_folder) if self.second_brain_folder else "",
+            "file_template_folder": str(self.file_template_folder) if self.file_template_folder else "",
+            "automation_rules": [rule.to_dict() for rule in self.automation_rules],
+            "email": self.email.to_dict(),
+            "teams": self.teams.to_dict(),
+        }
+
+@dataclass(slots=True)
+class Notification:
+    id: str
+    type: str
+    title: str
+    message: str
+    timestamp: datetime
+    project_path: Path | None = None
+    dismissed: bool = False
+
+
+@dataclass(slots=True)
+class DownloadEmailJob:
+    """Download Email automation job state."""
+    job_id: str
+    cr_number: str
+    project_name: str
+    project_path: Path
+    start_time: datetime
+    status: str  # active, completed, timeout, stopped
+    matching_rule: str | None = None
+    dismissed: bool = False
