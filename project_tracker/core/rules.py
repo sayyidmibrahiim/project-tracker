@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import getpass
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
@@ -49,6 +50,24 @@ class TransitionGuardResult(NamedTuple):
 
 def is_organizational_folder(path: Path) -> bool:
     return path.name.casefold() in ORGANIZATIONAL_FOLDER_NAMES
+
+
+def extract_cr_number(url: str) -> str | None:
+    if not url.strip():
+        return None
+    match = re.search(r"[?&]CRNumber=(CR\d+)(?:&|$)", url)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def extract_drone_ticket(url: str) -> str | None:
+    if not url.strip():
+        return None
+    match = re.search(r"/(D-[A-Z0-9-]+)/?$", url)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def validate_windows_folder_name(name: str) -> None:
