@@ -4,32 +4,64 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard · Project Tracker DBS</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="assets/tailwind.min.js"></script>
   <script>
-    tailwind.config = { theme: { extend: { colors: { mocha: { base:'#1e1e2e', mantle:'#181825', crust:'#11111b', text:'#cdd6f4', subtext:'#a6adc8', surface:'#313244', overlay:'#6c7086', peach:'#fab387', green:'#a6e3a1', mauve:'#cba6f7', red:'#f38ba8', yellow:'#f9e2af' } } } } };
+    tailwind.config={theme:{extend:{colors:{dbs:{bg:'#0b0b0d',panel:'#151518',card:'#ffffff',ink:'#111827',muted:'#6b7280',line:'#d1d5db',red:'#b91c1c',red2:'#991b1b',soft:'#f3f4f6',ok:'#166534',warn:'#92400e'}},fontFamily:{ui:['Segoe UI','Arial','sans-serif'],mono:['Cascadia Code','Consolas','monospace']}}}};
   </script>
 </head>
-<body class="min-h-screen bg-mocha-base text-mocha-text">
-  <main class="mx-auto max-w-7xl p-6">
-    <header class="mb-6 flex items-center justify-between">
-      <div><p class="text-xs uppercase tracking-[0.35em] text-mocha-peach">Project Tracker DBS</p><h1 class="text-4xl font-bold">Dashboard</h1></div>
-      <nav class="flex gap-2 text-sm text-mocha-subtext"><a href="project_detail.html">Detail</a><a href="settings.html">Settings</a><a href="automations.html">Automations</a><a href="report.html">Report</a><a href="second_brain.html">Second Brain</a></nav>
-    </header>
-    <section class="grid gap-4 md:grid-cols-4">
-      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">UAT Prepare</p><p class="mt-2 text-3xl font-bold text-mocha-peach">8</p></article>
-      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">Prod Ready</p><p class="mt-2 text-3xl font-bold text-mocha-mauve">5</p></article>
-      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">Implemented</p><p class="mt-2 text-3xl font-bold text-mocha-green">21</p></article>
-      <article class="rounded-2xl bg-mocha-mantle p-5"><p class="text-sm text-mocha-subtext">T-10 Alerts</p><p class="mt-2 text-3xl font-bold text-mocha-red">2</p></article>
-    </section>
-    <section class="mt-6 rounded-2xl bg-mocha-mantle p-5">
-      <div class="mb-4 flex items-center justify-between"><h2 class="text-xl font-semibold">Projects</h2><button onclick="bridge('refresh_projects')" class="rounded-xl bg-mocha-peach px-4 py-2 text-mocha-crust">Refresh</button></div>
-      <div class="overflow-hidden rounded-xl border border-mocha-surface"><table class="w-full text-left text-sm"><thead class="bg-mocha-crust text-mocha-subtext"><tr><th class="p-3">Project</th><th>CR</th><th>Drone</th><th>State</th><th>Owner</th></tr></thead><tbody id="projectRows"></tbody></table></div>
-    </section>
-  </main>
-  <script>
-    const projects = [{name:'Core Banking Refresh',cr:'CR-2026-001',drone:'DRN-1142',state:'UAT_PREPARE',owner:'Ops'}, {name:'ATM Monitoring Drone',cr:'CR-2026-014',drone:'DRN-1201',state:'PROD_READY',owner:'Automation'}, {name:'Branch Rollout',cr:'CR-2026-021',drone:'DRN-1288',state:'IMPLEMENTED',owner:'Release'}];
-    document.getElementById('projectRows').innerHTML = projects.map(p => `<tr class="border-t border-mocha-surface"><td class="p-3 font-medium">${p.name}</td><td>${p.cr}</td><td>${p.drone}</td><td><span class="rounded-full bg-mocha-surface px-2 py-1 text-mocha-peach">${p.state}</span></td><td>${p.owner}</td></tr>`).join('');
-    function bridge(action, payload = {}) { if (window.pywebview?.api?.[action]) return window.pywebview.api[action](payload); console.log('pywebview fallback', action, payload); }
-  </script>
+<body class="h-screen overflow-hidden bg-dbs-bg font-ui text-dbs-ink">
+  <div class="flex h-screen">
+    <aside class="flex w-52 shrink-0 flex-col border-r border-dbs-line bg-dbs-panel text-white">
+      <div class="border-b border-dbs-line/20 p-4"><p class="text-xs font-black uppercase tracking-widest text-red-200">Project Tracker</p><h1 class="mt-1 text-lg font-black">DBS</h1></div>
+      <nav id="nav" class="space-y-1 p-2 text-sm font-bold"></nav>
+      <section class="m-2 mt-4 min-h-0 flex-1 rounded border border-dbs-line/20 bg-black/20 p-2">
+        <div class="mb-2 flex items-center justify-between"><p class="text-xs font-black uppercase text-red-200">Notifications</p><button id="dismissAll" class="text-xs text-white/70 hover:text-white">Dismiss</button></div>
+        <div id="notifList" class="space-y-2 overflow-y-auto text-xs"></div>
+      </section>
+    </aside>
+    <main class="flex min-w-0 flex-1 flex-col bg-white">
+      <header class="flex h-14 shrink-0 items-center justify-between bg-dbs-red px-4 text-white">
+        <h2 class="text-xl font-black">Dashboard</h2>
+        <div class="flex items-center gap-2">
+          <select id="yearFilter" class="h-8 rounded bg-white px-2 text-xs font-bold text-dbs-ink"><option value="all">All years</option></select>
+          <input id="searchInput" class="h-8 w-56 rounded bg-white px-3 text-xs font-bold text-dbs-ink" placeholder="Search project, CR, Drone" />
+          <select id="crFilter" class="h-8 rounded bg-white px-2 text-xs font-bold text-dbs-ink"><option value="all">All CR states</option></select>
+          <button id="addProject" class="h-8 rounded bg-white px-3 text-xs font-black text-dbs-red">+ Add Project TODO</button>
+          <button id="refreshBtn" class="h-8 rounded bg-white px-3 text-xs font-black text-dbs-red">Refresh</button>
+        </div>
+      </header>
+      <section class="flex min-h-0 flex-1 flex-col gap-3 bg-dbs-soft p-4">
+        <div class="rounded border border-dbs-line bg-white p-3"><div id="statusTabs" class="flex flex-wrap gap-2"></div></div>
+        <div id="statusMsg" class="hidden rounded border border-dbs-line bg-white p-3 text-sm font-bold"></div>
+        <section class="min-h-0 flex-1 overflow-hidden rounded border border-dbs-line bg-white">
+          <div class="grid grid-cols-[44px_1.3fr_.9fr_.9fr_.9fr_.9fr_.9fr_160px] bg-dbs-ink text-xs font-black uppercase text-white">
+            <div class="p-2">No</div><div class="p-2">Project</div><div class="p-2">CR</div><div class="p-2">CR State</div><div class="p-2">Drone</div><div class="p-2">Folder</div><div class="p-2">Window</div><div class="p-2">Actions</div>
+          </div>
+          <div id="projectTable" class="max-h-[calc(100vh-190px)] overflow-y-auto text-sm"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+<script>
+const pages=[['dashboard.html','Dashboard'],['project_detail.html','Project Details'],['report.html','Report'],['second_brain.html','Second Brain'],['automations.html','Automations'],['settings.html','Settings']];
+function route(page){window.location.href=page}function renderNav(){const cur=location.pathname.split('/').pop()||'dashboard.html';nav.innerHTML=pages.map(([href,label])=>`<button onclick="route('${href}')" class="w-full rounded px-3 py-2 text-left ${cur===href?'bg-dbs-red text-white':'text-white/75 hover:bg-white/10'}">${label}</button>`).join('')}
+const api=()=>window.pywebview&&window.pywebview.api;const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+const state=v=>String(v||'UNKNOWN').replaceAll('-','_').replaceAll(' ','_').toUpperCase();const label=v=>state(v).replaceAll('_',' ');
+let allProjects=[],activeStatus='All',notifications=[];
+function pathOf(p){return p.path||p.id||''}function crOf(p){return p.cr_number||p.cr||extractId(p.cr_link,'CR')||'—'}function droneOf(p){const d=p.drone_ticket||p.drone||p.drone_tickets;return Array.isArray(d)?d.map(x=>x.drone_link||x).join(', '):(d||'—')}function extractId(url,prefix){const m=String(url||'').match(new RegExp(prefix+'[A-Z0-9-]*','i'));return m?m[0]||'':''}
+function normalize(p,i){return {raw:p,no:i+1,name:p.name||p.project_name||'Untitled Project',path:pathOf(p),year:p.year||'—',folder:state(p.state||p.project_state),cr:crOf(p),crState:state(p.cr_state),drone:droneOf(p),droneState:state(p.drone_state||''),start:p.start_datetime||p.start||'',end:p.end_datetime||p.end||''}}
+function setMsg(text,isError=false){statusMsg.classList.toggle('hidden',!text);statusMsg.className=`rounded border p-3 text-sm font-bold ${isError?'border-dbs-red bg-red-50 text-dbs-red':'border-dbs-line bg-white text-dbs-ink'}`;statusMsg.textContent=text||''}
+function filters(){const y=yearFilter.value,q=searchInput.value.trim().toLowerCase(),cr=crFilter.value;return allProjects.filter(p=>(activeStatus==='All'||p.folder===activeStatus)&&(y==='all'||String(p.year)===y)&&(cr==='all'||p.crState===cr)&&(!q||[p.name,p.cr,p.drone,p.folder,p.crState,p.year].join(' ').toLowerCase().includes(q)))}
+function renderMeta(){const years=[...new Set(allProjects.map(p=>p.year).filter(y=>y&&y!=='—'))].sort().reverse();yearFilter.innerHTML='<option value="all">All years</option>'+years.map(y=>`<option>${esc(y)}</option>`).join('');const crs=[...new Set(allProjects.map(p=>p.crState).filter(Boolean))].sort();crFilter.innerHTML='<option value="all">All CR states</option>'+crs.map(s=>`<option value="${esc(s)}">${esc(label(s))}</option>`).join('')}
+function renderTabs(){const statuses=['All','UAT_PREPARE','PROD_READY','IMPLEMENTED','POSTPONED'];statusTabs.innerHTML=statuses.map(s=>`<button class="rounded border px-3 py-1 text-xs font-black ${activeStatus===s?'border-dbs-red bg-dbs-red text-white':'border-dbs-line bg-white text-dbs-ink'}" data-s="${s}">${s==='All'?'All':label(s)} (${s==='All'?allProjects.length:allProjects.filter(p=>p.folder===s).length})</button>`).join('');statusTabs.querySelectorAll('button').forEach(b=>b.onclick=()=>{activeStatus=b.dataset.s;render()})}
+function detailsUrl(p){return 'project_detail.html?path='+encodeURIComponent(p.path)}
+function renderTable(rows){if(!rows.length){projectTable.innerHTML='<div class="p-10 text-center font-bold text-dbs-muted">No projects. Configure a root folder or adjust filters.</div>';return}projectTable.innerHTML=rows.map((p,i)=>`<article class="grid grid-cols-[44px_1.3fr_.9fr_.9fr_.9fr_.9fr_.9fr_160px] border-t border-dbs-line hover:bg-red-50"><div class="p-2 font-black">${p.no}</div><div class="p-2"><button data-act="details" data-i="${i}" class="font-black text-dbs-red hover:underline">${esc(p.name)}</button><p class="text-xs text-dbs-muted">${esc(p.path)}</p></div><div class="p-2 font-bold">${esc(p.cr)}</div><div class="p-2"><span class="rounded border border-dbs-line px-2 py-1 text-xs font-black">${esc(label(p.crState))}</span></div><div class="p-2 text-xs font-bold">${esc(p.drone)}</div><div class="p-2"><span class="rounded bg-dbs-soft px-2 py-1 text-xs font-black">${esc(label(p.folder))}</span></div><div class="p-2 text-xs">${esc(p.start||'—')}<br>${esc(p.end||'—')}</div><div class="flex flex-wrap gap-1 p-2"><button data-act="details" data-i="${i}" class="rounded bg-dbs-red px-2 py-1 text-xs font-black text-white">Details</button><button data-act="prod" data-i="${i}" class="rounded border border-dbs-line px-2 py-1 text-xs">PROD</button><button data-act="delete" data-i="${i}" class="rounded border border-dbs-line px-2 py-1 text-xs">Delete</button></div></article>`).join('');projectTable.querySelectorAll('[data-act]').forEach(b=>{const p=rows[Number(b.dataset.i)];if(b.dataset.act==='details')b.onclick=()=>route(detailsUrl(p));if(b.dataset.act==='prod')b.onclick=()=>transitionProject(p.path,'prod_ready');if(b.dataset.act==='delete')b.onclick=()=>deleteProject(p.path);})}
+function render(){renderTabs();renderTable(filters())}
+async function loadProjects(){setMsg('Loading real projects from pywebview bridge...');try{if(!api()?.get_projects)throw new Error('pywebview.api.get_projects is not available');const data=await api().get_projects();allProjects=(Array.isArray(data)?data:[]).map(normalize);setMsg(allProjects.length?'':'No projects returned by backend.')}catch(e){allProjects=[];setMsg(e.message,true)}renderMeta();render();loadNotifications()}
+async function loadNotifications(){try{notifications=api()?.get_notifications?await api().get_notifications():[]}catch(e){notifications=[{id:'notif-error',title:'Notification error',message:e.message}]}notifList.innerHTML=(notifications.length?notifications.slice(0,3):[{title:'No active notifications',message:'Backend notification panel is empty.'}]).map(n=>`<article class="rounded bg-white/10 p-2"><p class="font-black">${esc(n.title||n.type||'Notification')}</p><p class="text-white/70">${esc(n.message||n.timestamp||'')}</p></article>`).join('')}
+async function transitionProject(path,action){if(!api()?.transition_project)return setMsg('TODO: transition_project bridge is unavailable.',true);const r=await api().transition_project(path,action);setMsg(r.ok?'Transition complete':r.error,!r.ok);loadProjects()}
+async function deleteProject(path){if(!confirm('Move this project to Recycle Bin?'))return;if(!api()?.delete_project)return setMsg('TODO: delete_project bridge is unavailable.',true);const r=await api().delete_project(path);setMsg(r.ok?'Delete requested':r.error,!r.ok);loadProjects()}
+dismissAll.onclick=async()=>{if(api()?.dismiss_notifications)await api().dismiss_notifications();notifications=[];loadNotifications()};addProject.onclick=()=>route('project_detail.html?mode=new');refreshBtn.onclick=loadProjects;yearFilter.onchange=render;crFilter.onchange=render;searchInput.oninput=render;renderNav();loadProjects();
+</script>
 </body>
 </html>
