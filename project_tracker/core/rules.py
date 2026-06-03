@@ -87,6 +87,38 @@ def _is_timezone_aware(value: datetime) -> bool:
     return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
 
 
+def is_in_deployment_window(
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
+    now: datetime,
+) -> bool:
+    if start_datetime is None or end_datetime is None:
+        return False
+    if not _is_timezone_aware(start_datetime):
+        return False
+    if not _is_timezone_aware(end_datetime):
+        return False
+    if not _is_timezone_aware(now):
+        return False
+    return start_datetime <= now <= end_datetime
+
+
+def should_auto_start_cr(metadata: ProjectMetadata, now: datetime) -> bool:
+    return metadata.cr_state == CRState.APPROVED and is_in_deployment_window(
+        metadata.start_datetime,
+        metadata.end_datetime,
+        now,
+    )
+
+
+def should_auto_start_drone(ticket: DroneTicket, metadata: ProjectMetadata, now: datetime) -> bool:
+    return (
+        ticket.drone_state == DroneState.APPROVED
+        and bool(ticket.drone_link.strip())
+        and is_in_deployment_window(metadata.start_datetime, metadata.end_datetime, now)
+    )
+
+
 def validate_t10(metadata: ProjectMetadata, *, threshold_days: int = 10) -> T10ValidationResult:
     """
     Validate T-10 rule: CR must reach PENDING APPROVAL no later than threshold_days before start_datetime.

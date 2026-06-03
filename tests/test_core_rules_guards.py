@@ -5,6 +5,9 @@ import pytest
 from project_tracker.core.enums import CRState, DroneState
 from project_tracker.core.models import DroneTicket, ProjectMetadata
 from project_tracker.core.rules import (
+    is_in_deployment_window,
+    should_auto_start_cr,
+    should_auto_start_drone,
     validate_prod_ready_to_implemented_transition,
     validate_t10,
     validate_uat_to_prod_ready_transition,
@@ -13,6 +16,9 @@ from project_tracker.core.rules import (
 NOW = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
 START = datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc)
 END = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+WINDOW_START = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
+WINDOW_END = datetime(2026, 6, 3, 12, 0, tzinfo=timezone.utc)
+WINDOW_NOW = datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc)
 T10_PROOF = START - timedelta(days=10)
 LATE_T10_PROOF = START - timedelta(days=9)
 
@@ -276,3 +282,160 @@ def test_prod_ready_to_implemented_all_drone_tickets_finished_passes() -> None:
 
     assert result.allowed is True
     assert result.failed_guards == []
+
+
+def test_deployment_window_inside_window_returns_true() -> None:
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, WINDOW_NOW) is True
+
+
+def test_deployment_window_exactly_at_start_returns_true() -> None:
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, WINDOW_START) is True
+
+
+def test_deployment_window_exactly_at_end_returns_true() -> None:
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, WINDOW_END) is True
+
+
+def test_deployment_window_before_start_returns_false() -> None:
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, WINDOW_START - timedelta(seconds=1)) is False
+
+
+def test_deployment_window_after_end_returns_false() -> None:
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, WINDOW_END + timedelta(seconds=1)) is False
+
+
+def test_deployment_window_missing_start_returns_false() -> None:
+    assert is_in_deployment_window(None, WINDOW_END, WINDOW_NOW) is False
+
+
+def test_deployment_window_missing_end_returns_false() -> None:
+    assert is_in_deployment_window(WINDOW_START, None, WINDOW_NOW) is False
+
+
+def test_deployment_window_naive_start_returns_false() -> None:
+    naive_start = datetime(2026, 6, 3, 10, 0)
+
+    assert is_in_deployment_window(naive_start, WINDOW_END, WINDOW_NOW) is False
+
+
+def test_deployment_window_naive_end_returns_false() -> None:
+    naive_end = datetime(2026, 6, 3, 12, 0)
+
+    assert is_in_deployment_window(WINDOW_START, naive_end, WINDOW_NOW) is False
+
+
+def test_deployment_window_naive_now_returns_false() -> None:
+    naive_now = datetime(2026, 6, 3, 11, 0)
+
+    assert is_in_deployment_window(WINDOW_START, WINDOW_END, naive_now) is False
+
+
+def test_deployment_window_end_before_start_returns_false() -> None:
+    assert is_in_deployment_window(WINDOW_END, WINDOW_START, WINDOW_NOW) is False
+
+
+def test_should_auto_start_cr_approved_inside_window_returns_true() -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END, cr_state=CRState.APPROVED)
+
+    assert should_auto_start_cr(metadata, WINDOW_NOW) is True
+
+
+def test_should_auto_start_cr_approved_outside_window_returns_false() -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END, cr_state=CRState.APPROVED)
+
+    assert should_auto_start_cr(metadata, WINDOW_END + timedelta(seconds=1)) is False
+
+
+@pytest.mark.parametrize("cr_state", [CRState.PENDING_APPROVAL, CRState.IN_PROGRESS])
+def test_should_auto_start_cr_non_approved_inside_window_returns_false(cr_state: CRState) -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END, cr_state=cr_state)
+
+    assert should_auto_start_cr(metadata, WINDOW_NOW) is False
+
+
+def test_should_auto_start_cr_missing_dates_returns_false() -> None:
+    metadata = ProjectMetadata(cr_state=CRState.APPROVED)
+
+    assert should_auto_start_cr(metadata, WINDOW_NOW) is False
+
+
+def test_should_auto_start_cr_naive_dates_or_now_returns_false() -> None:
+    metadata = ProjectMetadata(
+        start_datetime=datetime(2026, 6, 3, 10, 0),
+        end_datetime=datetime(2026, 6, 3, 12, 0),
+        cr_state=CRState.APPROVED,
+    )
+
+    assert should_auto_start_cr(metadata, WINDOW_NOW) is False
+    assert should_auto_start_cr(
+        ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END, cr_state=CRState.APPROVED),
+        datetime(2026, 6, 3, 11, 0),
+    ) is False
+
+
+def test_should_auto_start_drone_approved_linked_inside_window_returns_true() -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END)
+    ticket = DroneTicket(
+        drone_link="https://drone.example.local/deployment/D-SSIDBI-159",
+        drone_state=DroneState.APPROVED,
+    )
+
+    assert should_auto_start_drone(ticket, metadata, WINDOW_NOW) is True
+
+
+def test_should_auto_start_drone_approved_blank_link_inside_window_returns_false() -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END)
+    ticket = DroneTicket(drone_link="   ", drone_state=DroneState.APPROVED)
+
+    assert should_auto_start_drone(ticket, metadata, WINDOW_NOW) is False
+
+
+@pytest.mark.parametrize(
+    "drone_state",
+    [
+        DroneState.UAT,
+        DroneState.PENDING_APPROVAL,
+        DroneState.FINISHED,
+        DroneState.CANCELED,
+    ],
+)
+def test_should_auto_start_drone_non_approved_linked_inside_window_returns_false(drone_state: DroneState) -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END)
+    ticket = DroneTicket(
+        drone_link="https://drone.example.local/deployment/D-SSIDBI-159",
+        drone_state=drone_state,
+    )
+
+    assert should_auto_start_drone(ticket, metadata, WINDOW_NOW) is False
+
+
+def test_should_auto_start_drone_approved_linked_outside_window_returns_false() -> None:
+    metadata = ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END)
+    ticket = DroneTicket(
+        drone_link="https://drone.example.local/deployment/D-SSIDBI-159",
+        drone_state=DroneState.APPROVED,
+    )
+
+    assert should_auto_start_drone(ticket, metadata, WINDOW_END + timedelta(seconds=1)) is False
+
+
+def test_should_auto_start_drone_missing_or_naive_metadata_times_returns_false() -> None:
+    linked_ticket = DroneTicket(
+        drone_link="https://drone.example.local/deployment/D-SSIDBI-159",
+        drone_state=DroneState.APPROVED,
+    )
+
+    assert should_auto_start_drone(linked_ticket, ProjectMetadata(), WINDOW_NOW) is False
+    assert should_auto_start_drone(
+        linked_ticket,
+        ProjectMetadata(
+            start_datetime=datetime(2026, 6, 3, 10, 0),
+            end_datetime=datetime(2026, 6, 3, 12, 0),
+        ),
+        WINDOW_NOW,
+    ) is False
+    assert should_auto_start_drone(
+        linked_ticket,
+        ProjectMetadata(start_datetime=WINDOW_START, end_datetime=WINDOW_END),
+        datetime(2026, 6, 3, 11, 0),
+    ) is False
