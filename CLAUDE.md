@@ -1,145 +1,268 @@
-# CLAUDE.md
+CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides operational guidance to Claude Code when working in this repository.
 
-## Commands
+Product Source of Truth
 
-Always prefix shell commands with `rtk`, including each command in `&&` chains.
+PRD.md v3.1 is the product and architecture source of truth.
 
-Claude Code shells do not inherit the active venv. Use full venv path:
+If this file conflicts with PRD.md, report the conflict before coding. Do not silently follow outdated instructions.
 
-```bash
+PROJECT_STATUS.md tracks implementation progress, verification status, completed phases, blocked items, and next tasks. Update it after each completed phase or meaningful implementation slice.
+
+Current Locked Stack
+
+Backend:
+
+- Python 3.12+
+- Modular monolith architecture
+- pywebview desktop shell
+- APScheduler for local background/scheduled jobs
+- SQLite as local rebuildable cache/index only
+- Local filesystem + JSON metadata as canonical project source of truth
+
+Frontend:
+
+- Svelte
+- TypeScript
+- Vite
+- Tailwind CSS bundled locally through the frontend build
+- Production frontend output must be served by pywebview local HTTP server / serve-folder mode
+- Do not use raw file:// loading for production frontend
+
+Windows integrations:
+
+- Outlook COM through pythoncom / win32com
+- Teams automation through guarded Windows-only service code
+- pyautogui for Teams desktop automation where required
+- send2trash for Recycle Bin delete
+- os.startfile for Windows file opening
+
+Future migration candidate only:
+
+- Tauri v2 + Svelte + Python sidecar may be considered after MVP stability.
+- Do not migrate to Tauri unless explicitly requested by the user.
+
+Commands
+
+Always prefix Claude Code shell commands with rtk, including each command in && chains.
+
+Claude Code shells do not inherit the active venv. Use the full venv path.
+
+Python tests:
+
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -v
-rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_phase_b_stores.py -v
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
-```
 
-Legacy PyQt6 preview (deprecated, jangan dipakai untuk UI baru):
+Frontend commands, once frontend/package.json exists:
 
-```bash
+rtk npm --prefix frontend install
+rtk npm --prefix frontend run build
+
+Run the pywebview app only after the current phase supports it:
+
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python main.py
-```
 
 Package for Windows transfer from repository root:
 
-```bash
-rtk zip -r project_tracker_dbs_v$(date +%Y%m%d).zip . --exclude ".venv/*" "__pycache__/*" "*.pyc" ".git/*"
-```
+rtk zip -r project_tracker_dbs_v$(date +%Y%m%d).zip . --exclude ".venv/_" "**pycache**/_" "_.pyc" ".git/_" "node_modules/\*"
 
-On Windows target:
+Do not run PyInstaller on Linux. Windows packaging must be done on Windows.
 
-```cmd
-pip install -r requirements.txt
-python main.py
-```
+Environment Boundaries
 
-No build/lint command is configured in `pyproject.toml`. Do not run PyInstaller on Linux.
+Component Linux dev Windows target
+Core logic, filesystem, JSON Unit tests allowed Full app
+SQLite cache/index Unit tests allowed Full app
+Svelte/Vite frontend build Allowed Allowed
+pywebview shell preview Allowed when guarded Full app
+PyQt6 UI shell Reference only Deprecated
+Outlook COM Stub/skip only Real integration
+Teams/pyautogui Stub/skip only Real integration
+send2trash, os.startfile Stub/skip only Real integration
+PyInstaller Forbidden Allowed
 
-## Environment Boundaries
+Windows-only imports must be lazy and guarded with sys.platform == "win32".
 
-| Component                    | Linux dev          | Windows target   |
-| ---------------------------- | ------------------ | ---------------- |
-| Core logic, filesystem, JSON | Unit tests allowed | Full app         |
-| pywebview + HTML/Tailwind    | Preview allowed    | Full app         |
-| PyQt6 UI shell (deprecated)  | Reference only     | DEPRECATED       |
-| Outlook COM, Teams/pyautogui | Stub/skip only     | Real integration |
-| `send2trash`, `os.startfile` | Stub/skip only     | Real integration |
-| PyInstaller                  | Forbidden          | Allowed          |
+Outlook, Teams, delete, and file-open services must instantiate without crashing on Linux.
 
-Windows-only imports must be lazy and guarded with `sys.platform == "win32"`. Outlook, Teams, delete, and file-open services must instantiate without crashing on Linux.
+Do not add dependencies without explicit user confirmation, except dependencies already approved in PRD.md v3.1.
 
-Do not add dependencies without user confirmation. Use `pathlib.Path`; never string path concatenation. Keep Windows-formatted paths in settings JSON as Windows paths.
+Use pathlib.Path; never use string path concatenation.
 
-## UI Tech Stack (Updated Juni 2026)
+Keep Windows-formatted paths in settings JSON as Windows paths. Do not normalize them into Linux paths.
 
-UI layer dimigrasikan dari PyQt6 ke **pywebview + HTML/Tailwind CDN**.
-`project_tracker/core/`, `infrastructure/`, `services/` tidak berubah strukturnya.
+Threading Rule — Mandatory
 
-### Threading Rule — WAJIB
+pywebview.start() must run on the main thread.
 
-`pywebview.start()` harus di main thread. Semua COM calls harus di background thread:
+All COM calls must run on a background thread and must initialize COM inside that thread.
 
-```python
-import pythoncom, threading
+import threading
+import pythoncom
+def \_com_task():
+pythoncom.CoInitialize()
+try:
+pass
+finally:
+pythoncom.CoUninitialize()
+threading.Thread(target=\_com_task, daemon=True).start()
 
-def _com_task():
-    pythoncom.CoInitialize()
-    try:
-        pass  # outlook/teams automation di sini
-    finally:
-        pythoncom.CoUninitialize()
+Frontend Rules
 
-threading.Thread(target=_com_task).start()
-```
+Production UI must be implemented in Svelte + TypeScript + Vite.
 
-### JS → Python Bridge Pattern
+Do not build new production screens with raw HTML + Tailwind CDN + Vanilla JS.
 
-```python
-class AppAPI:
-    def get_projects(self): ...  # callable dari JS: pywebview.api.get_projects()
+Small isolated JavaScript utilities are allowed only when they do not become application state management.
 
-window = webview.create_window('App', 'frontend/index.html', js_api=AppAPI())
-webview.start()
-```
+Frontend source should live under frontend/.
 
-### Referensi Visual
+Vite build output should be served by pywebview through the configured static output folder described in PRD.md.
 
-Ketika membangun HTML screen baru di frontend/, gunakan redesign_ui/\*.py sebagai referensi visual dan userflow. Ekstrak layout, warna, dan interaksinya — bukan kodenya.
+Tailwind must be bundled locally through the frontend build. Do not rely on CDN for production.
 
-### File yang DIPERTAHANKAN (jangan diubah):
+Python ↔ Frontend Bridge Rules
 
-- `project_tracker/core/`
-- `project_tracker/infrastructure/`
-- `project_tracker/services/` — terapkan threading rule di semua COM calls
+The frontend communicates with Python through the typed pywebview bridge.
 
-### File yang DIGANTIKAN (jangan generate PyQt6 code baru):
+The Python bridge/API layer must return predictable response objects.
 
-- `project_tracker/ui/` → `frontend/` (HTML files)
-- `project_tracker/themes/` → Tailwind classes
-- `project_tracker/app.py` → pywebview entry point baru
+Business/domain logic belongs in Python services, not in Svelte components.
 
-## Product Source of Truth
+Frontend state is UI-only state:
 
-`PRD.md` is product requirements source of truth. `PROJECT_STATUS.md` records verification status and completed slices. Linux-verifiable work is marked complete; Windows manual verification remains required for Outlook COM, Teams automation, `os.startfile`, `send2trash`, visual/font rendering, and packaging.
+- active page
+- selected row/project/link/note
+- search/filter form state
+- modal open/close state
+- loading and error states
+- draft form values
 
-Key constraints:
+Python owns:
 
-- Local-first, single-user desktop app; no cloud backend, external database, SQLite, or PDF export in MVP. UI layer menggunakan pywebview + HTML/Tailwind CDN (system WebView2, bukan bundled browser). Tidak ada server eksternal.
-- Filesystem is source of truth for project existence, year, and folder state.
-- `project_data.json` stores metadata only; `project_state` must never be stored in JSON.
-- Year comes only from year folder name.
-- Hard delete is forbidden; Windows delete must use Recycle Bin via `send2trash`.
-- Datetimes must be ISO 8601 timezone-aware using local OS timezone.
-- History user comes from `settings.display_name` if set, otherwise Windows login; never hardcode.
+- project state machine
+- folder transitions
+- metadata writes
+- scanner
+- SQLite cache/index rebuild
+- watchdog events
+- Outlook/Teams automation
+- scheduler jobs
+- notification persistence
 
-## Architecture
+Persistence Model
 
-Python 3.12+ modular monolith: pywebview + HTML/Tailwind UI, local filesystem, JSON persistence.
+Canonical source of truth:
 
-```text
-ui/ -> services/ -> core/
-services/ -> infrastructure/ + core/
-core/ imports no ui, services, or infrastructure
-```
+- Filesystem determines project existence.
+- Year folder determines project year.
+- Parent state folder determines project folder state.
+- project_data.json stores project metadata only.
+- project_state must never be stored in project_data.json.
 
-Runtime flow: `main.py` calls `project_tracker.app.run()`. `app.py` creates `QApplication`, loads `SettingsStore`, ensures year folders when `root_folder` exists, applies `ThemeManager`, then shows `MainWindow`. `ui/main_window.py` owns sidebar, `QStackedWidget` pages, notification panel, theme toggle, onboarding, and `AutoTransitionService` startup.
+SQLite rule:
 
-Core layer: `core/enums.py` defines state/theme/language/email enums; `core/models.py` defines metadata/settings/automation/notification dataclasses and JSON serialization; `core/rules.py` and `core/state_machine.py` enforce transition guards.
+- SQLite is approved only as a local rebuildable cache/index.
+- SQLite must never become the canonical source of truth for project existence, year, folder state, or project metadata.
+- If the SQLite database is deleted or corrupted, the app must be able to rebuild it from filesystem + JSON + local note/link files.
 
-Infrastructure layer: `metadata_store.py` atomically reads/writes `project_data.json` and strips `project_state`; `settings_store.py` writes config under `%APPDATA%\ProjectTrackerDBS` on Windows and `~/ProjectTrackerDBS` elsewhere; `filesystem.py` owns year/state folder helpers; `link_bank_store.py` stores reusable links; `watchdog_service.py` monitors filesystem changes.
+Atomic JSON writes must use the metadata store atomic write mechanism.
 
-Services layer: `project_service.py` moves folders between state directories and updates metadata/history; `scanner_service.py` ignores organizational folders and validates drone subfolders; `email_service.py`, `outlook_service.py`, `download_email_service.py`, and `teams_service.py` wrap Windows automation behind guards; `safe_delete_service.py` is the destructive-operation boundary; `theme_manager.py` applies centralized QSS themes.
+Hard delete is forbidden. Deletion must use Recycle Bin via send2trash on Windows.
 
-UI layer: `ui/dashboard.py` lists real scanned projects and must not use dummy production data. `ui/project_detail_wireframe.py` / `ui/project_detail_splitpane.py` handle real detail loading, inline edits, subprojects, notes, and template-file copy flows. `ui/*_tab.py` files compose automation, email, Teams, download-email, notes, and link-bank pages; `ui/widgets/` contains reusable controls.
+Datetimes must be ISO 8601 timezone-aware using the local OS timezone.
 
-## Persistence Model
+Legacy / Reference Code Rules
 
-Project root contains year folders; each year contains state folders such as `UAT_PREPARE`, `PROD_READY`, `IMPLEMENTED`, and `POSTPONED`. Project state is derived from parent state folder, not metadata.
+PyQt6 files are legacy/reference only.
 
-Each project folder may contain `project_data.json`. Missing metadata falls back to folder name. Corrupt or unknown schema metadata produces warnings and should not crash scans. Atomic JSON writes use `project_tracker.infrastructure.metadata_store.atomic_write_json()`.
+Do not add new production PyQt6 UI code.
 
-Organizational folders such as docs, backup, scripts, logs, temp, and archive are not drone subprojects.
+Do not copy PyQt6 implementation code into production.
 
-## Testing Notes
+Use PyQt6 prototype files only to understand:
 
-Automated PyQt6 tests must not open blocking modals or require manual clicks; monkeypatch dialogs/message boxes. Linux tests may verify platform-independent logic, JSON/filesystem behavior, and guarded PyQt6 UI shell behavior. Windows manual verification remains required for Outlook COM, Teams/pyautogui, `os.startfile`, `send2trash`, visual rendering, and packaging.
+- user flows
+- screen components
+- interactions
+- menu behavior
+- feature intent
+
+Old frontend/\*.html files are legacy/reference unless verified as part of the new Svelte frontend.
+
+Do not claim a screen is migrated until it is connected to real data, verified, and tracked in PROJECT_STATUS.md.
+
+Architecture Direction
+
+Target architecture:
+
+frontend/ Svelte UI
+-> pywebview JsApi bridge
+-> project_tracker/services/
+-> project_tracker/core/
+-> project_tracker/infrastructure/
+
+Dependency rules:
+
+frontend -> bridge only
+bridge -> services
+services -> core + infrastructure
+infrastructure -> core when needed
+core -> no UI, no services, no infrastructure
+
+Core layer must remain pure domain logic.
+
+Services layer coordinates use cases.
+
+Infrastructure layer owns filesystem, JSON stores, SQLite cache, settings, link bank, watchdog, Outlook, Teams, and OS integrations.
+
+Implementation Discipline
+
+Do not implement the whole PRD in one pass.
+
+Work phase by phase.
+
+Before coding a phase:
+
+1. Read the relevant PRD section.
+2. Identify files to touch.
+3. State the verification criteria.
+4. Keep changes surgical.
+5. Do not refactor unrelated code.
+6. Do not delete legacy/reference files unless explicitly approved.
+
+After coding a phase:
+
+1. Run relevant tests.
+2. Run frontend build when applicable.
+3. Update PROJECT_STATUS.md.
+4. Report changed files.
+5. Report commands run.
+6. Report what was not tested.
+7. Report remaining risks.
+
+Testing Notes
+
+Linux tests may verify:
+
+- core domain rules
+- state machine guards
+- JSON serialization
+- filesystem scanning logic
+- SQLite cache/index rebuild logic
+- bridge response formatting
+- guarded imports
+
+Windows manual verification is required for:
+
+- Outlook COM
+- Teams automation
+- send2trash
+- os.startfile
+- WebView2 behavior
+- visual rendering
+- packaging
+- installer behavior
+
+No test may open blocking dialogs or require manual clicks.

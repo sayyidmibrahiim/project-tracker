@@ -1,297 +1,449 @@
-# Project Tracker DBS — Product Requirements Document
+# Project Tracker DBS — Product Requirements Document v3.1
 
-> **Version:** 2.0.0  
-> **Last Updated:** 2026-05-17  
+> **Version:** 3.1.0  
+> **Date:** 2026-06-02  
 > **Author:** Sayyid M. Ibrahim  
-> **Status:** Single Source of Truth  
-> **Supersedes:** `README.md` and `DESIGN.md`
+> **Status:** Single Source of Truth — Supersedes PRD v2.0.0  
+> **Primary Runtime Target:** Windows 10/11 Desktop  
+> **Stack:** Python 3.12 + pywebview + Svelte + TypeScript + Vite + Tailwind CSS + APScheduler + SQLite (cache)  
+> **Prototype Sources (UX Reference Only):** `project_tracker_clean.py`, `project_details_redesign.py`, `report_redesign.py`, `second_brain_redesign.py`, `automations_redesign.py`, `settings_redesign.py`, `UI_FEATURE_DOCUMENTATION.md`
 
 ---
 
-## 1. Purpose
+## About This Document
 
-Project Tracker DBS is a Windows desktop application for tracking DBS Change Request (CR) deployment work from preparation through production implementation.
+This PRD is built from full analysis of all prototype `.py` files, UI feature documentation, the old PRD v2.0, and confirmed decisions from multi-model consultation (Claude, Grok, Perplexity, ChatGPT).
 
-The app is for a single deployment engineer workflow. It must prioritize local-first reliability, fast manual tracking, safe filesystem operations, and automation around Outlook, Teams, project notes, and report export.
+The PyQt6 prototype files are **UX and interaction reference only**. Production is implemented as a **pywebview desktop shell** serving a **Svelte + TypeScript + Vite** frontend, communicating with a Python backend through a typed `JsApi` bridge.
 
-`PRD.md` is the only product/source-of-truth document. Do not recreate or depend on `README.md` or `DESIGN.md` for requirements.
+Every menu must have a documented user flow. Every feature must trace back to this document. If code and PRD conflict, update this PRD first.
+
+---
+
+## 1. Purpose & Product Vision
+
+Project Tracker DBS is a single-user Windows desktop application for managing DBS Change Request (CR) deployment work from UAT preparation through production implementation.
+
+Built for a deployment/support engineer who tracks multiple CR projects, coordinates Outlook and Teams communication, manages deployment evidence, and writes operational notes — all in one local tool.
+
+**Core goals:**
+
+1. Make project state visible and actionable from a single dashboard.
+1. Enforce deployment workflow discipline (T-10, state guards, folder transitions).
+1. Keep all data local-first, filesystem-based, and recoverable.
+1. Automate repetitive Outlook and Teams tasks safely (draft-first by default).
+1. Provide a personal knowledge base (Second Brain) and link library (Link Bank).
+1. Generate operational reports and export CSV.
+1. Work reliably on Windows 10/11 without any cloud or server dependency.
 
 ---
 
 ## 2. Non-Negotiable Constraints
 
-### 2.1 Product Constraints
+### 2.1 Data & Storage
 
 - All project data stays local.
-- No external database.
-- No cloud backend.
-- No SQLite in MVP.
-- Local filesystem is source of truth for project existence, project year, and project folder state.
-- `project_data.json` stores metadata only.
-- `project_state` must never be stored in JSON.
-- Hard delete is forbidden; delete must use Windows Recycle Bin through `send2trash`.
-- Internal browser is canceled; all web links open in default OS browser.
-- PDF export is canceled; export is CSV only.
-- Do not add new dependencies without user confirmation.
+- Local filesystem is the canonical source of truth for project existence, year, and folder state.
+- `project_data.json` stores metadata only. **`project_state` must never appear in this file.**
+- SQLite is a **rebuildable local cache only** — not source of truth. If corrupt or deleted, app rebuilds from filesystem scan.
+- `settings.json` stores all app and automation configuration.
+- `link_bank.json` stores Link Bank data.
+- `notes.md` is primary notes storage per project/subproject.
+- Atomic writes: all JSON writes use temp-file-then-replace.
+- Hard delete is **forbidden**. Delete uses Windows Recycle Bin via `send2trash`.
 
-### 2.2 Development vs Target Environment
+### 2.2 Platform
 
-| Area                 | Dev Machine     | Target Machine   |
-| -------------------- | --------------- | ---------------- |
-| OS                   | Pop!\_OS Linux  | Windows 10+      |
-| Shell                | zsh             | PowerShell / CMD |
-| Runtime target       | Unit tests only | Full app         |
-| Windows integrations | Not executable  | Required         |
+- Windows 10/11 is the production runtime target.
+- Linux (PopOS) is used for development and unit testing only.
+  - On Linux: run unit tests, browser-preview frontend, run Python backend logic that does not use Windows APIs.
+  - On Linux: Windows-only integrations (Outlook COM, Teams `pyautogui`, `os.startfile`, `send2trash`, PyInstaller Windows build) must not be executed.
+- PyInstaller Windows build must only be attempted from Windows.
 
-Rules:
+### 2.3 Features
 
-- Do not run the deprecated PyQt app directly on Linux.
-- Do not run `python main.py` on Linux for app testing unless launching the pywebview shell for guarded preview work.
-- Unit tests on Linux may cover non-Windows logic: core models, state machines, rules, metadata parsing, settings serialization, scanner logic, and pywebview bridge code that does not require Windows integrations.
-- HTML/Tailwind screens may be previewed directly in a browser on Linux. Outlook COM, Teams automation, `os.startfile`, `pyautogui`, `send2trash`, pywebview WebView2 rendering, and PyInstaller Windows build must be manually tested on Windows.
-- PyInstaller Windows build must not be attempted from Linux.
-- All code paths must use `pathlib.Path`, not string concatenation.
-- Windows-specific code should target Windows correctly; do not add Linux fallback behavior unless explicitly requested.
-- Paths stored in `settings.json` may use Windows format such as `D:\\WORK\\CR`; do not normalize them into Linux paths when reading/writing settings.
-- Do not hardcode timezone, username, or local filesystem path.
+- No cloud sync.
+- No external server or web backend.
+- No multi-user collaboration.
+- No embedded browser (all web links open in default OS browser).
+- No PDF export (CSV only).
+- No hard delete.
+- No auto-send Teams messages by default (`teams_auto_send = false`).
+- No new dependencies without user confirmation.
+
+### 2.4 Architecture
+
+- `core/` must be pure Python, no platform imports, no UI imports.
+- Dependencies flow one direction: `core/ → infrastructure/ → services/ → web/js_api.py → frontend/`.
+- All paths use `pathlib.Path`. No manual string path concatenation.
+- Windows-specific code wrapped in `IS_WINDOWS = sys.platform == "win32"` guards.
 
 ---
 
-## 3. Architecture
+## 3. Locked Technology Stack
 
-### 3.1 Application Type
+| Layer                       | Technology                                | Notes                                                  |
+| --------------------------- | ----------------------------------------- | ------------------------------------------------------ |
+| Desktop Shell               | **pywebview** (serve_folder mode)         | WebView2 on Windows; webkit2gtk on Linux (dev only)    |
+| Frontend Framework          | **Svelte + TypeScript**                   | No SvelteKit; plain Svelte with Vite                   |
+| Build Tool                  | **Vite**                                  | Output: `web/static/`                                  |
+| Styling                     | **Tailwind CSS**                          | Bundled locally; CDN only for dev/prototype fallback   |
+| State Management (Frontend) | **Svelte Stores**                         | No XState; state machine logic lives in Python backend |
+| Backend / Domain            | **Python 3.12+**                          | Core authority for all business logic                  |
+| Persistence (Canonical)     | **Filesystem + JSON**                     | project_data.json, settings.json, link_bank.json       |
+| Persistence (Cache/Index)   | **SQLite**                                | Rebuildable from filesystem scan; not source of truth  |
+| Background Tasks            | **APScheduler 3.x**                       | Auto IN-PROGRESS, polling jobs, scheduler alarms       |
+| Windows Integrations        | pywin32, pythoncom, pyautogui, send2trash | All Windows-guarded                                    |
+| Packaging                   | **PyInstaller**                           | Must include Vite build output (`web/static/`)         |
+| Future Migration Path       | Tauri v2 + Svelte + Python sidecar        | ADR documented; not MVP                                |
 
-- Python 3.12+ desktop app.
-- pywebview shell with HTML/Tailwind CDN frontend.
-- Modular monolith.
-- Local filesystem + JSON persistence.
-- Outlook automation through `win32com.client`.
-- Teams desktop/web automation through deep link + clipboard + `pyautogui`.
+### 3.1 serve_folder Mode
 
-### 3.2 Layering
+```python
+# app_web.py — production mode
+webview.start(serve_folder="web/static")
 
-```text
-UI Layer
-  pywebview window + HTML/Tailwind screens + JS bridge
-
-Services Layer
-  Project orchestration, scanning, automation, reports
-
-Core Layer
-  Models, enums, rules, state machines
-
-Infrastructure Layer
-  Filesystem, JSON stores, Outlook, Teams, watchdog
+# app_web.py — development mode (Vite dev server)
+webview.start(url="http://localhost:5173")  # pass --dev flag
 ```
 
-Dependency rule:
+### 3.2 Frontend Build Pipeline
 
-```text
-UI → Services → Core
-UI → Infrastructure only through service boundaries when practical
-Services → Core + Infrastructure
-Core imports no UI, services, or infrastructure
+```bash
+# Development (Linux or Windows)
+cd frontend && npm run dev        # Vite dev server on :5173
+python app_web.py --dev           # pywebview → localhost:5173
+
+# Production build
+cd frontend && npm run build      # outputs to ../web/static/
+python app_web.py                 # pywebview → web/static/
 ```
 
-### 3.3 Canonical Package Direction
+### 3.3 Dependency Baseline
 
 ```text
-project_tracker/
-├── main.py
-├── app.py
+# Core (locked)
+pywebview>=5.0
+pywin32>=306
+pythoncom (part of pywin32)
+pyautogui>=0.9.54
+pyperclip>=1.8.2
+send2trash>=1.8.3
+apscheduler>=3.10.0
+
+# Build
+pyinstaller>=6.0.0
+vite>=5.0 (npm)
+svelte>=5.0 (npm)
+typescript>=5.0 (npm)
+tailwindcss>=3.4 (npm)
+
+# Optional — requires confirmation before adding
+watchdog>=4.0.0
+marked.js (npm, for markdown preview)
+```
+
+---
+
+## 4. Architecture & Package Structure
+
+```text
+project_tracker_dbs/
+├── app_web.py                    # Entry point: pywebview init, JsApi wiring
 ├── core/
-│   ├── enums.py
-│   ├── models.py
-│   ├── state_machine.py
-│   ├── rules.py
-│   └── exceptions.py
-├── services/
-│   ├── project_service.py
-│   ├── scanner_service.py
-│   ├── email_service.py
-│   ├── teams_service.py
-│   ├── email_download_service.py
-│   ├── second_brain_service.py
-│   ├── report_service.py
-│   └── notification_service.py
+│   ├── enums.py                  # CRState, DroneState, FolderState, EventType
+│   ├── models.py                 # Dataclasses: Project, SubProject, DroneTicket, HistoryEntry, etc.
+│   ├── state_machine.py          # All transition logic + guards (pure Python, no I/O)
+│   ├── rules.py                  # T-10 rule, guard checks, validation helpers
+│   └── exceptions.py             # Domain exceptions
 ├── infrastructure/
-│   ├── metadata_store.py
-│   ├── settings_store.py
-│   ├── link_bank_store.py
-│   ├── filesystem.py
-│   ├── outlook_integration.py
-│   ├── teams_integration.py
-│   └── watchdog_service.py
-├── ui/
-│   ├── main_window.py
-│   ├── dashboard.py
-│   ├── project_detail.py
-│   ├── report.py
-│   ├── second_brain.py
-│   ├── automations.py
-│   ├── settings.py
-│   ├── dialogs/
-│   └── widgets/
+│   ├── filesystem.py             # pathlib folder ops, scan, rename, create, delete via send2trash
+│   ├── metadata_store.py         # project_data.json atomic R/W per project
+│   ├── settings_store.py         # settings.json via %APPDATA%/~/ProjectTrackerDBS
+│   ├── link_bank_store.py        # link_bank.json R/W
+│   ├── cache_db.py               # SQLite: project index, notifications, scheduler, rule logs
+│   ├── outlook_client.py         # win32com Outlook wrapper (IS_WINDOWS guarded)
+│   └── teams_client.py           # pyautogui Teams deep-link wrapper (IS_WINDOWS guarded)
+├── services/
+│   ├── project_service.py        # CRUD + state orchestration for projects
+│   ├── scanner_service.py        # Filesystem scan → SQLite cache rebuild
+│   ├── watchdog_service.py       # Optional: watchdog observer + debounce + event queue push
+│   ├── automation_service.py     # Rules Engine: trigger evaluation + action dispatch
+│   ├── scheduler_service.py      # APScheduler job management + Scheduler tab entries
+│   ├── second_brain_service.py   # Notes search index, file ops, pin/favorite
+│   └── report_service.py         # Filter logic + CSV export
+├── web/
+│   ├── js_api.py                 # JsApi class (all pywebview bridge methods)
+│   └── event_queue.py            # thread-safe queue.Queue for background → frontend events
+├── frontend/                     # Svelte source (dev only, not included in Python package)
+│   ├── src/
+│   │   ├── lib/
+│   │   │   ├── api/              # Typed wrappers around window.pywebview.api.*
+│   │   │   ├── stores/           # Svelte writable/derived stores
+│   │   │   ├── components/       # Reusable UI components (Sidebar, Header, Table, Card, etc.)
+│   │   │   └── types/            # TypeScript interfaces mirroring Python models
+│   │   ├── routes/               # Page-level Svelte components
+│   │   └── app.html              # pywebview HTML shell
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts            # outDir: '../web/static'
 └── assets/
-    ├── email_templates/
-    ├── cmd_templates/
-    └── icon.ico
+    ├── icon.ico
+    └── email_templates/          # .html / .txt files for Outlook category templates
 ```
 
-This layout is a direction, not permission for unrelated refactors. Implementation must be phased and surgical.
+### 4.1 Layer Rules
+
+- `core/` imports nothing from `infrastructure/`, `services/`, `web/`, or `frontend/`.
+- `infrastructure/` imports from `core/` only.
+- `services/` imports from `core/` and `infrastructure/`.
+- `web/js_api.py` imports from `services/` only (never direct infrastructure calls).
+- `frontend/` calls Python through `window.pywebview.api.*` only.
+- Unit tests on Linux cover `core/`, `infrastructure/` logic, and `services/` without Windows APIs.
 
 ---
 
-## 4. Filesystem Model
+## 5. Development Environment & Workflow
 
-### 4.1 Root Folder
+### 5.1 Linux Development (PopOS)
 
-User chooses one root folder in Settings or first-run setup.
+```bash
+# Setup
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cd frontend && npm install
 
-Example:
+# Run (browser preview)
+cd frontend && npm run dev
+# Open http://localhost:5173 in browser for UI work
+# Python backend with mocked Windows APIs:
+python app_web.py --dev --no-windows
 
-```text
-D:\WORK\CR
+# Run unit tests
+pytest tests/ -v
 ```
 
-Root folder contains year folders only.
+### 5.2 Windows Testing
 
-### 4.2 Year Folder
+```bash
+# Full app test
+cd frontend && npm run build
+python app_web.py
 
-Project year is derived only from year folder name.
-
-```text
-{ROOT_FOLDER}\{YEAR}\
+# Windows integration test (Outlook, Teams, file ops)
+python -m pytest tests/windows/ -v  # manual verification
 ```
 
-Examples:
+### 5.3 Windows-only Guard Pattern
 
-```text
-D:\WORK\CR\2026\
-D:\WORK\CR\2027\
+```python
+import sys
+IS_WINDOWS = sys.platform == "win32"
+
+def open_file_externally(path: Path) -> None:
+    if IS_WINDOWS:
+        import os
+        os.startfile(str(path))
+    else:
+        # Dev fallback: log and skip
+        print(f"[DEV] Would open: {path}")
 ```
 
-Rules:
+---
 
-- Dashboard year dropdown shows only year folders that already exist under root folder.
-- Adding a year creates year folder and all 4 project state folders.
-- Default year suggestion from Add Year is next year.
-- If selected year is more than 2 years ahead of current local year, show confirmation warning before creating folders.
-- `start_datetime` and `end_datetime` do not determine year folder and must not automatically move a project across years.
+## 6. Design System & UI Theme
 
-### 4.3 Project State Folders
+### 6.1 Theme Philosophy
 
-Project folder state is derived from parent state folder only.
+**Utilitarian + Modern Minimalist**
 
-```text
-{ROOT_FOLDER}\{YEAR}\UAT_PREPARE\{project_name}\
-{ROOT_FOLDER}\{YEAR}\PROD_READY\{project_name}\
-{ROOT_FOLDER}\{YEAR}\IMPLEMENTED\{project_name}\
-{ROOT_FOLDER}\{YEAR}\POSTPONED\{project_name}\
+- **Utilitarian**: every element must serve a function; information density is valued; layout is task-oriented.
+- **Modern Minimalist**: clean whitespace, subtle depth, consistent spacing, smooth micro-interactions (150–220ms), no decoration without purpose.
+- No gradients. No neon. No playful accents.
+- High contrast text (WCAG AA minimum).
+- The enterprise banking palette from the PyQt6 prototypes is preserved exactly.
+
+### 6.2 Color Palette (Preserved from Prototypes)
+
+```css
+/* Primary */
+--color-primary: #b91c1c; /* enterprise red — buttons, active accents */
+--color-primary-hover: #991b1b; /* red hover state */
+--color-active-red: #dc2626; /* active indicators, left-border accents */
+--color-error-red: #991b1b; /* error and danger states */
+
+/* Surface */
+--color-sidebar-bg: #0a0a0b; /* black chrome sidebar */
+--color-surface-dark: #141416; /* dark surface elements */
+--color-border-dark: #2c2c30; /* dark border */
+--color-nav-active-bg: #231112; /* active nav item bg */
+--color-nav-inactive: #b9b9c0; /* inactive nav text/icon */
+
+/* Body Layers (light hierarchy) */
+--color-body: #ffffff; /* main content background */
+--color-panel: #e6e8eb; /* panel/card backgrounds */
+--color-inner-card: #ffffff; /* inner card/content boxes */
+--color-outer-layer: #eef0f2; /* outer layer */
+
+/* Text */
+--color-text-primary: #171717;
+--color-text-strong: #111111;
+--color-text-secondary: #6b7280;
+--color-text-muted: #a1a1aa;
+--color-placeholder: #71717a;
+
+/* Inputs */
+--color-input-border: #d7d7dc;
+--color-input-bg: #ffffff;
+
+/* Accent (selected states, hover bg) */
+--color-accent-pink: #fff1f4;
+--color-accent-border: #ffd4df;
+--color-accent-strong: #f4a7b9;
 ```
 
-Required state folders per year:
+### 6.3 Typography
 
-| Folder        | Meaning                                |
-| ------------- | -------------------------------------- |
-| `UAT_PREPARE` | Active preparation/editing state       |
-| `PROD_READY`  | Ready for production; partially locked |
-| `IMPLEMENTED` | Completed/archived; locked             |
-| `POSTPONED`   | Paused project; editable and resumable |
+- Primary font: `Inter` (load via local asset or Google Fonts during dev).
+- Fallback: `Segoe UI`, `sans-serif`.
+- Font scale uses Tailwind size classes (`text-xs` through `text-base`).
+- Font weight: 700–900 for labels/headings; 600–700 for body content.
 
-### 4.4 Project Folder
+### 6.4 Spacing System
 
-One main project folder equals one CR number.
+- Base unit: 4px (Tailwind default).
+- Standard component padding: `p-3` (12px) for inner cards, `p-4` (16px) for panels.
+- Tight spacing: `gap-1.5` or `gap-2` between related controls.
+- Section spacing: `gap-3` or `gap-4` between cards.
 
-```text
-{ROOT_FOLDER}\{YEAR}\{STATE}\{project_name}\
+### 6.5 Component Standards
+
+```
+Cards:        white bg, 1px border (#E5E7EB), 3px left-border (#B91C1C), rounded-lg, subtle shadow
+Panels:       #E6E8EB bg, 1px soft border, rounded-xl
+Buttons (primary): #B91C1C bg, white text, rounded-md, hover → #991B1B
+Buttons (secondary): white bg, #B91C1C text, 1px #FFD4DF border, hover → #FFF1F4
+Tables:       white bg, dark header (#111111), white text, 1px grid lines
+Sidebar:      #0A0A0B bg, collapsed/expanded, active item has left-border + #231112 bg
+Header:       #B91C1C bg, white title, white datetime badge border, refresh button white bg
+Splitters:    visible handle, pink on hover
+Scrollbars:   thin (4px), pink accent handle
 ```
 
-Required files inside project folder:
+### 6.6 Responsive Behavior
 
-```text
+- Avoid fixed major container sizes; use flex/grid with `min-*` readability constraints.
+- Use `clamp()` for font sizes where needed.
+- Major panels use resizable splitters (CSS resize or library).
+- All list/table panels scroll internally; no page-level overflow.
+- Sidebar supports expanded (default) and collapsed (icon-only) modes.
+- Header controls use `min-w` to prevent clipping on small screens.
+- Empty-area click must clear selection in tables/trees/lists.
+
+---
+
+## 7. Filesystem Model (Source of Truth)
+
+### 7.1 Root Folder
+
+User selects one root folder. All project data lives here.
+
+```
+D:\WORK\CR\
+```
+
+### 7.2 Year Folders
+
+```
+{ROOT}\{YEAR}\
+```
+
+- Year is derived solely from the year folder name.
+- Dashboard year dropdown shows only existing year folders.
+- Creating a year creates the year folder + all 5 project state folders.
+- Default Add Year suggestion: next calendar year.
+- Adding a year >2 years ahead of current year shows a confirmation warning.
+
+### 7.3 Project State Folders (5 States)
+
+```
+{ROOT}\{YEAR}\UAT_PREPARE\
+{ROOT}\{YEAR}\PROD_READY\
+{ROOT}\{YEAR}\IMPLEMENTED\
+{ROOT}\{YEAR}\POSTPONED\
+{ROOT}\{YEAR}\CANCELED\
+```
+
+| Folder        | Meaning                         | Editability                  |
+| ------------- | ------------------------------- | ---------------------------- |
+| `UAT_PREPARE` | Active preparation/editing      | Fully editable               |
+| `PROD_READY`  | Ready for production deployment | Partially locked             |
+| `IMPLEMENTED` | Completed and archived          | Fully locked (read-only)     |
+| `POSTPONED`   | Paused; can be resumed          | Editable after resume action |
+| `CANCELED`    | Closed; can be reopened         | Editable after reopen action |
+
+### 7.4 Project Folder
+
+```
+{ROOT}\{YEAR}\{STATE}\{PROJECT_NAME}\
+```
+
+One folder = one CR scope.
+
+Required files:
+
+```
 project_data.json
 notes.md
 ```
 
-Template-generated files may also exist, for example:
+### 7.5 Sub Project Folder
 
-```text
-{CR_NUMBER}_uat_signoff.docx
-cmd_onboard.md
-cmd_rollback.md
+A child folder inside the main project folder representing a component/package/script under the same CR.
+
 ```
-
-### 4.5 Sub Project Folder
-
-A sub project is a subfolder inside a main project folder that represents a script/package/setting/component change related to the same main CR.
+{ROOT}\{YEAR}\{STATE}\{PROJECT_NAME}\{SUBPROJECT_NAME}\
+```
 
 Rules:
 
-- Main project and all sub projects share the same CR number.
-- Main project may have its own Drone ticket.
-- Each sub project may have its own Drone ticket.
-- Sub project does not have independent CR state.
-- Sub project does not have independent project folder state.
-- Sub project is mapped to Drone ticket by `DroneTicket.subfolder_name`.
-- Sub project can have its own files and `notes.md`.
+- Shares the same CR number as parent project.
+- May have its own Drone ticket.
+- No independent CR state or folder state.
+- May have own files and `notes.md`.
+- Does **not** have its own `project_data.json`.
 
-Example:
+### 7.6 Organizational Folder Exclusion (Case-insensitive)
 
-```text
-D:\WORK\CR\2026\UAT_PREPARE\PYTHON_A\
-├── project_data.json
-├── notes.md
-├── script_change\
-│   ├── notes.md
-│   └── update_query.sql
-└── package_change\
-    ├── notes.md
-    └── requirements_change.txt
+These folder names are excluded from sub-project detection:
+
 ```
-
-### 4.6 Organizational Folders
-
-Some folders inside a project are organizational and must not be treated as sub projects.
-
-Case-insensitive exclusion list:
-
-```text
 doc, docs, document, documents,
 bak, backup, before, after,
 script, scripts, cicd,
 log, logs, temp, tmp, archive
 ```
 
-Folders matching this list are shown as normal folders/files, not sub projects.
+Folders matching this list appear as normal folder entries in the file browser, not as sub-projects.
 
-### 4.7 Folder Naming Rules
+### 7.7 Folder Name Validation
 
-Project and sub project names must be valid Windows folder names.
-
-Reject:
-
-```text
-\ / : * ? " < > |
-```
+Reject names containing: `\ / : * ? " < > |`
 
 Also reject:
 
-- Empty names.
-- Names with trailing space.
-- Names with trailing dot.
-- Reserved Windows device names: `CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`.
-- Duplicate folder names in target parent folder.
+- Empty string.
+- Trailing space or dot.
+- Duplicate name in target parent folder.
+- Windows reserved device names: `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`.
 
-UI must validate in real time and disable Save while invalid.
+Frontend disables Save in real-time while invalid. Backend enforces the same validation as authoritative guard.
 
 ---
 
-## 5. Metadata Model
+## 8. Data Models
 
-### 5.1 `project_data.json`
-
-Stored in main project folder only.
+### 8.1 `project_data.json` Schema
 
 ```json
 {
@@ -308,16 +460,17 @@ Stored in main project folder only.
       "subfolder_name": null,
       "drone_link": "https://drone.example.local/deployment/D-SSIDBI-159",
       "drone_state": "APPROVED",
-      "drone_state_updated_at": "2026-01-05T10:00:00+07:00"
+      "drone_state_updated_at": "2026-01-05T10:00:00+07:00",
+      "owner": "Alice"
     },
     {
       "subfolder_name": "script_change",
       "drone_link": "https://drone.example.local/deployment/D-SSIDBI-160",
       "drone_state": "PENDING APPROVAL",
-      "drone_state_updated_at": "2026-01-05T11:00:00+07:00"
+      "drone_state_updated_at": "2026-01-05T11:00:00+07:00",
+      "owner": "Bob"
     }
   ],
-  "notes": "Legacy short note. notes.md is primary note storage.",
   "implementation_plan": "Step 1: Deploy DB scripts\nStep 2: Deploy API",
   "email_flags": {
     "ack_sent": false,
@@ -329,7 +482,7 @@ Stored in main project folder only.
       "timestamp": "2026-01-10T14:30:00+07:00",
       "action": "STATE_CHANGE",
       "detail": "CR: PENDING APPROVAL → APPROVED",
-      "user": "sayyid"
+      "user": "Sayyid"
     }
   ],
   "created_at": "2026-01-05T09:00:00+07:00",
@@ -337,23 +490,18 @@ Stored in main project folder only.
 }
 ```
 
-Rules:
+**Rules:**
 
-- `project_state` must not exist.
-- `project_name` should match folder name after rename.
-- `cr_state_updated_at` updates on every CR state change.
-- `cr_pending_approval_at` records first time CR reaches `PENDING APPROVAL`; used for T-10.
-- `cr_pending_approval_at` should not be overwritten by later CR states.
-- If old data has no `cr_pending_approval_at`, use fallback logic in warnings and ask user to repair if T-10 cannot be proven.
-- Each `DroneTicket` may map to main project with `subfolder_name = null` or to sub project with `subfolder_name = "folder_name"`.
-- If `subfolder_name` points to a missing folder, show warning but do not crash.
-- `notes` is legacy/short-note field; primary notes live in `notes.md`.
-- `history` is unlimited and read-only in UI.
-- Missing fields in known schema are defaulted.
-- Unknown schema must skip/warn without crashing.
-- Corrupt JSON must skip/warn without crashing.
+- `project_state` must never appear in this file.
+- `subfolder_name: null` = ticket belongs to the main project.
+- `owner` is fetched from Outlook contacts (Windows) or free text (fallback).
+- `cr_pending_approval_at` records the first time CR reaches `PENDING APPROVAL`; never overwrite.
+- `notes.md` is primary notes storage; `notes` JSON field is legacy/not used.
+- Corrupt JSON: skip project and warn, never crash.
+- Missing known fields: use defaults silently.
+- Unknown fields: ignore without error.
 
-### 5.2 Default Metadata
+### 8.2 Default `project_data.json`
 
 ```json
 {
@@ -366,7 +514,6 @@ Rules:
   "cr_state_updated_at": null,
   "cr_pending_approval_at": null,
   "drone_tickets": [],
-  "notes": "",
   "implementation_plan": "",
   "email_flags": {
     "ack_sent": false,
@@ -379,1345 +526,2311 @@ Rules:
 }
 ```
 
-### 5.3 Datetime Policy
+### 8.3 History Entry
 
-- Store datetimes as ISO 8601 timezone-aware strings.
-- Use local OS timezone dynamically for `now`.
+```json
+{
+  "timestamp": "2026-01-10T14:30:00+07:00",
+  "action": "STATE_CHANGE",
+  "detail": "CR: PENDING APPROVAL → APPROVED",
+  "user": "display_name from settings or Windows login"
+}
+```
+
+- History is append-only and read-only in UI.
+- Newest entries displayed first.
+- `user` = `settings.display_name` if set; else `os.getenv("USERNAME")` on Windows.
+- Never hardcode username.
+
+### 8.4 Datetime Policy
+
+- Store all datetimes as ISO 8601 timezone-aware strings.
+- Use local OS timezone dynamically (`datetime.now(tz=timezone.utc).astimezone()`).
 - Do not hardcode WIB, UTC+7, or any fixed offset.
-- Display format is configurable in Settings.
+- Display format comes from `settings.datetime_format`.
 
-### 5.4 History Entry
+### 8.5 `settings.json`
 
-Every meaningful action appends history.
-
-Fields:
-
-| Field       | Description                                             |
-| ----------- | ------------------------------------------------------- |
-| `timestamp` | Local OS timezone-aware timestamp                       |
-| `action`    | Machine-friendly action name                            |
-| `detail`    | Human-readable activity detail                          |
-| `user`      | `settings.display_name` if set; otherwise Windows login |
-
-History is read-only and sorted newest-first in UI.
-
----
-
-## 6. App Config Model
-
-All app-level config is stored under:
-
-```text
-%APPDATA%\ProjectTrackerDBS\
-```
-
-### 6.1 Required App Config Files/Folders
-
-```text
-%APPDATA%\ProjectTrackerDBS\settings.json
-%APPDATA%\ProjectTrackerDBS\link_bank.json
-%APPDATA%\ProjectTrackerDBS\SecondBrain\
-```
-
-### 6.2 `settings.json`
+Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTrackerDBS/settings.json` (Linux dev).
 
 ```json
 {
   "root_folder": "D:\\WORK\\CR",
   "display_name": "",
   "language": "en",
-  "datetime_format": "ddd, dd MMM yyyy HH:mm",
-  "t10_threshold_days": 10,
-  "auto_refresh_interval": "off",
-  "theme": "dark",
+  "datetime_format": "ddd, dd MMM yyyy HH:mm:ss",
   "startup_behavior": "current_year_dashboard",
+  "auto_refresh_interval_seconds": 0,
+  "t10_threshold_days": 10,
   "second_brain_folder": "%APPDATA%\\ProjectTrackerDBS\\SecondBrain",
   "file_template_folder": "",
-  "automation_rules": [
-    {
-      "name": "Require approved CR",
-      "description": "Reusable condition group example",
-      "warning_only": false,
-      "conditions": [
-        {
-          "type": "cr_state",
-          "operator": "equals",
-          "value": "APPROVED"
-        }
-      ]
-    }
-  ],
-  "email": {
-    "global_mode": "draft",
-    "template_folder_path": "",
-    "download_poll_interval_seconds": 10,
-    "download_timeout_hours": 3,
-    "categories": {
-      "ACK_UAT": {
-        "to": "",
-        "cc": "",
-        "subject_template": "",
-        "body_template": "",
-        "attachment_template_file": "",
-        "mode_override": null,
-        "conditions": []
-      },
-      "ACK_SOP": {
-        "to": "",
-        "cc": "",
-        "subject_template": "",
-        "body_template": "",
-        "attachment_template_file": "",
-        "mode_override": null,
-        "conditions": []
-      },
-      "APRVL_CR": {
-        "to": "",
-        "cc": "",
-        "subject_template": "",
-        "body_template": "",
-        "attachment_template_file": "",
-        "mode_override": null,
-        "conditions": []
-      },
-      "APRVL_SOP": {
-        "to": "",
-        "cc": "",
-        "subject_template": "",
-        "body_template": "",
-        "attachment_template_file": "",
-        "mode_override": null,
-        "conditions": []
-      }
-    }
+  "ui": {
+    "sidebar_collapsed": false,
+    "last_active_page": "dashboard",
+    "last_selected_year": null
   },
-  "teams": {
-    "countdown_seconds": 3,
-    "teams_auto_send": false,
-    "automations": [
-      {
-        "name": "Default approval request",
-        "target_email": "",
-        "target_group": "",
-        "mentions": [],
-        "message_template": "Hi, mohon approval untuk deployment {PROJECT_NAME} dengan Drone ticket {DRONE_TICKET}.",
-        "attachment_paths": [],
-        "conditions": []
+  "automation": {
+    "outlook": {
+      "global_mode": "draft",
+      "template_folder_path": "",
+      "categories": {
+        "ACK_UAT": {
+          "to": "",
+          "cc": "",
+          "subject_template": "[ACK_UAT] {PROJECT_NAME} - {CR_NUMBER}",
+          "body_template": "",
+          "use_html_file": false,
+          "html_file_path": "",
+          "attachment_path": "",
+          "mode_override": null,
+          "conditions": []
+        },
+        "ACK_SOP": { "...": "..." },
+        "APRVL_CR": { "...": "..." },
+        "APRVL_SOP": { "...": "..." }
       }
-    ]
+    },
+    "teams": {
+      "countdown_seconds": 3,
+      "teams_auto_send": false,
+      "automations": []
+    },
+    "scheduler": {
+      "entries": []
+    },
+    "rules_engine": {
+      "rules": []
+    }
   }
 }
 ```
 
-Settings rule: if a behavior can reasonably be dynamic without breaking safety, put it in Settings.
-
-Settings UI must expose at minimum:
-
-- Root folder.
-- Display name.
-- Language.
-- Datetime format.
-- T-10 threshold days.
-- Auto-refresh setting.
-- Theme.
-- Startup behavior.
-- Second Brain folder.
-- File template folder.
-- Email global mode.
-- Email template folder.
-- Email poll interval and timeout.
-- Email category templates and conditions.
-- Automation Rules condition groups.
-- Teams global countdown.
-- Teams auto-send toggle.
-- Teams automation entries.
-
-Settings changes should apply immediately when safe. Otherwise show restart-required message.
-
-Settings UI must include per-section Restore Defaults with confirmation before reset.
-
-### 6.3 `link_bank.json`
-
-Stored at `%APPDATA%\ProjectTrackerDBS\link_bank.json`.
+### 8.6 `link_bank.json`
 
 ```json
 {
-  "categories": ["CR & ITSM Tools", "Drone & Deployment", "Personal"],
+  "version": 1,
+  "categories": [
+    {
+      "id": "cat-1",
+      "name": "CR & ITSM Tools",
+      "archived": false,
+      "created_at": "2026-01-01T09:00:00+07:00",
+      "updated_at": "2026-01-01T09:00:00+07:00"
+    }
+  ],
   "links": [
     {
-      "name": "CR Portal",
+      "id": "link-1",
+      "category_id": "cat-1",
+      "title": "CR Portal",
       "url": "https://example.local/",
-      "notes": "Work support link",
-      "category": "CR & ITSM Tools"
+      "tags": ["Portal", "PROD", "Working"],
+      "details": "Daily CR work portal.",
+      "pinned": false,
+      "favorite": false,
+      "archived": false,
+      "last_opened_at": null,
+      "created_at": "2026-01-01T09:00:00+07:00",
+      "updated_at": "2026-01-01T09:00:00+07:00"
     }
   ]
 }
 ```
 
-Rules:
-
-- Link Bank belongs inside Second Brain, not as separate navigation item.
-- Links open in default OS browser.
-- Search must be case-insensitive over name, URL, and notes.
-- Categories are user-editable.
+Tags are user-defined free-form strings (hashtags). No fixed list. Stored inline in each link’s `tags` array.
 
 ---
 
-## 7. State Machines
+## 9. State Machines
 
-### 7.1 CR State Values
+### 9.1 CR State Values
 
-```text
+| State                | Selectable by User | Notes                                                                      |
+| -------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `PENDING SUBMISSION` | ✅                 | Default on project creation                                                |
+| `PENDING APPROVAL`   | ✅                 | User sets after submitting CR to approver                                  |
+| `APPROVED`           | ✅                 | User sets after CR approved in web portal                                  |
+| `IN-PROGRESS`        | ❌ Auto only       | Scheduler sets when `now` is within `[start_dt, end_dt]` AND CR=`APPROVED` |
+| `FINISHED`           | ✅                 | User sets after deployment work is complete; only from `IN-PROGRESS`       |
+| `POSTPONED`          | ✅                 | Moves project folder to `POSTPONED/`                                       |
+| `CANCELED`           | ✅                 | Moves project folder to `CANCELED/`                                        |
+
+`REOPEN` is an **action/event**, not a persistent state. It is available when the project folder is in `POSTPONED` or `CANCELED` state.
+
+### 9.2 CR State Transition Diagram
+
+```
 PENDING SUBMISSION
-PENDING APPROVAL
-APPROVED
-IN-PROGRESS
-FINISHED
-CANCELED
-REOPEN
+    │
+    ▼ [user: CR submitted to approver]
+PENDING APPROVAL  ────────────────────────────────────────────┐
+    │                                                          │
+    ▼ [user: CR approved in web portal]                        │
+APPROVED                                                       │
+    │                                                          │
+    ▼ [auto: now enters [start_dt, end_dt] window]             │
+IN-PROGRESS  ──────────────────────────────────────────────── │ ← REOPEN available
+    │                                                          │   (from POSTPONED/CANCELED folder)
+    ▼ [user: deployment complete]                              │   → moves folder to UAT_PREPARE
+FINISHED                                                       │   → CR state → PENDING SUBMISSION
+                                                               │
+From any active state ─────────────────────────────────────── │
+    POSTPONED folder (user: project paused) ◄──────────────── │
+    CANCELED folder  (user: project closed) ◄──────────────── │
 ```
 
-### 7.2 CR State Flow
+### 9.3 Drone State Values
 
-Normal flow:
+| State              | Selectable by User | Notes                                                                      |
+| ------------------ | ------------------ | -------------------------------------------------------------------------- |
+| `UAT`              | ✅                 | Default on drone ticket creation                                           |
+| `PENDING APPROVAL` | ✅                 | User sets after submitting Drone for approval                              |
+| `APPROVED`         | ✅                 | User sets after Drone approved                                             |
+| `IN-PROGRESS`      | ❌ Auto only       | Scheduler sets when `now` enters `[start_dt, end_dt]` AND Drone=`APPROVED` |
+| `FINISHED`         | ✅                 | User sets after deployment; only from `IN-PROGRESS`                        |
+| `CANCELED`         | ✅                 | Ticket canceled                                                            |
 
-```text
-PENDING SUBMISSION → PENDING APPROVAL → APPROVED → IN-PROGRESS → FINISHED
-```
-
-Special flows:
-
-```text
-PENDING APPROVAL → REOPEN → PENDING SUBMISSION
-APPROVED          → REOPEN → PENDING SUBMISSION
-Any non-FINISHED/non-IMPLEMENTED eligible state → CANCELED → POSTPONED folder
-```
-
-Rules:
-
-- CR cannot change state if `cr_link` is empty, except while creating initial empty project metadata.
-- `PENDING SUBMISSION` is default.
-- User may manually set `PENDING APPROVAL` and `APPROVED` if guards pass.
-- `IN-PROGRESS` is automatic only.
-- User may manually set `FINISHED` only from `IN-PROGRESS`.
-- `REOPEN` is selectable only from `APPROVED` or `PENDING APPROVAL`.
-- REOPEN moves project folder to `UAT_PREPARE`.
-- After REOPEN event, the CR returns to `PENDING SUBMISSION` as next working state.
-- REOPEN must still be recorded in history as event/action.
-- If implementation needs to display `REOPEN` briefly, it must not leave project permanently stuck in `REOPEN`; the actionable state after reopen is `PENDING SUBMISSION`.
-- `CANCELED` moves project folder to `POSTPONED`.
-- Every CR state change updates `cr_state_updated_at`.
-- First transition into `PENDING APPROVAL` sets `cr_pending_approval_at` if not already set.
-
-### 7.3 Drone State Values
-
-```text
-UAT
-PENDING APPROVAL
-APPROVED
-IN-PROGRESS
-FINISHED
-CANCELED
-```
-
-### 7.4 Drone State Flow
-
-```text
-UAT → PENDING APPROVAL → APPROVED → IN-PROGRESS → FINISHED
-```
-
-Special flow:
-
-```text
-Any active drone state → CANCELED
-```
-
-Rules:
+**Rules:**
 
 - Drone cannot change state if `drone_link` is empty.
-- `UAT` is default.
-- User may manually set `PENDING APPROVAL` and `APPROVED` if guards pass.
-- `IN-PROGRESS` is automatic only.
-- User may manually set `FINISHED` only from `IN-PROGRESS`.
-- Every drone state change updates that ticket's `drone_state_updated_at`.
+- `UAT` is default on creation.
+- `FINISHED` only from `IN-PROGRESS`.
+- Every state change updates `drone_state_updated_at`.
 
-### 7.5 Project Folder State Transitions
+### 9.4 Project Folder State Transitions
 
-#### 7.5.1 `UAT_PREPARE → PROD_READY`
+#### `UAT_PREPARE → PROD_READY` (Auto)
 
-All guards must pass:
+Triggered automatically by the scheduler when:
 
-- `start_datetime` exists.
-- `end_datetime` exists.
-- `end_datetime > start_datetime`.
-- `start_datetime` is not backdated at transition time.
-- `end_datetime` is not backdated at transition time.
+- `cr_state = APPROVED`
+- All drone tickets `drone_state = APPROVED` (or no drone tickets exist)
+- T-10 guard passes
+
+If T-10 fails but other conditions pass:
+
+- Auto move is **blocked**.
+- Notification: `"T-10 violation: CR {number} missed threshold. Manual review required."`
+- User can manually override via confirmation dialog.
+
+Guards also checked at manual transition:
+
+- `start_datetime` exists and is not backdated.
+- `end_datetime` exists and `end_datetime > start_datetime`.
 - `cr_link` exists.
-- `cr_state = APPROVED`.
-- If drone tickets exist, all required drone tickets are `APPROVED`.
-- T-10 rule passes.
 
-If any guard fails, show a modal listing each failed guard and block transition.
+#### `PROD_READY → IMPLEMENTED` (Auto)
 
-#### 7.5.2 `PROD_READY → IMPLEMENTED`
+Triggered automatically when:
 
-All guards must pass:
+- `cr_state = FINISHED`
+- All drone tickets `drone_state = FINISHED`
+- Project is currently in `PROD_READY`
 
-- Local OS `now` is inside `[start_datetime, end_datetime]`.
-- `cr_state = FINISHED`.
-- If drone tickets exist, all required drone tickets are `FINISHED`.
+#### `Any → POSTPONED` (Manual)
 
-`IMPLEMENTED` is locked after transition.
+Available from: `UAT_PREPARE`, `PROD_READY` (with confirmation), `CANCELED`.  
+**Not available** from: `IMPLEMENTED`.
 
-#### 7.5.3 Any Eligible State → `POSTPONED`
+CR state is set to `POSTPONED`. Folder physically moves to `POSTPONED/`.
 
-Rules:
+#### `Any → CANCELED` (Manual)
 
-- Allowed from `UAT_PREPARE`.
-- Allowed from `PROD_READY` only through explicit Postpone/Cancel action with confirmation.
-- Not allowed from `IMPLEMENTED`.
-- Resume from `POSTPONED` always moves project back to `UAT_PREPARE`.
-- CR `CANCELED` moves folder to `POSTPONED`.
+Available from: `UAT_PREPARE`, `PROD_READY` (with confirmation), `POSTPONED`.  
+**Not available** from: `IMPLEMENTED`.
 
-### 7.6 Locking Rules
+Requires confirmation. CR state is set to `CANCELED`. Folder moves to `CANCELED/`.
 
-| Folder State  | Edit Metadata | Edit Files | Add Notes | Rename | Delete | Change CR/Drone State |       Move Folder State |
-| ------------- | ------------: | ---------: | --------: | -----: | -----: | --------------------: | ----------------------: |
-| `UAT_PREPARE` |           Yes |        Yes |       Yes |    Yes |    Yes |                   Yes |                     Yes |
-| `POSTPONED`   |           Yes |        Yes |       Yes |    Yes |    Yes |                   Yes | Resume to `UAT_PREPARE` |
-| `PROD_READY`  |       Partial |    Partial |       Yes |     No |     No |               Limited | Implement/Postpone only |
-| `IMPLEMENTED` |            No |         No | View only |     No |     No |                    No |                      No |
+#### `POSTPONED or CANCELED → UAT_PREPARE` (REOPEN — Manual)
 
-`PROD_READY` partial lock means:
+User triggers REOPEN:
 
-- Do not allow rename project/sub project.
-- Do not allow delete project/sub project.
-- Do not allow destructive file operations.
-- Do allow viewing all details.
-- Do allow notes/history viewing and safe notes append/edit if needed for execution evidence.
-- Do allow CR/Drone state progression needed to finish deployment.
-- Do allow move to `IMPLEMENTED` after guards pass.
-- Do allow Postpone/Cancel only with confirmation.
+1. History entry records: `"REOPEN: project moved from {old_folder_state} to UAT_PREPARE"`.
+1. Folder physically moves to `UAT_PREPARE/`.
+1. CR state → `PENDING SUBMISSION`.
+1. `cr_state_updated_at` updated.
 
-`IMPLEMENTED` lock means all editing/deleting/postponing controls hidden or disabled.
+### 9.5 Folder State Locking Rules
 
-### 7.7 T-10 Rule
+|                       | UAT_PREPARE | PROD_READY                    | IMPLEMENTED | POSTPONED     | CANCELED |
+| --------------------- | ----------- | ----------------------------- | ----------- | ------------- | -------- |
+| Edit metadata         | ✅          | Partial                       | ❌          | ✅            | ✅       |
+| Edit files            | ✅          | Partial                       | ❌          | ✅            | ✅       |
+| Add/edit notes        | ✅          | ✅                            | View only   | ✅            | ✅       |
+| Rename project        | ✅          | ❌                            | ❌          | ✅            | ✅       |
+| Delete project        | ✅          | ❌                            | ❌          | ✅            | ✅       |
+| Change CR/Drone state | ✅          | Limited                       | ❌          | ❌            | ❌       |
+| Move folder state     | ✅          | To IMPLEMENTED/POSTPONED only | ❌          | Resume/Cancel | Reopen   |
 
-Requirement: CR must reach at least `PENDING APPROVAL` no later than configured threshold days before `start_datetime`.
+**PROD_READY Partial Lock:** editing metadata, renaming, destructive file ops, and delete are all disabled. Viewing, notes/evidence editing, CR/Drone progression needed for deployment, and moving to IMPLEMENTED or POSTPONED are allowed.
 
-Default threshold: 10 days.
+### 9.6 T-10 Rule
 
-Canonical calculation:
-
-```text
-cr_pending_approval_at <= start_datetime - t10_threshold_days
+```python
+# Guard: CR must have reached PENDING APPROVAL at least t10_threshold_days before start_datetime
+cr_pending_approval_at <= start_datetime - timedelta(days=t10_threshold_days)
 ```
 
-Rules:
+Default threshold: 10 days (configurable in Settings).
 
-- Use `cr_pending_approval_at`, not `cr_state_updated_at`, for T-10 proof.
-- If `cr_pending_approval_at` missing and CR is already beyond `PENDING SUBMISSION`, show warning that old data cannot prove T-10.
-- Dashboard highlights row when current date passes T-10 deadline and CR has not reached `PENDING APPROVAL`.
-- Transition `UAT_PREPARE → PROD_READY` is blocked if T-10 condition fails or cannot be proven.
+- Uses `cr_pending_approval_at`, not `cr_state_updated_at`.
+- If `cr_pending_approval_at` is missing and CR is beyond `PENDING SUBMISSION`: warn that T-10 cannot be proven.
+- Dashboard highlights row in warning color when today passes the T-10 deadline and CR has not yet reached `PENDING APPROVAL`.
+- `UAT_PREPARE → PROD_READY` is blocked if T-10 fails (manual override with confirmation allowed).
 
-### 7.8 Auto `IN-PROGRESS`
+### 9.7 Auto IN-PROGRESS (APScheduler)
 
-Background QTimer checks active projects periodically.
+APScheduler checks active projects every 60 seconds.
 
-Default tick: 60 seconds.
+Condition: `start_datetime ≤ now ≤ end_datetime`
 
-If local OS `now` is inside `[start_datetime, end_datetime]`:
+Action:
 
-- CR with `APPROVED` becomes `IN-PROGRESS` automatically.
-- Drone ticket with `APPROVED` becomes `IN-PROGRESS` automatically.
-- Metadata is written atomically.
-- History entries are appended.
-- UI refreshes through the pywebview JS bridge or equivalent main-thread-safe notification path.
-- Notification is created.
+- CR with state `APPROVED` → set to `IN-PROGRESS`
+- All Drone tickets with state `APPROVED` → set to `IN-PROGRESS`
+- Write metadata atomically.
+- Append history entries.
+- Push notification to frontend event queue.
+
+### 9.8 CR/Drone Link Parsing
+
+- User pastes full URL into CR or Drone field.
+- Store full URL unchanged in `cr_link` / `drone_link`.
+- Extract friendly identifier for display:
+  - CR: `CRNumber=CR202604209900114` → display `CR202604209900114 ↗`
+  - Drone: `/D-SSIDBI-159` → display `D-SSIDBI-159 ↗`
+- If extraction fails: display shortened safe URL text.
+- When pasted into empty field: validate URL-like, store, display extracted.
+- When CR link pasted: auto-set state to `PENDING SUBMISSION` if state was empty.
+- Click always opens full URL in default OS browser.
+- History entry on save, not on each keystroke.
 
 ---
 
-## 8. Link Parsing and Display
+## 10. Global Shell & Navigation
 
-### 8.1 CR Link
+### 10.1 Navigation Pages
 
-User pastes full CR URL into CR field.
-
-App stores full URL in `cr_link`.
-
-UI displays formatted CR number extracted from URL when possible.
-
-Example display:
-
-```text
-CR202604209900114 ↗
 ```
-
-Click opens stored `cr_link` in default browser.
-
-If extraction fails, display shortened URL or host/path safely, but keep full URL stored.
-
-### 8.2 Drone Link
-
-User pastes full Drone URL into Drone field.
-
-App stores full URL in `drone_link`.
-
-UI displays formatted Drone ticket extracted from URL when possible.
-
-Example display:
-
-```text
-D-SSIDBI-159 ↗
-```
-
-Click opens stored `drone_link` in default browser.
-
-### 8.3 Empty Field Paste Behavior
-
-When field is empty and user pastes CR/Drone link:
-
-- Validate that pasted value is URL-like.
-- Store original full URL.
-- Immediately display extracted CR/Drone identifier if possible.
-- Keep clickable behavior.
-- Add history entry after Save, not on every paste keystroke.
-
----
-
-## 9. App Navigation and Windows
-
-Navigation items:
-
-1. Main Dashboard
+1. Dashboard
 2. Project Details
-3. Report
-4. Second Brain
-5. Automations
+3. Second Brain  (contains: Notes, Link Bank)
+4. Report
+5. Automations   (contains: Outlook, Teams, Scheduler, Rules Engine)
 6. Settings
+```
 
-Notifications is not a separate page. It is a persistent panel visible across all windows, attached to main layout/sidebar.
+Notifications are **not** a separate page — they are a persistent sidebar panel visible on all pages.
 
-Link Bank is not a separate page. It is a mode/tab inside Second Brain.
+### 10.2 App Shell Layout
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  SIDEBAR  │  MAIN WRAPPER                               │
+│           │  ┌─────────────────────────────────────────┐ │
+│  [Logo]   │  │  HEADER (red)                           │ │
+│  [Nav]    │  │  Title . . . . DateTime . . . Actions   │ │
+│  [Notif]  │  └─────────────────────────────────────────┘ │
+│  [Coll]   │  PAGE CONTENT (white body)                   │
+│           │                                               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 10.3 Sidebar Rules
+
+- Background: `#0A0A0B` (black chrome).
+- Brand row: icon + “Project Tracker” title.
+- 6 nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Settings.
+- Notification panel fills remaining space in expanded mode.
+- Collapsed mode: icon-only + notification shortcut icon + collapse button at bottom.
+- Active nav item: `#231112` background + 3px `#DC2626` left border.
+- Collapsed width: ~52px. Expanded width: ~208px.
+- Collapse animation: smooth 220ms `InOutCubic`.
+
+### 10.4 Header Rules
+
+Every page has a consistent red header:
+
+- Background: `#B91C1C`.
+- Left: vertical black divider + Page Title (white, bold, large).
+- Center: DateTime badge (white bg, black border, live `ddd, dd MMM yyyy HH:mm:ss`).
+- Right: Page-specific controls + Refresh button.
+- Refresh button: white bg, spinning animation on click.
 
 ---
 
-## 10. User Flows
+## 11. Dashboard — User Flows & Components
 
-### 10.1 App Startup
+### 11.1 Purpose
 
-```text
+Primary daily overview of all projects for the selected year. Entry point for all project operations.
+
+### 11.2 Layout
+
+```
+Header: "Dashboard." | DateTime | [Year ▾] [Search] [+ Add Project] [🔄]
+─────────────────────────────────────────────────────────────────────────
+KPI Row:   [Total CR] [UAT Prepare] [PROD Ready] [Implemented] [Postponed]
+─────────────────────────────────────────────────────────────────────────
+Filter Row: [All (n)] [UAT Prepare (n)] [PROD Ready (n)] [Implemented (n)]
+            [Postponed (n)] [Canceled (n)]          ... [N project(s)]
+─────────────────────────────────────────────────────────────────────────
+Project Table (scrollable, full height)
+```
+
+### 11.3 User Flow — Initial Load
+
+```
 App opens
-  → Load settings.json from %APPDATA%\ProjectTrackerDBS\
-    → If root_folder unset: show setup dialog to choose root folder
-    → Save settings
-  → Scan filesystem
-  → Load dashboard for current year if folder exists, otherwise prompt/create
-  → Start watchdog observer
-  → Start auto IN-PROGRESS timer
+  → Load settings.json
+    → If root_folder unset → show First Run Setup dialog (choose root folder)
+  → Read last_selected_year from settings.ui
+  → Scan filesystem for year folders
+  → Populate year dropdown
+  → Load projects for selected year from SQLite cache (or scan if cache empty)
+  → Render KPI cards + table
+  → Start APScheduler background tasks
+  → Begin event polling (1.5s interval)
 ```
 
-### 10.2 Navigation
+### 11.4 User Flow — Filter by Folder State
 
-```text
-User clicks sidebar item
-  → QStackedWidget switches active window
-  → Notification panel stays visible and is not recreated
+```
+User clicks filter tab (e.g. "PROD Ready")
+  → Filter table in-memory (no rescan)
+  → Update project count label
+  → Table renders filtered rows only
+  → Clicking "All" shows all folder states
 ```
 
-### 10.3 Dashboard Filter
+### 11.5 User Flow — Search
 
-```text
-User opens Main Dashboard
-  → Table shows all projects for selected year
-  → State tabs filter in memory
-  → Search filters by project/subproject name with 200ms debounce
-  → Year dropdown shows existing year folders only
-  → Selecting year rescans that year
+```
+User types in search field
+  → Debounce 200ms
+  → Filter visible rows by: project name, subproject name, CR number, drone ticket
+  → Matches highlight
+  → Clears on empty input
 ```
 
-### 10.4 Add Year
+### 11.6 User Flow — Change Year
 
-```text
+```
+User selects year from dropdown
+  → Trigger filesystem scan for that year
+  → Rebuild SQLite cache for that year
+  → Render new table
+  → Save last_selected_year to settings.ui
+```
+
+### 11.7 User Flow — Add Year
+
+```
 User clicks + beside year dropdown
-  → Popover/dropdown defaults to next year
-  → User picks year
-  → If year > current year + 2: confirmation warning
-  → Create {YEAR}\UAT_PREPARE, PROD_READY, IMPLEMENTED, POSTPONED
-  → Refresh year dropdown
+  → Dialog: "Create year folder?" with year input (default: next year)
+  → If year > current_year + 2 → confirmation warning shown
+  → Confirm → create {ROOT}/{YEAR}/ and 5 state folders
+  → Refresh year dropdown → select new year
 ```
 
-### 10.5 Dashboard Row Actions
+### 11.8 User Flow — Add Project
 
-For each project/sub project row:
-
-- Click project/sub project name: open folder in Windows File Explorer.
-- Click CR/Drone display value: open stored link in default browser.
-- Click Details: navigate to Project Details.
-- Change CR/Drone state via inline dropdown if transition is valid.
-- Open action menu: Details, Move to `PROD_READY`, Postpone, Delete, Open Folder.
-
-Invalid transitions must be disabled or blocked with clear reason.
-
-### 10.6 Add New Project
-
-```text
-User clicks Add Project
-  → Project Details opens in NEW_PROJECT mode
-  → Only Project Name field required
-  → Real-time Windows folder name validation
-  → Save disabled until valid
-  → Save creates {root}\{year}\UAT_PREPARE\{project_name}\
-  → Create project_data.json defaults
-  → Create notes.md
-  → Create default command template files if configured
-  → Refresh Dashboard and highlight new row
+```
+User clicks "+ Add Project"
+  → Navigate to Project Details in NEW_PROJECT mode
+  → (see Section 12 for full flow)
 ```
 
-### 10.7 Project Details — SHOW/EDIT
+### 11.9 User Flow — Open Project Details
 
-```text
-User clicks Details
-  → Project Details opens in SHOW_EDIT mode
-  → Load selected main project/sub project context
-  → Lock/edit behavior follows folder state
+```
+User clicks Details button in row action menu
+  → Navigate to Project Details in SHOW_EDIT mode
+  → Load selected project
 ```
 
-Main project context shows:
+### 11.10 User Flow — Change CR State (Inline)
 
-- Main project info.
-- CR link/state.
-- Start/end datetime.
-- All sub projects.
-- Drone ticket mapping for main project and sub projects.
-- Main folder files excluding files inside sub project folders.
-- Main `notes.md`.
-- Project history.
-
-Sub project context shows:
-
-- Sub project info.
-- Parent main project info.
-- Same CR number/link inherited from main project.
-- Drone ticket mapped to that sub project.
-- Sub project files.
-- Sub project `notes.md`.
-- Relevant project/sub project history.
-
-Available actions depending on lock state:
-
-- Open root folder.
-- Rename project/sub project.
-- Edit CR link/state.
-- Add/edit Drone tickets.
-- Add sub project from main project context.
-- Delete project/sub project.
-- Edit start/end datetime.
-- Add/delete files.
-- Add file from template.
-- Add manual file.
-- Edit notes.
-- View history.
-
-### 10.8 Add Sub Project
-
-```text
-User opens main project details
-  → Click Add Sub Project
-  → Enter folder name
-  → Validate Windows folder name
-  → Create subfolder
-  → Create subproject notes.md
-  → Refresh subproject list
+```
+User clicks CR State dropdown in table row
+  → Show valid next states for current state
+  → IN-PROGRESS shown as disabled/label (auto only)
+  → User selects state
+  → If POSTPONED: confirmation modal ("Move project to POSTPONED?")
+  → If CANCELED: confirmation modal ("Mark as Canceled? This moves project to CANCELED folder.")
+  → Backend validates transition + guard
+  → On success: update row, history entry, notification
+  → On failure: show specific guard failure message
 ```
 
-### 10.9 Add Drone Ticket
+### 11.11 User Flow — Change Drone State (Inline)
 
-```text
-User opens project details
-  → Click Add Drone Ticket
-  → Select mapping: main project or sub project folder
-  → Paste Drone link
-  → Store full link
-  → Display extracted ticket identifier
-  → Default drone_state = UAT
-  → Append history
+Same pattern as CR State inline change.
+
+```
+  → If all Drones + CR reach APPROVED → auto move folder to PROD_READY
+  → Notification: "Project moved to PROD_READY."
+  → Row folder state badge updates
 ```
 
-### 10.10 Add File from Template
+### 11.12 User Flow — Inline CR/Drone Link Paste
 
-```text
-User clicks Add File from Template
-  → App lists files from configured template folders
-  → User selects template
-  → App copies template into current project/sub project folder
-  → New filename prefix = {CR_NUMBER}_{template_filename}
-  → App opens file using default Windows application
-  → Refresh file list
+```
+User clicks CR Number cell or Drone Ticket cell
+  → Cell becomes editable inline input
+  → User pastes full URL
+  → On blur/Enter: store URL, display extracted identifier
+  → Multiple rows can be bulk-pasted in sequence
+  → History entry after each committed save
 ```
 
-### 10.11 Add Manual File
+### 11.13 User Flow — Row Action Menu (⋮)
 
-```text
-User clicks Add Manual File
-  → Input file name
-  → If extension exists: use it
-  → If no extension: user chooses format
+```
+User clicks ⋮ button
+  → Popup menu shows:
+    - Open Project Folder (opens Windows Explorer)
+    - Project Details
+    - Move to PROD_READY (if UAT_PREPARE + guards)
+    - Move to Implemented (if PROD_READY + guards)
+    - Postpone
+    - Cancel
+    - Reopen (if POSTPONED or CANCELED)
+    - Delete (Recycle Bin, confirmation required)
+  → Each action validates server-side
+```
+
+### 11.14 User Flow — Refresh
+
+```
+User clicks 🔄
+  → Rescan selected year from filesystem
+  → Rebuild SQLite cache
+  → Refresh table + KPI
+  → Refresh icon spins (650ms animation)
+```
+
+### 11.15 Table Columns
+
+| Column         | Content                                       | Editable Inline |
+| -------------- | --------------------------------------------- | --------------- |
+| No             | Row number                                    | ❌              |
+| Main Project   | Project name (click → open folder)            | ❌              |
+| Sub Project    | Sub project name(s) (click → open sub folder) | ❌              |
+| Start DateTime | Formatted per settings                        | ❌              |
+| End DateTime   | Formatted per settings                        | ❌              |
+| Drone Ticket   | Extracted ID + link icon (click → browser)    | ✅ (paste URL)  |
+| Drone State    | Inline state dropdown                         | ✅              |
+| CR Number      | Extracted ID + link icon (click → browser)    | ✅ (paste URL)  |
+| CR State       | Inline state dropdown                         | ✅              |
+| Actions        | ⋮ menu                                        | —               |
+
+---
+
+## 12. Project Details — User Flows & Components
+
+### 12.1 Purpose
+
+Operational workspace for one project: edit metadata, manage CR/Drone links, manage sub-projects, manage files, write notes, review history.
+
+### 12.2 Modes
+
+**NEW_PROJECT mode:** creating a brand new project.  
+**SHOW_EDIT mode:** viewing/editing an existing project.
+
+### 12.3 Header
+
+```
+Header: "Project Details." | DateTime | [Year ▾] [Project ▾] [Sub Project ▾] [Search] [+ Add Project] [🔄]
+```
+
+### 12.4 User Flow — NEW_PROJECT Mode
+
+```
+User arrives from "+ Add Project"
+  → Form shows minimal required fields:
+    - Project Name (realtime Windows folder name validation)
+    - Year (pre-selected from dashboard)
+    - Start DateTime
+    - End DateTime
+    - CR Link (optional at creation)
+    - First Drone Link + Drone Owner (optional at creation)
+    - Implementation Plan (optional)
+  → Save disabled while project name is invalid
+  → User fills fields → clicks Save
+    → Create folder: {ROOT}/{YEAR}/UAT_PREPARE/{PROJECT_NAME}/
+    → Create project_data.json with defaults
+    → Create notes.md (empty)
+    → Append history: "Project created"
+    → Navigate to SHOW_EDIT mode for new project
+    → Dashboard row added
+  → Cancel → return to Dashboard, no files created
+```
+
+### 12.5 User Flow — SHOW_EDIT Mode Layout
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ Project Command Center: [Project ▾]  [Sub Project ▾]  [Open] [Delete] │
+├────────────────────────┬──────────────────────────────────────────────┤
+│  LEFT COLUMN           │  RIGHT COLUMN                                 │
+│                        │                                               │
+│  Project Identity      │  Files                                        │
+│  ─────────────────     │  ──────                                       │
+│  Project Name          │  [Add File] [From Template]                   │
+│  CR Number             │  file list                                     │
+│  Drone Ticket(s)       │                                               │
+│  CR State              │  Notes (markdown)                             │
+│  Drone State           │  ──────                                       │
+│  Owner                 │  [Undo] [Redo] [B][I][H1][H2][Code][Link]... │
+│                        │  textarea (autosave 1000ms)                   │
+│  Schedule              │                                               │
+│  ─────────────────     │  Activity History                             │
+│  Start DateTime        │  ─────────────                                │
+│  End DateTime          │  read-only list, newest first                 │
+│                        │                                               │
+│  Sub Projects          │                                               │
+│  ─────────────────     │                                               │
+│  [Add Sub Project]     │                                               │
+│  sub project table     │                                               │
+│                        │                                               │
+└────────────────────────┴──────────────────────────────────────────────┘
+```
+
+### 12.6 User Flow — Edit CR Link
+
+```
+User clicks CR Number field
+  → Becomes editable input
+  → User pastes full URL
+  → On blur/Enter:
+    → Extract CR number for display
+    → Auto-set CR state to PENDING SUBMISSION if currently empty
+    → Save to project_data.json
+    → Append history: "CR link updated"
+```
+
+### 12.7 User Flow — Change CR State (Project Details)
+
+```
+User clicks CR State dropdown
+  → Shows valid selectable states (not IN-PROGRESS)
+  → User selects new state
+  → Backend validates transition guard
+  → On failure → show modal listing each failed guard
+  → On success:
+    → Update cr_state + cr_state_updated_at
+    → If first PENDING APPROVAL → set cr_pending_approval_at
+    → Append history
+    → If auto-PROD_READY conditions now met → trigger folder move
+    → If POSTPONED/CANCELED → move folder
+    → UI updates folder state badge
+```
+
+### 12.8 User Flow — Add Drone Ticket
+
+```
+User clicks "+ Add Drone Ticket"
+  → Dialog: drone link input + subfolder mapping (main project or sub project) + owner picker
+  → Owner picker: search Outlook contacts (Windows COM) or free text fallback
+  → Confirm → add to drone_tickets array → save JSON
+  → Append history: "Drone ticket added: {extracted_id}"
+```
+
+### 12.9 User Flow — Add Sub Project
+
+```
+User clicks "+ Add Sub Project"
+  → Inline or dialog: enter sub project folder name
+  → Realtime folder name validation
+  → Confirm → create subfolder → add notes.md inside
+  → Sub project appears in sub project table
+  → User can now map a Drone ticket to the new sub project
+```
+
+### 12.10 User Flow — Sub Project Table
+
+```
+Columns: Sub Project | Drone Ticket | Drone State | Owner | Actions
+Actions: Open Folder | Delete (Recycle Bin) | Rename (if not locked)
+Drone State editable inline → same guard flow as main project
+Drone Ticket editable inline → paste URL → extract + store
+```
+
+### 12.11 User Flow — File Management
+
+```
+User views file list (main project files only; sub project files not shown in main list)
+
+Add File from Template:
+  → Browse file_template_folder
+  → Select template
+  → Create copy: {CR_NUMBER}_{template_filename} in project folder
+  → Open file with default OS app
+
+Add Manual File:
+  → Input filename (with or without extension)
+  → Choose file type if no extension given
   → Create empty file
-  → Open with default Windows application
-  → Refresh file list
+  → Open with default OS app
+
+Open File: → os.startfile (Windows)
+Delete File: → confirmation → send2trash (Recycle Bin)
+Rename File: → inline rename → save
+
+Note: all file ops disabled in PROD_READY and IMPLEMENTED states (except Add/Edit Notes)
 ```
 
-### 10.12 Notes Editing
+### 12.12 User Flow — Notes
 
-Project and sub project notes use `notes.md` as primary storage.
-
-```text
-User types in built-in notes editor
-  → Debounce 1000ms
-  → Auto-save to notes.md
-  → Show saved status
+```
+User edits in markdown textarea
+  → Autosave triggers 1000ms after last keystroke
+  → "Saving..." indicator while pending
+  → "Saved" indicator after write to notes.md completes
+  → Markdown toolbar inserts syntax at cursor position
+  → Edit/Preview toggle: Preview renders markdown as HTML (via marked.js)
 ```
 
-JSON `notes` remains for legacy/short note compatibility, not primary note editor storage.
+### 12.13 User Flow — REOPEN
 
-### 10.13 REOPEN
-
-```text
-User selects REOPEN from CR state dropdown
-  → Only available from APPROVED or PENDING APPROVAL
-  → Confirm modal
-  → Move project folder to UAT_PREPARE
-  → Record REOPEN history event
-  → Set next working CR state to PENDING SUBMISSION
-  → Update timestamps
-  → Refresh Dashboard
-  → Create notification
 ```
-
-History detail should preserve old state:
-
-```text
-REOPEN: {old_state} → REOPEN, project reverted to UAT_PREPARE; next state PENDING SUBMISSION
-```
-
-### 10.14 Move to PROD_READY
-
-```text
-User clicks Move to PROD_READY
-  → Run all guards
-  → If failed: show guard checklist and block
-  → If passed: confirm
-  → Move folder to PROD_READY
-  → Append history
-  → Refresh Dashboard
-```
-
-### 10.15 Postpone
-
-```text
-User clicks Postpone
-  → Not available for IMPLEMENTED
-  → Confirm
-  → Move folder to POSTPONED
-  → Append history
-  → Refresh Dashboard
-```
-
-Resume:
-
-```text
-User clicks Resume from POSTPONED
-  → Confirm
-  → Move folder to UAT_PREPARE
-  → Append history
-  → Refresh Dashboard
-```
-
-### 10.16 Delete
-
-```text
-User clicks Delete
-  → Not available for IMPLEMENTED
-  → Confirm that folder goes to Recycle Bin
-  → send2trash(project_or_subproject_path)
-  → Refresh Dashboard
-  → Create notification
-```
-
-Deleting a main project deletes/moves whole main project folder to Recycle Bin. Deleting sub project moves only sub project folder.
-
-### 10.17 CR CANCELED
-
-```text
-User sets CR state to CANCELED
-  → Confirm
-  → Update CR state/history
-  → Move project folder to POSTPONED
-  → Refresh Dashboard
-  → Create notification
+User is in POSTPONED or CANCELED project
+  → REOPEN button visible in action menu or header
+  → Confirmation dialog: "Move project back to UAT_PREPARE?"
+  → Confirm:
+    → Move folder from POSTPONED/CANCELED to UAT_PREPARE
+    → Set CR state to PENDING SUBMISSION
+    → Append history: "REOPEN: moved from {old_state} to UAT_PREPARE"
+    → Notification sent
+    → UI refreshes
 ```
 
 ---
 
-## 11. Main Dashboard Requirements
+## 13. Second Brain — User Flows & Components
 
-Dashboard is primary tracking window.
+### 13.1 Purpose
 
-Must show:
+Local personal knowledge workspace: markdown notes, project documents discovery, operational playbooks, and reusable link library.
 
-- Active year selector.
-- Add Year button.
-- Add Project button.
-- State filters for `UAT_PREPARE`, `PROD_READY`, `IMPLEMENTED`, `POSTPONED`.
-- Search by project/sub project name.
-- Summary counts by state.
-- Table/list of main projects and sub projects.
+### 13.2 Header
 
-Each row should expose:
-
-- Project/sub project name.
-- Folder state.
-- CR number display and link action.
-- CR state badge/dropdown.
-- Drone ticket display and link action.
-- Drone state badge/dropdown.
-- Start/end datetime.
-- T-10 warning indicator.
-- Details/action button.
-
-Dashboard must not require full rescan for simple in-memory filters.
-
----
-
-## 12. Project Details Requirements
-
-Project Details has two modes.
-
-### 12.1 NEW_PROJECT Mode
-
-Triggered only from Add Project.
-
-Required:
-
-- Minimal form.
-- Project Name field.
-- Realtime folder validation.
-- Save creates folder and default metadata.
-- Cancel returns without creating files.
-
-### 12.2 SHOW_EDIT Mode
-
-Triggered from Dashboard Details or navigation.
-
-Required:
-
-- Project/sub project selector.
-- Header showing selected context.
-- Parent info when viewing sub project.
-- Main project info when viewing main project.
-- CR link/state editor according to lock rules.
-- Drone ticket list and mapping.
-- Start/end datetime editor according to lock rules.
-- Sub project management for main project.
-- File list for selected context.
-- Notes editor backed by `notes.md`.
-- Read-only history panel.
-
-File list rule:
-
-- If viewing main project, show files directly under main project folder only.
-- Do not include files inside sub project folders.
-- Organizational folders are normal folders, not sub projects.
-
----
-
-## 13. Report Requirements
-
-Report window shows project analytics and CSV export.
-
-Required filters:
-
-- Year.
-- Month.
-- Folder state.
-- CR state.
-- Drone state.
-- Search text.
-
-Required information:
-
-- Total CR count by selected filter.
-- Count by date/month/year.
-- Count by project folder state.
-- Count by CR state.
-- Count by Drone state.
-- Table of matching projects/sub projects.
-
-Export:
-
-- CSV only.
-- Use Python standard `csv` library.
-- User chooses output path through save dialog.
-- CSV must be readable by Excel.
-
-No PDF export in MVP.
-
----
-
-## 14. Second Brain Requirements
-
-Second Brain has two modes/tabs: Notes and Link Bank.
-
-### 14.1 Notes Mode
-
-Storage root default:
-
-```text
-%APPDATA%\ProjectTrackerDBS\SecondBrain\
+```
+Header: "Second Brain." | DateTime | [🔄]
+Tab Bar: [Notes] [Link Bank]
 ```
 
-Requirements:
+Tab bar follows the pill-style pattern from `second_brain_redesign.py`.
 
-- Free folder structure.
-- Create folder.
-- Rename folder.
-- Delete folder through Recycle Bin.
-- Create `.md` note.
-- Rename note.
-- Delete note through Recycle Bin.
-- Built-in markdown editor.
-- Auto-save with 1000ms debounce.
-- Optional preview uses browser-native HTML rendering or plain text unless a markdown dependency is approved.
-- Markdown toolbar inserts syntax for bold, italic, underline intent, H1, H2, code, link, horizontal rule, and quote.
-- Smart tags or tag text support inside note content.
-- Search by pattern, case-insensitive partial match.
-- Filter notes by date.
-- Can also show/search project/sub project notes and files.
+### 13.3 Notes Tab Layout
 
-All notes created by Second Brain must be `.md`.
-
-### 14.2 Link Bank Mode
-
-Requirements:
-
-- Add/edit/delete categories.
-- Add/edit/delete links.
-- Fields: name, URL, notes, category.
-- Group links by category.
-- Open link in default browser.
-- Search case-insensitive by name, URL, notes.
-- Stored in `link_bank.json`.
-
----
-
-## 15. Automations Requirements
-
-Automations window has four MVP modes/tabs:
-
-1. Email
-2. Teams
-3. Download Email
-4. Automation Rules
-
-Automation Rules is shared rule management for reusable conditions used by Email, Teams, and Download Email jobs.
-
-### 15.1 Email Automation
-
-Uses Outlook desktop through `win32com.client`.
-
-Email can be draft or send depending on settings.
-
-Default mode: draft.
-
-Flags:
-
-- `ack_sent`
-- `approval_sent`
-- `last_cr_link_when_sent`
-
-Flags are visual indicators only. They must not block user from generating another draft/send.
-
-#### 15.1.1 Email Categories
-
-| Category    | Purpose                                                                       | Active Conditions                                                          |
-| ----------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `ACK_UAT`   | Ask manager acknowledgement for non-SOP/per-application UAT/package readiness | CR `PENDING SUBMISSION`; Drone `PENDING APPROVAL` for projects using Drone |
-| `ACK_SOP`   | Ask acknowledgement for routine weekly SOP                                    | CR `PENDING SUBMISSION`; Drone ignored                                     |
-| `APRVL_CR`  | Ask technical approval after PROD execution for non-SOP/per-application work  | CR `IN-PROGRESS`; Drone `IN-PROGRESS` for projects using Drone             |
-| `APRVL_SOP` | Ask technical approval for routine weekly SOP closure                         | CR `IN-PROGRESS`; Drone ignored                                            |
-
-If project has no Drone ticket, Drone condition is treated as passed where applicable.
-
-#### 15.1.2 Editable Template Settings
-
-Each email category must allow editing:
-
-- To.
-- CC.
-- Subject template.
-- Body template.
-- Attachment template/file.
-- Draft/send override.
-- Conditions.
-
-Editable conditions may involve only:
-
-- CR state.
-- Drone state.
-- Existence of specified file in project/sub project folder.
-
-#### 15.1.3 Placeholders
-
-Supported placeholders:
-
-```text
-{PROJECT_NAME}
-{SUBPROJECT_NAME}
-{CR_NUMBER}
-{CR_LINK}
-{DRONE_TICKET}
-{DRONE_LINK}
-{START}
-{END}
-{CR_STATE}
-{DRONE_STATE}
-{YEAR}
-{USER}
-{IMPLEMENTATION_PLAN}
+```
+┌──────────────────────────┬─────────────────────────────────────────────┐
+│  LEFT: Notes & Documents │  RIGHT: Editor / Preview                     │
+│                          │                                               │
+│  [Search...] [📅] [Sort] │  Metadata: Title | Tags                      │
+│  [Add Folder][Add File]  │  Breadcrumb + document state indicator        │
+│  [Filter ▾]              │  State: [Editable][Image][External]           │
+│  ─────────────────────── │  Mode: [Edit][Preview]                        │
+│  ▶ Search Results        │  Toolbar: [Undo][Redo][B][I][U][H1][H2]...   │
+│  ▶ Pinned                │        [Code][Link][HR][Quote] ... [Pin][⭐] │
+│  ▶ Favorites             │  ─────────────────────────────────────────── │
+│  ▶ Second Brain Notes    │  Editor/Preview content (stretchable)         │
+│    ▶ Daily               │  ─────────────────────────────────────────── │
+│    ▶ UAT                 │  Backlinks / Related Notes                    │
+│  ▶ Project Documents     │  ─────────────────────────────────────────── │
+│    (all project files)   │  Recent Activity                              │
+│                          │                                               │
+└──────────────────────────┴─────────────────────────────────────────────┘
+Flow Status: [Ready · select note or search]
 ```
 
-### 15.2 Teams Automation
+### 13.4 Supported File Modes
 
-Default behavior is paste-only, not auto-send.
+| Extensions                                                                                                                                                    | Mode                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `.md`, `.txt`, `.py`, `.sh`, `.ps1`, `.sql`, `.json`, `.csv`, `.log`, `.yml`, `.yaml`, `.xml`, `.toml`, `.ini`, `.cfg`, `.env`, `.ts`, `.js`, `.html`, `.css` | Editable in-app                  |
+| `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`                                                                                                                       | Preview only in-app              |
+| `.pdf`, `.docx`, `.xlsx`, `.zip`, and all others                                                                                                              | Open externally (default OS app) |
 
-Requirements:
+### 13.5 User Flow — Browse Notes Tree
 
-- User can add/edit/delete Teams automation entries.
-- Each entry has name, target email/group, mentions, message template, attachment paths, and conditions.
-- Conditions may involve CR state, Drone state, folder state, and file existence.
-- Countdown seconds is configurable globally.
-- `teams_auto_send` default false globally.
-- If false: app opens Teams target and pastes message only.
-- If true: app pastes message and presses Enter after countdown.
-- User can cancel during countdown.
-- `pyautogui.FAILSAFE = True`.
-- Locked/sleeping screen or missing target should abort safely.
-
-### 15.3 Download Email Automation
-
-Triggered after selected email draft/send is created.
-
-Purpose: wait for Outlook reply email related to CR, save it to project folder, and notify user.
-
-Rules:
-
-- Runs in background thread, not UI thread.
-- Poll interval default: 10 seconds.
-- Timeout default: 3 hours.
-- Match reply by CR number in subject and/or configured matching rule.
-- Active job shows CR number, project name, start time, progress/elapsed indicator, and Stop action.
-- On match: save email and attachments to project folder.
-- On success: mark job completed and create notification.
-- On timeout: mark job timeout and create warning notification.
-- User can stop active job; stopped job is kept in job history.
-- Active and historical jobs visible in Automations window.
-
-### 15.4 Automation Rules
-
-Automation Rules is shared configuration for conditions used by Email, Teams, and Download Email jobs.
-
-Requirements:
-
-- User can add/edit/delete named condition groups.
-- Condition group can be reused by Email template or Teams automation.
-- Conditions may check CR state, Drone state, folder state, project name pattern, SOP/non-SOP pattern, and file existence.
-- Conditions must show human-readable pass/fail result before automation runs.
-- Failed required conditions block automation unless user explicitly marks condition group as warning-only.
-- Condition changes are saved to `settings.json`.
-
----
-
-## 16. Notifications Requirements
-
-Notifications are persistent panel attached to all windows, not separate navigation page.
-
-Notification sources:
-
-- T-10 warning.
-- Auto `IN-PROGRESS`.
-- Watchdog folder rename/move/delete.
-- Email draft/send completed.
-- Email reply received.
-- Email download timeout.
-- Schema/corrupt JSON warning.
-- System/config warnings.
-
-Notification fields:
-
-| Field          | Description                                            |
-| -------------- | ------------------------------------------------------ |
-| `id`           | Unique id                                              |
-| `type`         | Notification type                                      |
-| `title`        | Short title                                            |
-| `message`      | Full message                                           |
-| `timestamp`    | Local timestamp                                        |
-| `project_path` | Optional related project                               |
-| `dismissed`    | In-memory or persisted depending future implementation |
-
-Panel behavior:
-
-- Visible on all main windows.
-- Attached to persistent sidebar/layout and not recreated during navigation.
-- Shows latest 3 notifications by default.
-- Shows total count when more than 3 notifications exist.
-- Card click opens detail dialog.
-- Detail dialog can close, dismiss, or go to project if applicable.
-- Dismiss removes notification from active panel.
-- Close keeps notification active.
-
-MVP can keep notifications in memory during one app session unless persistence is explicitly added later.
-
----
-
-## 17. Watchdog, Concurrency, and Data Safety
-
-### 17.1 Watchdog
-
-Use `watchdog` to detect filesystem changes under root folder.
-
-Safety requirements:
-
-1. Debounce filesystem events by at least 300ms.
-2. Watchdog thread must communicate to UI through a main-thread-safe pywebview bridge or queued notification path.
-3. JSON reads/writes must retry on temporary file lock.
-4. If folder is renamed/moved externally while app has it loaded, app must remap path before saving.
-5. External delete removes item from in-memory dashboard and creates notification.
-6. External move between state folders updates derived project state.
-
-### 17.2 Atomic Writes
-
-All JSON writes use temp file then replace.
-
-```text
-project_data.json.tmp → project_data.json
-settings.json.tmp → settings.json
-link_bank.json.tmp → link_bank.json
+```
+User opens Second Brain → Notes tab
+  → Tree renders: Pinned | Favorites | Second Brain Notes | Project Documents
+  → Project Documents shows all files in all project/subproject paths under root_folder
+  → User expands folders
+  → User clicks a file
+    → Editable file → load in editor
+    → Image file → show inline preview
+    → External file → show "Open with default app" message + button
 ```
 
-### 17.3 Error Handling
+### 13.6 User Flow — Search Notes
 
-- Missing `project_data.json`: project still appears with default metadata and warning if needed.
-- Corrupt JSON: skip affected project and notify/warn; app must not crash.
-- Unknown schema: skip/warn; app must not crash.
-- Missing subfolder referenced by Drone ticket: warn; app must not crash.
-- Locked file: retry before warning.
-- Existing target folder during move/rename: block and show error.
-
----
-
-## 18. Dependencies
-
-Locked baseline dependencies:
-
-```text
-pywebview>=5.0
-pywin32>=306
-pyinstaller>=6.0.0
-pyautogui>=0.9.54
-pyperclip>=1.8.2
-send2trash>=1.8.3
-watchdog>=4.0.0
+```
+User types in search field
+  → Debounce 150ms
+  → Query runs against in-memory precomputed index (title, body, tags, path, content)
+  → Results appear under "Search Results" group in tree (above other groups)
+  → Date filter: user clicks 📅 → unclipped popup calendar → sets YYYYMMDD filter
+  → Sort: Newest | Oldest | A-Z | Type
+  → User clicks result → open in editor
+  → Clearing search removes "Search Results" group from tree
 ```
 
-Rules:
+### 13.7 User Flow — Create Note/Folder
 
-- Do not add dependency without user confirmation.
-- Do not add Qt or browser-engine packages.
-- Do not add PDF library.
-- Markdown preview should use browser-native HTML rendering or plain text unless user approves markdown dependency.
+```
+User clicks Add Folder:
+  → If item selected in tree → create child folder
+  → If nothing selected → create root folder in Second Brain path
+  → Inline rename starts immediately in tree
+  → Enter or click-out commits name
 
----
-
-## 19. Packaging
-
-Target packaging is Windows only.
-
-Production direction:
-
-```powershell
-pyinstaller --name "ProjectTrackerDBS" --onedir --windowed --icon=assets/icon.ico --add-data "assets;assets" project_tracker/main.py
+User clicks Add File:
+  → Create new empty file with selected type (default: .md)
+  → Inline rename starts in tree
+  → On commit: determine open_mode from extension
+  → Load into editor (if editable)
 ```
 
-Rules:
+### 13.8 User Flow — Pin / Favorite
 
-- Do not attempt Windows PyInstaller build from Linux.
-- Build verification belongs on Windows target machine.
-- Source code can be unit-tested on Linux only for platform-independent logic.
+```
+User opens a note
+  → Clicks Pin button in editor toolbar
+    → Note appears under "Pinned" group in tree
+    → Pin indicator visible on tree item
+  → Clicks Favorite (⭐) button
+    → Note appears under "Favorites" group in tree
+Pin/Favorite status stored in note metadata (SQLite or frontmatter in .md)
+```
+
+### 13.9 User Flow — Markdown Edit/Preview
+
+```
+User is in Edit mode (default):
+  → Textarea is editable
+  → Toolbar inserts markdown syntax at cursor
+  → Autosave: 1000ms debounce → write to .md file
+  → Status shows "Saving..." / "Saved"
+
+User clicks Preview:
+  → Content rendered as HTML via marked.js
+  → Textarea becomes read-only
+  → Switch back to Edit to continue writing
+```
+
+### 13.10 Backlinks & Related Notes
+
+```
+Below editor, Related Notes panel shows:
+  → Same tag matches
+  → Wiki-style [[NoteTitle.md]] references
+  → Same project file context
+→ Click related item → open in editor
+Production: built from tags, note titles, links, file metadata
+Prototype: static examples
+```
+
+### 13.11 Recent Activity
+
+```
+Recent Activity panel shows last-touched notes/files:
+  → Edited note
+  → Opened document
+  → Created note
+→ Click to resume work
+Production: local activity history stored in SQLite
+```
 
 ---
 
-## 20. MVP Scope
+## 14. Link Bank — User Flows & Components
 
-All listed product features are MVP:
+### 14.1 Purpose
 
-- Main Dashboard.
-- Project Details.
-- Report.
-- Second Brain Notes.
-- Link Bank inside Second Brain.
-- Automations: Email, Teams, Download Email, Automation Rules.
-- Settings.
-- Persistent notification panel.
-- Watchdog filesystem sync.
-- Auto `IN-PROGRESS`.
-- T-10 warning/blocking.
-- CSV export.
-- Windows packaging direction.
+Reusable work link library grouped by category with search, tags, and quick copy.
 
-MVP does not include:
+### 14.2 Layout
 
-- Cloud sync.
-- External DB.
-- SQLite cache.
-- Multi-user collaboration.
-- PDF export.
-- Internal browser/WebEngine.
-- Linux runtime support for the desktop app.
+```
+┌──────────────────────────────┬────────────────────────────────────────────┐
+│  LEFT: Categories            │  RIGHT: Link Content                        │
+│                              │                                              │
+│  [Search...] [📅] [Sort ▾]  │  Add/Edit Link Panel                         │
+│  [+ Category] [Rename] [📦] │  ────────────────────────────────────────── │
+│  [Filter ▾]                  │  Title | URL | Tags | Description           │
+│  ─────────────────────────── │           [Pin] [⭐] [Save]                 │
+│  PROD · 3 links              │  ────────────────────────────────────────── │
+│  UAT · 3 links               │  "PROD" Category Header                      │
+│  CR & ITSM Tools · 2 links   │  [Search within category...] [Sort ▾]       │
+│  Personal · 0 links          │  [Copy URL] [Edit] [Remove]                 │
+│  Archived · 4 links          │  ────────────────────────────────────────── │
+│                              │  ┌──────────────────┬─────────────────────┐ │
+│                              │  │  Link List       │  Selected Link      │ │
+│                              │  │  ─────────────── │  Detail Panel       │ │
+│                              │  │  compact cards   │                     │ │
+│                              │  └──────────────────┴─────────────────────┘ │
+└──────────────────────────────┴────────────────────────────────────────────┘
+```
+
+### 14.3 User Flow — Browse Links
+
+```
+User opens Second Brain → Link Bank tab
+  → Category list renders on left
+  → Clicking empty area deselects category
+  → Click category → right panel shows links for that category
+  → Links shown as compact cards (title, tags/badges, Last modified)
+  → Click a link card → Selected Link Detail panel updates
+    → Shows: URL (clickable), tags, details, category, path, date, status
+  → Click URL in detail panel → opens in default OS browser
+  → Click Copy URL → copies to clipboard
+```
+
+### 14.4 User Flow — Add Link
+
+```
+User fills Add/Edit Link panel:
+  → Link Title, Link (URL), Tags (comma-separated hashtags), Description
+  → Right side: Description textarea
+  → Bottom-right: [Pin] [⭐] [Save]
+  → Click Save → add new link to selected category
+  → Prototype: in-memory; Production: save to link_bank.json
+```
+
+### 14.5 User Flow — Edit Link
+
+```
+User selects a link card
+  → Clicks Edit in action toolbar
+  → Selected link data populates Add/Edit Link panel
+  → User modifies fields → clicks Save (same button)
+  → Link card updates
+```
+
+### 14.6 User Flow — Archive Link/Category
+
+```
+User selects link → clicks Remove → confirmation → link archived
+User right-clicks category → Archive → confirmation → category + links hidden
+Archived items visible in "Archived" section → user can Restore
+Hard delete not available; archive is the soft delete
+```
+
+### 14.7 User Flow — Search Links
+
+```
+User types in left panel search field
+  → Case-insensitive, searches: title, URL, tags, details, category
+  → Date filter available (same calendar popup pattern)
+  → Sort: Newest | Oldest | A-Z | Favorite | Pinned
+  → Results show across categories
+  → Clicking result selects its category and highlights link
+```
+
+### 14.8 User Flow — Import/Export
+
+```
+Export: → choose local file path → save link_bank.json or CSV
+Import: → browse local file → validate format → merge with confirmation
+```
+
+### 14.9 Link Card Content
+
+Each compact card shows:
+
+- Title (bold)
+- Tag badges (user-defined hashtags)
+- Last modified timestamp (bottom-right, muted)
+
+Selected Link Detail shows full: URL, tags, details, category, path, date, status.
+
+### 14.10 Link Bank Badges
+
+Tags are user-defined free-form strings. No fixed list. Initial suggestions include: `PROD`, `UAT`, `SOP`, `Portal`, `Dashboard`, `Working`, `Login Needed`, `Internal Only`. User can add/remove any tag.
 
 ---
 
-## 21. Implementation Protocol
+## 15. Report — User Flows & Components
 
-Implementation must happen in phases. Do not move to next phase until current phase is verified.
+### 15.1 Purpose
 
-Current instruction priority: finish PRD first before writing more Python code.
+Searchable, filterable, export-ready view of all projects and deployment status.
 
-### Phase 0 — PRD Finalization
+### 15.2 Layout
 
-- `PRD.md` is complete single source of truth.
-- `README.md` and `DESIGN.md` are not used as requirements.
-- User approves PRD direction.
+```
+Header: "Report." | DateTime | [🔄]
+─────────────────────────────────────────────────────────────────
+Filter Row: [Year ▾] [Month ▾] [Folder State ▾] [CR State ▾] [Drone State ▾]
+            [Search...] [Clear]                              [Export CSV]
+─────────────────────────────────────────────────────────────────
+KPI Cards: [Total CR] [UAT Prepare] [PROD Ready] [Implemented] [Postponed]
+─────────────────────────────────────────────────────────────────
+Chart Summaries: [CR States] [Drone States] [Monthly Activity]
+(each has labeled summary rows, not chart.js — utilitarian style)
+─────────────────────────────────────────────────────────────────
+Report Table (scrollable, full height with vertical scrollbar)
+```
+
+### 15.3 User Flow — Filter & Search
+
+```
+User adjusts Year/Month/State filters
+  → Table updates immediately (in-memory filter from loaded data)
+  → KPI cards update to match current filter
+
+User types in Search
+  → Debounce 200ms
+  → Filter by: project name, sub project, CR number, drone ticket
+  → Results shown inline
+
+User clicks Clear
+  → All filters reset to defaults
+  → Search cleared
+```
+
+### 15.4 User Flow — Export CSV
+
+```
+User clicks "Export CSV"
+  → Python opens save dialog (pywebview file dialog or OS dialog)
+  → User chooses output path + filename
+  → Export runs in background
+  → Notification on success: "CSV exported to {path}"
+  → CSV uses Python standard csv library; Excel-compatible (UTF-8 BOM)
+  → Export respects active filter set
+```
+
+### 15.5 Report Table Columns
+
+| Column                 |
+| ---------------------- |
+| No                     |
+| Main Project           |
+| Sub Project            |
+| Year                   |
+| Folder State           |
+| Start DateTime         |
+| End DateTime           |
+| CR Number (display)    |
+| CR State               |
+| Drone Ticket (display) |
+| Drone State            |
+| T-10 Status            |
+| Last Updated           |
+
+---
+
+## 16. Automations — User Flows & Components
+
+### 16.1 Purpose
+
+Safe, configurable automation of Outlook email, Teams messages, scheduled alarms, and general trigger-condition-action rules.
+
+### 16.2 Layout
+
+```
+Header: "Automations." | DateTime | [🔄]
+Tab Bar: [Outlook] [Teams] [Scheduler] [Rules Engine]
+─────────────────────────────────────────────────────────────────
+[Tab content area]
+```
+
+---
+
+### 16.3 Outlook Tab
+
+#### Purpose
+
+Manage outbound Outlook email templates (ACK_UAT, ACK_SOP, APRVL_CR, APRVL_SOP) and download email jobs.
+
+#### Layout
+
+```
+┌──────────────────────────────────────┬──────────────────────────────────────┐
+│  SEND AUTOMATION                     │  DOWNLOAD AUTOMATION                  │
+│  ────────────────────────────────    │  ────────────────────────────────     │
+│  Hint: Double-click row to edit      │  Relation to Send categories          │
+│  [CATEGORY | PURPOSE | CONDITIONS]   │  [CATEGORY | DETAILS] table           │
+│  4 rows                              │  2 rows                               │
+│                   [+ Add Category]   │              [Downloaded Emails ▶]   │
+│  ──────────────────────────────────  │  ──────────────────────────────────   │
+│  Send Automation Log                 │  Download Tool Log                    │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+
+Metrics Row: [Send Categories] [Download Jobs] [HTML Templates] [On Going ACK] [On Going Tech LV]
+```
+
+#### User Flow — View and Edit Send Category
+
+```
+User double-clicks a send category row (e.g. ACK_UAT)
+  → Email Template Dialog opens (full-screen dialog)
+
+Dialog layout (2-column):
+  LEFT:
+    - Category Code (editable)
+    - To, CC (email fields)
+    - Subject template with placeholders
+    - Body textarea (or HTML file option)
+    - Attachment field + Browse
+    - Automation Mode: [Draft Only] [Send Immediately]
+    - Placeholder chips (click to insert): {PROJECT_NAME} {CR_NUMBER} {CR_LINK} etc.
+
+  RIGHT:
+    - Active Conditions (condition grid: CR State op value, Drone State op value, Project Pattern)
+    - Condition Preview (live display of rule as text)
+    - Email Automation Log (scrollable, latest 10 entries)
+
+  Footer: [Cancel] [Save]
+```
+
+#### Email Template Placeholders
+
+```
+{PROJECT_NAME}  {CR_NUMBER}    {CR_LINK}         {CR_STATE}
+{DRONE_TICKET}  {DRONE_LINK}   {DRONE_STATE}     {START_DATETIME}
+{END_DATETIME}  {IMPLEMENTATION_PLAN}             {DISPLAY_NAME}
+```
+
+#### User Flow — Send Email (from Project Details or Automations)
+
+```
+User triggers email from project context (Project Details or Rules Engine action):
+  → Select category (ACK_UAT, etc.)
+  → Backend resolves placeholders from project_data.json
+  → If mode = draft:
+    → Outlook COM creates draft in Outbox
+    → Dialog shows preview
+    → User reviews and clicks Send in Outlook
+  → If mode = send:
+    → Confirmation dialog: "Send now to {to}?"
+    → Confirm → COM sends immediately
+  → email_flags updated (visual indicator only)
+  → History entry appended
+  → Notification created
+```
+
+#### User Flow — Downloaded Emails Dialog
+
+```
+User clicks "Downloaded Emails"
+  → Dialog opens showing all downloaded reply emails:
+    - Subject, From, CR Number, Date, Tag/Category
+  → Sorted newest first by default
+  → Search and sort available
+  → Click email card → expand details
+  → Close button
+```
+
+#### Email Category Conditions
+
+Each category can define conditions using operators:
+
+| Field                | Operators                                                                      |
+| -------------------- | ------------------------------------------------------------------------------ |
+| CR State             | eq, nq, contains, not contains, starts_with, ends_with, is_empty, is_not_empty |
+| Drone State          | (same)                                                                         |
+| Project Name pattern | (same)                                                                         |
+
+If conditions are defined, email action only executes when all conditions pass.
+
+---
+
+### 16.4 Teams Tab
+
+#### Purpose
+
+Configure and trigger Teams message automations (deep link + clipboard paste by default).
+
+#### Layout
+
+```
+┌──────────────────────────────────────────┬────────────────────────┐
+│  LEFT: Teams Message Automation          │  RIGHT: Teams Status   │
+│                                          │                        │
+│  Purpose text area                       │  [Saved Automation]    │
+│  Webhook URL                             │  [Active Automation]   │
+│  Attachment (optional)                   │  [Deactive Automation] │
+│  Automation Mode: [Preview][Send Now]    │  [Last Trigger]        │
+│                                          │                        │
+│  Saved Automations Table:                │                        │
+│  NAME | PURPOSE | MODE | ACTIVE | DATE   │                        │
+│  3 rows  [Open Teams Automation ▶]       │                        │
+│                                          │                        │
+│  Teams Automation Log                    │                        │
+└──────────────────────────────────────────┴────────────────────────┘
+```
+
+#### User Flow — Create/Edit Teams Automation
+
+```
+User clicks "Open Teams Automation" or double-clicks row
+  → Teams Automation Dialog opens (full-screen dialog)
+
+Dialog layout (2-column):
+  LEFT:
+    - Automation Purpose
+    - Webhook URL
+    - Attachment path + Browse
+    - Automation Mode: [Preview First (default)] [Send Immediately]
+    - Message Body textarea
+
+  RIGHT:
+    - Rules section
+    - [+ Add Rules] button
+    - Rules list (scrollable):
+      Each rule row: [index] [Field ▾] [Condition ▾] [Value/Pattern]
+      Fields: CR State, Drone State, Project State, Is File Exist
+      Conditions: conditions, equals, is not equals, true, false
+
+  Footer: [Delete] [Cancel] [Save]
+```
+
+#### User Flow — Send Teams Message (from Automation or Rules Engine)
+
+```
+User triggers Teams message:
+  → If mode = preview:
+    → App opens Teams desktop app or web via deep link
+    → Message pasted to clipboard
+    → User manually sends in Teams
+  → If mode = send immediately AND teams_auto_send = true:
+    → Countdown (configurable, default 3s) shows
+    → User can cancel during countdown
+    → After countdown: pyautogui pastes and presses Enter
+    → pyautogui.FAILSAFE = True (mouse to top-left corner aborts)
+  → History entry appended
+  → Notification created
+```
+
+---
+
+### 16.5 Scheduler Tab
+
+#### Purpose
+
+Alarm and reminder entries with notes. Each entry can trigger in-app notification, Outlook email, or Teams message (in-app is default; email/Teams require user confirmation).
+
+#### Layout
+
+```
+KPI Row: [Due Soon] [Overdue] [Paused] [Total Entries]
+─────────────────────────────────────────────────────────────────
+Table: RULE | PROJECT FILTER | STATE FILTER | SCHEDULE | CHANNEL | STATUS
+                                              [Import Rule] [+ Add Reminder]
+─────────────────────────────────────────────────────────────────
+```
+
+#### User Flow — Add Scheduler Entry
+
+```
+User clicks "+ Add Reminder"
+  → Dialog / form:
+    - Name (alarm title)
+    - Notes (alarm message/content, markdown supported)
+    - Schedule Type: One-time | Daily | Weekly | Monthly | Custom Cron
+    - Schedule Config: datetime picker or cron expression
+    - Project Filter: optional (bind alarm to a specific project)
+    - State Filter: optional (only trigger when project is in certain CR/folder state)
+    - Channels (multi-select):
+        ☑ In-app Notification (default, always on)
+        ☐ Outlook Email (requires: To, Subject, Body in sub-form)
+        ☐ Teams Message (requires: webhook or message content)
+    - Confirm Outlook/Teams channels: additional confirmation step before saving
+  → Save → entry added to scheduler table → APScheduler job created
+```
+
+#### User Flow — Alarm Triggers
+
+```
+APScheduler fires at scheduled time:
+  → Evaluate project filter (if any)
+  → Evaluate state filter (if any)
+  → If conditions met:
+    → In-app: push notification event to frontend event queue
+    → Outlook (if configured): COM creates draft or sends email
+    → Teams (if configured): deep link + clipboard + optional countdown
+  → Update last_triggered_at in SQLite
+  → Log execution result to SQLite automation_rule_logs
+  → Mark as completed if one-time entry
+```
+
+#### User Flow — Edit / Pause / Delete Entry
+
+```
+User clicks row action:
+  → Edit → opens same dialog pre-filled
+  → Pause/Resume → toggles status in SQLite, APScheduler pauses job
+  → Delete → confirmation → remove from SQLite + APScheduler
+```
+
+---
+
+### 16.6 Rules Engine Tab
+
+#### Purpose
+
+General trigger → condition → action automation. Handles inbound monitoring (email polling), state-based triggers, and multi-action workflows.
+
+#### Layout
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Rules Engine                                                           │
+│  ─────────────────────────────────────────────────────────────────────  │
+│  RULE | TRIGGER | CONDITIONS | ACTIONS | ENABLED | LAST RUN            │
+│  [+ Add Rule]                                                           │
+│  ─────────────────────────────────────────────────────────────────────  │
+│  Rule Execution Log (latest 20 entries)                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### User Flow — Create Rule
+
+```
+User clicks "+ Add Rule"
+  → Rule Editor Dialog:
+
+    SECTION: Rule Info
+      - Rule Name
+      - Enabled toggle
+
+    SECTION: Trigger
+      - Trigger Type: [Schedule ▾]
+          Schedule: run every X minutes/hours
+      - (Future: CR State Changed, Drone State Changed, Folder Changed)
+
+    SECTION: Conditions (all must be true to execute actions)
+      - [+ Add Condition]
+      - Each condition row:
+          [Field ▾] [Operator ▾] [Value]
+          Fields: email_subject | email_from | email_body | email_to |
+                  attachment_name | cr_number | cr_state | drone_state
+          Operators: contains | equals | starts_with | ends_with | matches_regex
+          Value: text input (supports {CR_NUMBER} placeholder)
+
+    SECTION: Actions (ordered list, run top-to-bottom)
+      - [+ Add Action]
+      - Each action row:
+          [Action Type ▾] [params...]
+
+          Action Types:
+            download_email → save email body to project folder
+            save_attachment → save attachment to project folder
+            update_cr_state → [new state ▾] (for matching project)
+            update_drone_state → [subfolder ▾] [new state ▾]
+            send_outlook_email → [category ▾] (uses Outlook templates)
+            send_teams_message → [automation ▾]
+            in_app_notification → [message text]
+            append_history → [entry text]
+
+    Footer: [Cancel] [Save]
+```
+
+#### User Flow — Rule Execution
+
+```
+APScheduler fires rule at configured interval:
+  → Evaluate all conditions against email inbox (via Outlook COM, Windows-guarded)
+  → If all conditions pass:
+    → Execute actions in order
+    → Each action result logged
+    → On error: log failure, skip to next action (configurable)
+  → Write execution result to SQLite automation_rule_logs
+  → Push in-app notification if action includes one
+```
+
+#### Use Case Example (Download Email Approval)
+
+```
+Rule: "Download Approval Email for SOP CR"
+Trigger: Schedule every 5 minutes
+Conditions:
+  - email_subject contains: "{CR_NUMBER}"
+  - email_from contains: "@example.com"
+  - email_body contains: "approved"
+Actions:
+  1. download_email → save to project folder
+  2. save_attachment → save all attachments to project folder
+  3. update_cr_state → APPROVED
+  4. in_app_notification → "Approval email received for {CR_NUMBER}"
+  5. send_teams_message → "ACK_TO_TEAMS" automation
+```
+
+---
+
+## 17. Settings — User Flows & Components
+
+### 17.1 Purpose
+
+Configure app behavior, storage paths, display preferences, automation defaults, and access help documentation.
+
+### 17.2 Layout
+
+```
+Header: "Settings." | DateTime | [🔄]
+─────────────────────────────────────────────────────────────────
+Body (50/50 split, resizable splitter):
+  LEFT: Settings Forms          RIGHT: Help Center (document reader)
+  ─────────────────────────     ─────────────────────────────────
+  General card                  [Search help topics...]
+  Behavior card                 ─────────────────────────────────
+  Paths card                    Help Guide content (scrollable)
+  [Save Settings]
+```
+
+### 17.3 User Flow — Edit Settings
+
+```
+User opens Settings
+  → Left panel shows 3 cards: General, Behavior, Paths
+  → Fields are editable
+  → Changes are staged (not auto-saved)
+  → User clicks "Save Settings"
+    → Validate all fields
+    → Write to settings.json
+    → Apply changes that can be hot-reloaded
+    → Show "Settings saved" toast notification
+    → If restart-required change: show warning toast
+```
+
+### 17.4 Settings Fields
+
+#### General Card
+
+| Field           | Type                 | Default                     |
+| --------------- | -------------------- | --------------------------- |
+| Root Folder     | Text + Browse button | —                           |
+| Display Name    | Text input           | empty                       |
+| Language        | Dropdown: en, id     | en                          |
+| Datetime Format | Text input           | `ddd, dd MMM yyyy HH:mm:ss` |
+
+#### Behavior Card
+
+| Field                 | Type                                                            | Default                |
+| --------------------- | --------------------------------------------------------------- | ---------------------- |
+| T-10 Threshold Days   | Spinner                                                         | 10                     |
+| Auto Refresh Interval | Dropdown: off, 15s, 30s, 1min                                   | off                    |
+| Startup Behavior      | Dropdown: current_year_dashboard, project_details, second_brain | current_year_dashboard |
+
+#### Paths Card
+
+| Field                | Type                 | Default                                   |
+| -------------------- | -------------------- | ----------------------------------------- |
+| Second Brain Folder  | Text + Browse button | `%APPDATA%\ProjectTrackerDBS\SecondBrain` |
+| File Template Folder | Text + Browse button | empty                                     |
+
+**Note:** Automation settings (email categories, Teams configs, Rules Engine) are managed within the Automations page, not Settings. Theme is fixed (Utilitarian + Modern Minimalist, single enterprise palette) — no theme switcher.
+
+### 17.5 Help Center Panel
+
+```
+- Search field (case-insensitive search over help topics)
+- Topics: General Settings, Behavior, Paths, Notifications, Automations,
+          Project Details, Report, Responsive UI, Troubleshooting,
+          Future Documentation
+- Each topic: title + description paragraph
+- Style: white document-reader background, left-bordered topic cards
+- Content: local markdown or hardcoded HTML; no PDF dependency
+```
+
+---
+
+## 18. Notifications System
+
+### 18.1 Purpose
+
+Lightweight operational alerts visible at all times without leaving the current page.
+
+### 18.2 Notification Panel (Sidebar)
+
+```
+EXPANDED SIDEBAR:
+  Bell icon + "Notifications" label + [✕ Dismiss All]
+  Scrollable list of notification cards (newest first)
+  Empty state: "No notifications yet."
+
+COLLAPSED SIDEBAR:
+  Bell icon button with unread count badge
+  Click → expand sidebar to see notifications
+```
+
+### 18.3 Notification Types
+
+| Type                   | Trigger                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| State Transition       | CR/Drone state changed (auto or manual)                    |
+| Folder Move            | Project moved to PROD_READY/IMPLEMENTED/POSTPONED/CANCELED |
+| T-10 Warning           | Today passes T-10 deadline for PENDING APPROVAL            |
+| Auto IN-PROGRESS       | Scheduler sets IN-PROGRESS                                 |
+| Email Draft/Send       | Outlook email created/sent                                 |
+| Teams Paste            | Teams message pasted                                       |
+| Rules Engine Execution | Rule triggered and actions completed                       |
+| Scheduler Alarm        | Scheduled alarm fires                                      |
+| CSV Export             | Export completed successfully                              |
+| Filesystem Warning     | Corrupt JSON, missing folder mapping                       |
+| Download Email         | Reply email received and downloaded                        |
+
+### 18.4 Notification Storage
+
+- Active session notifications: in-memory (cleared on app restart).
+- Notification history: SQLite `notifications` table (persistent).
+- MVP may use in-memory only; persistent history is Phase H addition.
+
+---
+
+## 19. Python ↔ Svelte Communication
+
+### 19.1 Bridge Pattern
+
+Frontend calls Python through the `JsApi` class registered with pywebview:
+
+```javascript
+// Svelte frontend call pattern
+const result = await window.pywebview.api.methodName(payload);
+// result: { ok: boolean, data: any, warnings: string[], error: ErrorObj | null }
+```
+
+### 19.2 Standard Bridge Response Shape
+
+```typescript
+interface BridgeResponse<T> {
+  ok: boolean;
+  data: T | null;
+  warnings: string[];
+  error: {
+    code: string;
+    message: string;
+    details: Record<string, unknown>;
+  } | null;
+}
+```
+
+Every bridge method returns this shape. Never return raw Python exceptions. Never expose stack traces.
+
+### 19.3 Background Event Push (Event Queue Pattern)
+
+Background threads (APScheduler, Outlook COM, Rules Engine) push events to a `queue.Queue`. Frontend polls this queue every ~1.5 seconds:
+
+```python
+# web/event_queue.py
+import queue
+_event_queue: queue.Queue = queue.Queue()
+
+def push(event: dict) -> None:
+    _event_queue.put_nowait(event)
+
+def drain() -> list[dict]:
+    events = []
+    while not _event_queue.empty():
+        try:
+            events.append(_event_queue.get_nowait())
+        except queue.Empty:
+            break
+    return events
+```
+
+```javascript
+// Svelte polling store (frontend)
+setInterval(async () => {
+  const { data: events } = await window.pywebview.api.app_get_pending_events();
+  events?.forEach((event) => handleEvent(event));
+}, 1500);
+```
+
+For high-priority events (auto IN-PROGRESS, alarm fires), Python may also use `webview.windows[0].evaluate_js()` from a main-thread-safe context as a secondary push channel.
+
+### 19.4 Event Payload Structure
+
+```python
+{
+  "type": "AUTO_IN_PROGRESS" | "FOLDER_MOVED" | "NOTIFICATION" | "SCAN_COMPLETE" | ...,
+  "payload": { ... },
+  "timestamp": "ISO8601"
+}
+```
+
+---
+
+## 20. Windows Integrations (Guarded)
+
+All Windows integrations are wrapped in `IS_WINDOWS = sys.platform == "win32"` guards. Non-Windows dev environment receives graceful mock/log responses.
+
+### 20.1 Outlook COM
+
+```python
+# infrastructure/outlook_client.py
+import sys
+IS_WINDOWS = sys.platform == "win32"
+
+def create_draft_email(to, cc, subject, body, attachment_path=None):
+    if not IS_WINDOWS:
+        print(f"[DEV] Would create Outlook draft to {to}: {subject}")
+        return
+    import pythoncom
+    import win32com.client
+    pythoncom.CoInitialize()
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        mail = outlook.CreateItem(0)
+        mail.To = to
+        mail.CC = cc
+        mail.Subject = subject
+        mail.Body = body
+        if attachment_path:
+            mail.Attachments.Add(str(attachment_path))
+        mail.Display()  # draft mode
+        # mail.Send()  # send mode
+    finally:
+        pythoncom.CoUninitialize()
+```
+
+Outlook COM must run in a **background thread**, not the main thread. `CoInitialize`/`CoUninitialize` called per thread.
+
+### 20.2 Teams Integration
+
+```python
+# infrastructure/teams_client.py
+def send_teams_message(message, webhook_url=None):
+    if not IS_WINDOWS:
+        print(f"[DEV] Would send Teams: {message[:80]}")
+        return
+    import pyperclip, pyautogui, webbrowser
+    pyautogui.FAILSAFE = True
+    pyperclip.copy(message)
+    webbrowser.open(f"msteams://")  # deep link
+    # countdown → paste if auto_send enabled
+```
+
+### 20.3 File/Folder Operations
+
+```python
+def open_folder(path: Path):
+    if IS_WINDOWS:
+        import os
+        os.startfile(str(path))
+    else:
+        print(f"[DEV] Would open folder: {path}")
+
+def send_to_recycle_bin(path: Path):
+    import send2trash
+    send2trash.send2trash(str(path))
+    # Works on both Windows and Linux (for dev testing)
+```
+
+### 20.4 Outlook Contacts
+
+```python
+def get_contacts() -> list[dict]:
+    if not IS_WINDOWS:
+        return [{"name": "Dev User", "email": "dev@example.local"}]
+    import pythoncom, win32com.client
+    pythoncom.CoInitialize()
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        namespace = outlook.GetNamespace("MAPI")
+        contacts_folder = namespace.GetDefaultFolder(10)  # olFolderContacts
+        return [
+            {"name": c.FullName, "email": c.Email1Address}
+            for c in contacts_folder.Items
+            if hasattr(c, "FullName")
+        ]
+    finally:
+        pythoncom.CoUninitialize()
+```
+
+---
+
+## 21. JsApi Bridge Contract
+
+All methods callable from Svelte frontend via `window.pywebview.api.*`.
+
+### 21.1 App & Events
+
+| Method                   | Params           | Returns                               |
+| ------------------------ | ---------------- | ------------------------------------- |
+| `app_get_status`         | —                | App status, version, settings summary |
+| `app_get_pending_events` | —                | List of queued background events      |
+| `util_get_fs_years`      | —                | List of year folder names from root   |
+| `util_open_url`          | `url: str`       | Opens in default browser              |
+| `util_open_folder`       | `path: str`      | Opens in Windows Explorer             |
+| `util_choose_folder`     | `title: str`     | OS folder dialog, returns path        |
+| `util_choose_file`       | `title, filters` | OS file dialog, returns path          |
+| `util_scan_refresh`      | `year: str`      | Rescans year folder, rebuilds cache   |
+
+### 21.2 Years
+
+| Method        | Params      | Returns                        |
+| ------------- | ----------- | ------------------------------ |
+| `year_list`   | —           | Existing year folders          |
+| `year_create` | `year: int` | Creates year + 5 state folders |
+
+### 21.3 Projects
+
+| Method                | Params                   | Returns                          |
+| --------------------- | ------------------------ | -------------------------------- |
+| `project_list`        | `year, filters`          | Filtered project list from cache |
+| `project_create`      | `data: dict`             | Creates project folder + files   |
+| `project_get`         | `project_path`           | Full project metadata            |
+| `project_update`      | `project_path, data`     | Update metadata fields           |
+| `project_delete`      | `project_path`           | Recycle Bin via send2trash       |
+| `project_rename`      | `project_path, new_name` | Rename folder + update JSON      |
+| `project_open_folder` | `project_path`           | os.startfile                     |
+
+### 21.4 CR & Drone State
+
+| Method               | Params                                | Returns                                    |
+| -------------------- | ------------------------------------- | ------------------------------------------ |
+| `cr_update_link`     | `project_path, cr_link`               | Store URL, extract CR number, update state |
+| `cr_update_state`    | `project_path, new_state`             | Validate + set CR state                    |
+| `cr_reopen`          | `project_path`                        | REOPEN action                              |
+| `drone_add`          | `project_path, data`                  | Add drone ticket                           |
+| `drone_update_link`  | `project_path, subfolder, drone_link` | Store URL, extract                         |
+| `drone_update_state` | `project_path, subfolder, new_state`  | Validate + set Drone state                 |
+| `drone_delete`       | `project_path, subfolder`             | Remove drone ticket                        |
+
+### 21.5 Folder Transitions
+
+| Method                    | Params         | Returns                                     |
+| ------------------------- | -------------- | ------------------------------------------- |
+| `folder_move_prod_ready`  | `project_path` | Guard check + folder move                   |
+| `folder_move_implemented` | `project_path` | Guard check + folder move                   |
+| `folder_postpone`         | `project_path` | Confirmation required → move                |
+| `folder_cancel`           | `project_path` | Confirmation required → move                |
+| `folder_reopen`           | `project_path` | Confirmation required → move to UAT_PREPARE |
+
+### 21.6 Sub Projects & Files
+
+| Method                      | Params                         | Returns                       |
+| --------------------------- | ------------------------------ | ----------------------------- |
+| `subproject_list`           | `project_path`                 | List sub project folders      |
+| `subproject_create`         | `project_path, name`           | Create subfolder + notes.md   |
+| `subproject_rename`         | `project_path, name, new_name` | Rename                        |
+| `subproject_delete`         | `project_path, name`           | Recycle Bin                   |
+| `file_list`                 | `path`                         | Files in path (not recursive) |
+| `file_create_from_template` | `path, template_name`          | Copy template → project       |
+| `file_create_manual`        | `path, filename`               | Create empty file             |
+| `file_open`                 | `filepath`                     | os.startfile                  |
+| `file_delete`               | `filepath`                     | Recycle Bin                   |
+| `file_rename`               | `filepath, new_name`           | Rename                        |
+
+### 21.7 Notes
+
+| Method       | Params          | Returns                  |
+| ------------ | --------------- | ------------------------ |
+| `notes_read` | `path`          | Content of notes.md      |
+| `notes_save` | `path, content` | Atomic write to notes.md |
+
+### 21.8 Report
+
+| Method              | Params                 | Returns                       |
+| ------------------- | ---------------------- | ----------------------------- |
+| `report_get_data`   | `filters: dict`        | Filtered project + state data |
+| `report_export_csv` | `filters, output_path` | Write CSV, return success     |
+
+### 21.9 Second Brain
+
+| Method                | Params                           | Returns                    |
+| --------------------- | -------------------------------- | -------------------------- |
+| `brain_get_tree`      | `path`                           | Folder/file tree structure |
+| `brain_search`        | `query, date_filter, sort`       | Search results list        |
+| `brain_create_folder` | `parent_path, name`              | Create folder              |
+| `brain_create_file`   | `parent_path, filename, content` | Create file                |
+| `brain_read_file`     | `filepath`                       | File content               |
+| `brain_save_file`     | `filepath, content`              | Atomic write               |
+| `brain_delete`        | `path`                           | Recycle Bin                |
+| `brain_rename`        | `path, new_name`                 | Rename                     |
+| `brain_pin`           | `filepath, pinned: bool`         | Update pin metadata        |
+| `brain_favorite`      | `filepath, favorite: bool`       | Update favorite metadata   |
+
+### 21.10 Link Bank
+
+| Method                  | Params                     | Returns                   |
+| ----------------------- | -------------------------- | ------------------------- |
+| `link_get_all`          | —                          | All categories + links    |
+| `link_category_create`  | `name`                     | New category              |
+| `link_category_rename`  | `category_id, new_name`    | Rename                    |
+| `link_category_archive` | `category_id`              | Archive                   |
+| `link_create`           | `data`                     | New link                  |
+| `link_update`           | `link_id, data`            | Update link               |
+| `link_archive`          | `link_id`                  | Soft delete               |
+| `link_restore`          | `link_id`                  | Restore from archive      |
+| `link_search`           | `query, date_filter, sort` | Search results            |
+| `link_export`           | `output_path, format`      | JSON or CSV export        |
+| `link_import`           | `file_path`                | Import + validate + merge |
+
+### 21.11 Notifications
+
+| Method                     | Params            | Returns              |
+| -------------------------- | ----------------- | -------------------- |
+| `notification_list`        | `limit`           | Recent notifications |
+| `notification_dismiss`     | `notification_id` | Dismiss one          |
+| `notification_dismiss_all` | —                 | Dismiss all          |
+
+### 21.12 Settings
+
+| Method                      | Params    | Returns                        |
+| --------------------------- | --------- | ------------------------------ |
+| `settings_get`              | —         | Full settings.json content     |
+| `settings_save`             | `data`    | Validate + write settings.json |
+| `settings_restore_defaults` | `section` | Reset section to defaults      |
+
+### 21.13 Automations
+
+| Method                          | Params                              | Returns                            |
+| ------------------------------- | ----------------------------------- | ---------------------------------- |
+| `outlook_get_categories`        | —                                   | Email categories config            |
+| `outlook_save_category`         | `data`                              | Save/update category               |
+| `outlook_send_email`            | `category_code, project_path, mode` | Create draft or send               |
+| `outlook_get_downloaded_emails` | —                                   | Downloaded email list              |
+| `outlook_get_contacts`          | —                                   | Outlook contacts (Windows-guarded) |
+| `teams_get_automations`         | —                                   | Teams automation list              |
+| `teams_save_automation`         | `data`                              | Save/update automation             |
+| `teams_send_message`            | `automation_id, project_path`       | Deep link + paste                  |
+| `scheduler_list`                | —                                   | All scheduler entries              |
+| `scheduler_create`              | `data`                              | Create + register APScheduler job  |
+| `scheduler_update`              | `entry_id, data`                    | Update + reschedule                |
+| `scheduler_delete`              | `entry_id`                          | Remove + cancel APScheduler job    |
+| `scheduler_toggle`              | `entry_id, enabled`                 | Pause/resume job                   |
+| `rules_list`                    | —                                   | All rules                          |
+| `rules_create`                  | `data`                              | Create rule                        |
+| `rules_update`                  | `rule_id, data`                     | Update rule                        |
+| `rules_delete`                  | `rule_id`                           | Delete rule                        |
+| `rules_toggle`                  | `rule_id, enabled`                  | Enable/disable rule                |
+| `rules_get_logs`                | `rule_id, limit`                    | Execution log entries              |
+
+---
+
+## 22. SQLite Cache Schema
+
+SQLite is a **rebuildable local cache**. If the database file is deleted or corrupt, the app rebuilds from filesystem scan. SQLite is never the authoritative source of data.
+
+Database file: `%APPDATA%\ProjectTrackerDBS\cache.db`
+
+### 22.1 `project_index`
+
+Rebuilt on every full scan. Used for fast dashboard queries and report filtering.
+
+```sql
+CREATE TABLE project_index (
+    path TEXT PRIMARY KEY,          -- absolute project folder path
+    name TEXT NOT NULL,
+    year TEXT NOT NULL,
+    folder_state TEXT NOT NULL,     -- UAT_PREPARE | PROD_READY | IMPLEMENTED | POSTPONED | CANCELED
+    cr_link TEXT,
+    cr_number TEXT,                 -- extracted display identifier
+    cr_state TEXT,
+    cr_pending_approval_at TEXT,    -- ISO8601
+    start_datetime TEXT,
+    end_datetime TEXT,
+    drone_tickets_json TEXT,        -- JSON array
+    t10_status TEXT,               -- PASS | FAIL | UNKNOWN
+    updated_at TEXT,
+    scanned_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 22.2 `notifications`
+
+```sql
+CREATE TABLE notifications (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    project_path TEXT,
+    dismissed INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 22.3 `scheduler_entries`
+
+```sql
+CREATE TABLE scheduler_entries (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    notes TEXT,
+    schedule_type TEXT NOT NULL,   -- one_time | daily | weekly | monthly | cron
+    schedule_config TEXT,          -- JSON
+    project_filter TEXT,
+    state_filter TEXT,
+    channels TEXT NOT NULL,        -- JSON array: ["in_app", "outlook_email", "teams"]
+    channel_configs TEXT,          -- JSON
+    enabled INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'active',  -- active | paused | completed
+    last_triggered_at TEXT,
+    next_trigger_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 22.4 `automation_rule_logs`
+
+```sql
+CREATE TABLE automation_rule_logs (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT NOT NULL,
+    rule_name TEXT,
+    trigger_type TEXT,
+    conditions_passed INTEGER,
+    actions_executed TEXT,         -- JSON array
+    success INTEGER DEFAULT 1,
+    error_message TEXT,
+    timestamp TEXT DEFAULT (datetime('now'))
+);
+```
+
+### 22.5 `email_jobs`
+
+```sql
+CREATE TABLE email_jobs (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT,
+    cr_number TEXT,
+    project_path TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    status TEXT DEFAULT 'active',  -- active | completed | timeout | stopped
+    emails_downloaded INTEGER DEFAULT 0,
+    attachments_saved INTEGER DEFAULT 0,
+    notes TEXT
+);
+```
+
+### 22.6 Rebuild Trigger
+
+SQLite is rebuilt from filesystem scan when:
+
+- App starts and `project_index` table is empty.
+- User clicks Refresh.
+- `cache.db` is missing or corrupt (detected on `pragma integrity_check`).
+
+---
+
+## 23. File Operations & Data Safety
+
+### 23.1 Atomic Write Pattern
+
+```python
+# All JSON writes
+import tempfile, shutil
+def atomic_write_json(path: Path, data: dict) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)  # atomic on most OS/filesystems
+```
+
+### 23.2 Delete Safety
+
+```python
+# Always Recycle Bin, never os.remove
+import send2trash
+send2trash.send2trash(str(path))
+```
+
+Show confirmation before every delete. Disable delete in `PROD_READY` and `IMPLEMENTED` states.
+
+### 23.3 Error Handling Rules
+
+| Error                              | Behavior                                                          |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| Corrupt `project_data.json`        | Skip project + warning notification; do not crash                 |
+| Missing `project_data.json`        | Show project with defaults + warning                              |
+| Missing subfolder for Drone ticket | Show mapping warning inline; do not crash                         |
+| JSON write failure                 | Retry once → show error toast                                     |
+| OS permission denied               | User-readable message; do not crash                               |
+| Windows COM unavailable            | Graceful fallback message; show “Windows only” label              |
+| SQLite corrupt                     | Rebuild from filesystem scan                                      |
+| Year >2 ahead                      | Confirmation warning, not hard block                              |
+| T-10 violation                     | Block auto move + notification; manual override with confirmation |
+
+### 23.4 Filesystem Change Detection
+
+MVP approach:
+
+- **Manual Refresh button** (always available).
+- **Auto refresh polling**: if `auto_refresh_interval_seconds > 0` in settings → scan + rebuild cache at that interval using APScheduler.
+
+Optional (requires confirmation before adding dependency):
+
+- **watchdog** file system observer for near-realtime change detection.
+
+---
+
+## 24. Packaging & Deployment
+
+### 24.1 Build Steps
+
+```bash
+# Step 1: Build Svelte frontend
+cd frontend
+npm run build
+# Output: ../web/static/
+
+# Step 2: PyInstaller (Windows only)
+pyinstaller \
+  --name "ProjectTrackerDBS" \
+  --onedir \
+  --windowed \
+  --icon=assets/icon.ico \
+  --add-data "web/static;web/static" \
+  --add-data "assets;assets" \
+  app_web.py
+```
+
+### 24.2 Rules
+
+- PyInstaller build only from Windows.
+- Do not attempt Windows build from Linux.
+- `web/static/` (Vite build output) must be included in PyInstaller `--add-data`.
+- `assets/` must be included (icon, email templates).
+- WebView2 runtime must be present on target Windows machine (bundled or prerequisite installer).
+- Verify WebView2, Outlook COM, Teams integration, send2trash, os.startfile, and pywebview loading manually on Windows.
+
+### 24.3 AppData on Fresh Install
+
+On first run:
+
+1. Create `%APPDATA%\ProjectTrackerDBS\` directory if not exists.
+1. Create default `settings.json`.
+1. Create default `link_bank.json`.
+1. Create `SecondBrain\` directory.
+1. Create `cache.db` SQLite database.
+1. Show First Run Setup dialog: choose root folder.
+
+---
+
+## 25. Implementation Phases
+
+Do not move to the next phase until the current phase is verified.
+
+### Phase 0 — PRD Lock
+
+- User approves this PRD.
+- This file replaces all previous PRD versions.
 
 ### Phase A — Core Domain
 
-- Enums and dataclasses.
-- `cr_pending_approval_at`.
-- `DroneTicket.subfolder_name`.
-- REOPEN event semantics.
-- CR CANCELED → POSTPONED rule.
-- POSTPONED → UAT_PREPARE resume rule.
-- T-10 based on `cr_pending_approval_at`.
-- Folder-name validation.
-- Organizational folder exclusion.
-- Settings `display_name` and current user helper.
+Build: `core/enums.py`, `core/models.py`, `core/state_machine.py`, `core/rules.py`, `core/exceptions.py`
 
-Verify with unit tests only.
+Cover:
 
-### Phase B — Filesystem and Stores
+- All enum values (CRState, DroneState, FolderState).
+- State transition guards (pure Python, no I/O).
+- T-10 rule calculation.
+- Folder name validator.
+- CR/Drone link extractor.
+- Organizational folder exclusion logic.
+- History entry model.
 
-- MetadataStore atomic read/write.
-- SettingsStore AppData path.
-- LinkBankStore.
-- Notes file handling.
-- Scanner and schema fallback.
-- Watchdog service skeleton with debounce/signals.
+Verify: unit tests pass on Linux. Zero Windows API imports in `core/`.
 
-Verify with unit tests where possible.
+### Phase B — Infrastructure & Stores
 
-### Phase C — Main UI Structure
+Build: `infrastructure/filesystem.py`, `metadata_store.py`, `settings_store.py`, `link_bank_store.py`, `cache_db.py`
 
-- MainWindow shell.
-- Sidebar navigation.
-- Persistent notification panel.
-- QStackedWidget pages.
-- Dashboard read-only scan display.
+Cover:
 
-Verify manually on Windows.
+- AppData path resolution (Windows + Linux fallback).
+- Atomic JSON read/write.
+- SQLite schema creation + rebuild logic.
+- Filesystem scanner (scan year → state folders → projects → sub projects).
+- Folder create/rename/delete (send2trash).
+- `outlook_client.py` and `teams_client.py` stubs (IS_WINDOWS guarded).
 
-### Phase D — Project Dashboard and Details
+Verify: unit tests for stores and scanner with temp filesystem fixtures.
 
-- Add Project.
-- Add Year.
-- Dashboard actions.
-- Project Details NEW/SHOW_EDIT modes.
+### Phase C — Services & Event Queue
+
+Build: all `services/`, `web/event_queue.py`, `web/js_api.py`
+
+Cover:
+
+- Project service orchestrates state machine + stores.
+- Scanner service populates SQLite cache.
+- Automation service evaluates rules.
+- Scheduler service manages APScheduler jobs.
+- Second Brain service: search index + file ops.
+- Report service: filter logic + CSV writer.
+- All JsApi bridge methods (returning standard BridgeResponse).
+- Event queue push/drain.
+
+Verify: unit tests for services using mocked infrastructure. Bridge response shape tests.
+
+### Phase D — Svelte Frontend Shell
+
+Build: Svelte app structure, app shell, sidebar, header, notification panel, router.
+
+Cover:
+
+- `app.html` + Vite config.
+- Svelte stores: `projectsStore`, `settingsStore`, `notificationsStore`, `currentPageStore`.
+- Sidebar component: nav items, collapse/expand, notification panel.
+- Header component: title, datetime, actions.
+- Event polling: `setInterval(1500)` → `get_pending_events()`.
+- TypeScript types mirroring Python models.
+- `window.pywebview.api.*` typed wrappers.
+
+Verify: browser preview on Linux matches prototype visual. pywebview preview where safe on Windows.
+
+### Phase E — Dashboard & Project Details
+
+Build: Dashboard page, Project Details (NEW + SHOW_EDIT modes).
+
+Cover:
+
+- Year selector + Add Year.
+- KPI cards + state filter tabs.
+- Project table: columns, inline editing, row actions.
+- Search + debounce.
+- Add Project flow.
+- CR/Drone link paste + extract + state change flows.
+- Auto PROD_READY trigger on state change.
+- Sub project table + Drone ticket management.
 - File management.
-- Notes editor.
+- Notes autosave (marked.js for preview).
 - History panel.
-- Locking behavior.
+- REOPEN flow.
+- All locking rules applied.
 
-Verify manually on Windows plus core unit tests.
+Verify: fixture-based + manual Windows testing.
 
-### Phase E — State Transitions and Automation Hooks
+### Phase F — Second Brain, Link Bank, Report
 
-- Move to `PROD_READY`.
-- Move to `IMPLEMENTED`.
-- Postpone/resume.
-- Cancel.
-- REOPEN.
-- Auto `IN-PROGRESS`.
-- Notifications.
+Build: Second Brain Notes tab, Link Bank tab, Report page.
 
-Verify with unit tests for rules and manual Windows tests for filesystem/UI.
+Cover:
 
-### Phase F — Second Brain, Report, Automations
+- Notes tree: Pinned, Favorites, Second Brain Notes, Project Documents.
+- Notes search index: in-memory precomputed, debounced, date-filterable.
+- Notes CRUD: create, read, edit, delete (Recycle Bin), rename, pin, favorite.
+- markdown.js integration for preview.
+- Link Bank: category CRUD, link CRUD, search, archive/restore, import/export.
+- Report: filters, summary rows, table, CSV export with file dialog.
 
-- Second Brain notes.
-- Link Bank.
-- Report and CSV export.
-- Email automation.
-- Teams automation.
-- Download Email jobs.
-- Automation Rules.
-- Settings UI completion.
+Verify: search behavior, persistence, CSV output format.
 
-Verify manually on Windows; unit-test serializable settings/stores.
+### Phase G — Automations
+
+Build: Outlook tab, Teams tab, Scheduler tab, Rules Engine tab.
+
+Cover:
+
+- Email Template Dialog (full Outlook category editor).
+- Outlook COM draft/send (Windows manual test).
+- Downloaded Emails dialog.
+- Teams Automation Dialog (rules, message, mode).
+- Teams deep link + paste (Windows manual test).
+- Scheduler: APScheduler jobs, alarm entries, all 3 channels.
+- Rules Engine: trigger→condition→action editor, execution logs.
+
+Verify: all Windows integrations manual-tested on Windows 10/11.
+
+### Phase H — Settings & Packaging
+
+Build: Settings page, Help Center, PyInstaller config.
+
+Cover:
+
+- Settings form: General, Behavior, Paths.
+- Help Center: search + topic cards.
+- Settings save/validate/persist.
+- First Run Setup dialog.
+- PyInstaller build on Windows including `web/static/` and `assets/`.
+- Fresh Windows machine installation test.
+
+Verify: app installs and runs on clean Windows machine.
 
 ---
 
-## 22. Acceptance Criteria
+## 26. Acceptance Criteria
 
-### 22.1 Core/Data
+### 26.1 Core Data
 
-| #   | Criteria                                                                                |
-| --- | --------------------------------------------------------------------------------------- |
-| 1   | Project folder state is always derived from folder path.                                |
-| 2   | `project_state` never appears in `project_data.json`.                                   |
-| 3   | Year is derived from year folder only.                                                  |
-| 4   | `DroneTicket.subfolder_name = null` loads old data without crash.                       |
-| 5   | Missing subfolder mapping shows warning without crash.                                  |
-| 6   | `cr_pending_approval_at` is stored and used for T-10.                                   |
-| 7   | History uses display name or Windows login, never hardcoded username.                   |
-| 8   | Unknown/corrupt JSON warns/skips without app crash.                                     |
-| 9   | Atomic writes use temp-then-replace.                                                    |
-| 10  | Windows folder name validation rejects invalid names/reserved names/trailing dot/space. |
+| #   | Criteria                                                                                    |
+| --- | ------------------------------------------------------------------------------------------- |
+| 1   | `project_state` never appears in `project_data.json`.                                       |
+| 2   | Folder path is the sole source of project year and folder state.                            |
+| 3   | Corrupt JSON never crashes the app.                                                         |
+| 4   | All JSON writes are atomic (temp-file-then-replace).                                        |
+| 5   | Delete uses Recycle Bin only (`send2trash`).                                                |
+| 6   | `cr_pending_approval_at` is set on first PENDING APPROVAL transition and never overwritten. |
+| 7   | T-10 uses `cr_pending_approval_at` for calculation.                                         |
+| 8   | Missing subfolder mapping for Drone ticket shows warning without crash.                     |
+| 9   | SQLite deletion triggers rebuild from filesystem without data loss.                         |
+| 10  | Settings persist across app restarts under app data folder.                                 |
 
-### 22.2 State Rules
+### 26.2 State Machine
 
-| #   | Criteria                                                                     |
-| --- | ---------------------------------------------------------------------------- |
-| 1   | `UAT_PREPARE → PROD_READY` blocked unless all guards pass.                   |
-| 2   | T-10 violation highlights dashboard and blocks `PROD_READY`.                 |
-| 3   | Auto `IN-PROGRESS` changes CR/Drone only during execution window.            |
-| 4   | `FINISHED` can be manually set only from `IN-PROGRESS`.                      |
-| 5   | REOPEN available only from `APPROVED`/`PENDING APPROVAL`.                    |
-| 6   | REOPEN moves folder to `UAT_PREPARE` and next state is `PENDING SUBMISSION`. |
-| 7   | CR `CANCELED` moves project to `POSTPONED`.                                  |
-| 8   | `POSTPONED` resumes only to `UAT_PREPARE`.                                   |
-| 9   | `PROD_READY` partial lock works.                                             |
-| 10  | `IMPLEMENTED` full lock works.                                               |
+| #   | Criteria                                                                                   |
+| --- | ------------------------------------------------------------------------------------------ |
+| 1   | `UAT_PREPARE → PROD_READY` auto-triggers when CR+all Drones = APPROVED and T-10 passes.    |
+| 2   | T-10 failure blocks auto move + notification shown; manual override requires confirmation. |
+| 3   | `IN-PROGRESS` is set automatically by scheduler; not available in user dropdown.           |
+| 4   | `FINISHED` is settable only from `IN-PROGRESS`.                                            |
+| 5   | `PROD_READY → IMPLEMENTED` auto-triggers when CR+all Drones = FINISHED.                    |
+| 6   | REOPEN moves folder to `UAT_PREPARE` and sets CR to `PENDING SUBMISSION`.                  |
+| 7   | POSTPONED/CANCELED both get their own separate project folders.                            |
+| 8   | `PROD_READY` partial lock prevents rename, delete, and destructive file ops.               |
+| 9   | `IMPLEMENTED` fully locks all editing, deleting, and state changes.                        |
+| 10  | Drone state `IN-PROGRESS` is auto only; not selectable by user.                            |
 
-### 22.3 UI/User Flow
+### 26.3 User Interface
 
 | #   | Criteria                                                                        |
 | --- | ------------------------------------------------------------------------------- |
-| 1   | Dashboard year dropdown shows existing year folders only.                       |
-| 2   | Add Year creates four required state folders.                                   |
-| 3   | Add Project opens NEW_PROJECT mode with only required fields.                   |
-| 4   | Details opens SHOW_EDIT mode and respects selected project/sub project.         |
-| 5   | Main project file list excludes sub project files.                              |
-| 6   | Organizational folders do not appear as sub projects.                           |
-| 7   | CR/Drone pasted links display as extracted ticket numbers and remain clickable. |
-| 8   | Project/sub project names open Explorer.                                        |
-| 9   | CR/Drone values open default browser.                                           |
-| 10  | Notification panel remains visible across windows.                              |
+| 1   | Production UI uses pywebview + Svelte + TypeScript + Vite + Tailwind (no PyQt). |
+| 2   | Sidebar/header are visually consistent across all 6 pages.                      |
+| 3   | Notification panel persists and is not recreated during page navigation.        |
+| 4   | Dashboard year dropdown shows only existing year folders.                       |
+| 5   | CR/Drone link paste displays extracted identifier; click opens default browser. |
+| 6   | Inline CR/Drone editing in dashboard table works for bulk paste workflows.      |
+| 7   | Empty-area click clears table/tree/list selection.                              |
+| 8   | Search inputs are debounced and provide visible feedback.                       |
+| 9   | All content panels scroll internally without page-level overflow.               |
+| 10  | UI is usable on both laptop (1366×768) and external monitor (1920×1080).        |
 
-### 22.4 Feature Areas
+### 26.4 Features
 
-| #   | Criteria                                                              |
-| --- | --------------------------------------------------------------------- |
-| 1   | Notes save to `notes.md` with debounce.                               |
-| 2   | Second Brain creates and edits `.md` notes.                           |
-| 3   | Link Bank stores categories and links in `link_bank.json`.            |
-| 4   | Report filters by year/month/state and exports CSV.                   |
-| 5   | Email templates are editable and saved to settings.                   |
-| 6   | Email draft/send uses Outlook and latest project data.                |
-| 7   | Email flags are visual only and do not block repeat draft.            |
-| 8   | Teams automation defaults to paste-only.                              |
-| 9   | Download Email polls every 10s up to 3h and notifies success/timeout. |
-| 10  | Automation Rules can be saved and reused by Email/Teams automations.  |
-| 11  | Watchdog external changes update UI without crash.                    |
+| #   | Criteria                                                                        |
+| --- | ------------------------------------------------------------------------------- |
+| 1   | Dashboard scans filesystem and displays projects with correct states.           |
+| 2   | Notes autosave to `notes.md` with 1000ms debounce and status indicator.         |
+| 3   | Second Brain file tree shows both Second Brain Notes and Project Documents.     |
+| 4   | Second Brain search returns results across notes, filenames, content, and tags. |
+| 5   | Link Bank CRUD persists in `link_bank.json`.                                    |
+| 6   | Report CSV export respects active filters and is Excel-compatible.              |
+| 7   | Outlook email creates draft by default; send only after confirmation.           |
+| 8   | Teams automation defaults to paste-only mode.                                   |
+| 9   | Scheduler entries persist across restarts and trigger at configured times.      |
+| 10  | Rules Engine executes ordered actions on condition match.                       |
 
-### 22.5 Platform
+### 26.5 Platform & Safety
 
-| #   | Criteria                                                          |
-| --- | ----------------------------------------------------------------- |
-| 1   | Linux dev only runs platform-independent unit tests.              |
-| 2   | Windows manual test covers UI and integrations.                   |
-| 3   | PyInstaller build is documented for Windows and not run on Linux. |
-| 4   | No WebEngine/internal browser dependency exists.                  |
-| 5   | No PDF dependency exists.                                         |
-
----
-
-## 23. Explicit Non-Goals
-
-- No design-system/pixel-perfect/color spec in PRD.
-- No cloud sync.
-- No multi-user conflict resolution.
-- No database-backed source of truth.
-- No PDF export.
-- No embedded browser.
-- No Linux runtime support for this Windows desktop app.
-- No automatic sending to Teams unless user explicitly enables `teams_auto_send`.
-- No destructive hard delete.
+| #   | Criteria                                                                   |
+| --- | -------------------------------------------------------------------------- |
+| 1   | Windows-only integrations fail gracefully on Linux with log/stub behavior. |
+| 2   | PyInstaller build includes `web/static/` and `assets/`.                    |
+| 3   | App runs on clean Windows 10/11 without internet connection.               |
+| 4   | No PDF library added.                                                      |
+| 5   | No external DB or cloud service used.                                      |
 
 ---
 
-## 24. Final Locked Decisions
+## 27. Architecture Decision Records (ADRs)
 
-This PRD locks the following product decisions for MVP implementation:
+### ADR-001: Frontend Framework — Svelte + TypeScript + Vite
 
-1. `PRD.md` is the only source of truth.
-2. Filesystem folder path is the source of truth for project existence, year, and folder state.
-3. `project_data.json` stores metadata only and never stores `project_state`.
-4. Main project and sub projects share one CR number.
-5. Main project and each sub project may have separate Drone tickets.
-6. `PROD_READY` is partially locked; `IMPLEMENTED` is fully locked.
-7. T-10 uses `cr_pending_approval_at`.
-8. REOPEN moves project to `UAT_PREPARE`, records REOPEN history, then returns CR working state to `PENDING SUBMISSION`.
-9. CR `CANCELED` moves project to `POSTPONED`.
-10. `POSTPONED` resumes only to `UAT_PREPARE`.
-11. Primary notes storage is `notes.md`; JSON `notes` remains legacy/short-note compatibility.
-12. Notifications are a persistent panel, not a standalone page.
-13. Link Bank lives inside Second Brain.
-14. All listed windows/features are MVP.
-15. CSV export only; PDF export is not allowed.
-16. Default browser only; embedded browser/WebEngine is not allowed.
-17. Teams automation is paste-only by default unless `teams_auto_send` is enabled.
-18. Windows is the runtime target; Linux is only for platform-independent unit tests.
+**Decision:** Use Svelte + TypeScript + Vite for the frontend instead of Vanilla JS/HTML.
 
----
+**Context:** The application has complex UI state across 6 pages: live updating tables, nested splitter panels, multi-step dialogs, search with real-time filtering, and polling-based event sync. Vanilla JS becomes difficult to maintain at this complexity level.
 
-## 25. Implementation Handoff Rule
+**Alternatives considered:**
 
-Implementation may start only after user approves this PRD direction.
+- Vanilla JS + HTML (simpler, no build step, sufficient for simple apps)
+- React + Vite (heavier runtime, more boilerplate)
+- Vue 3 + Vite (valid alternative, slightly larger ecosystem than Svelte)
+- SvelteKit (too much convention overhead for a single-page pywebview app)
 
-When implementation starts:
+**Rationale:**
 
-1. Follow phase order in Section 21.
-2. Do not skip verification gates between phases.
-3. Do not add dependencies without confirmation.
-4. Do not run Windows-only app/integration flows on Linux.
-5. Keep changes surgical and traceable to this PRD.
-6. If implementation discovers conflict between code and PRD, update/confirm PRD before coding around it.
+- Svelte compiles to minimal vanilla JS — no runtime overhead.
+- TypeScript provides type safety for the Python bridge contract.
+- Vite provides fast dev-server mode for Linux development.
+- Svelte Stores sufficient for state management (state machine lives in Python).
+- Component model makes complex panels maintainable.
+- Requires build step, but `serve_folder` makes pywebview integration clean.
+
+**Status:** Locked.
 
 ---
 
-## 26. Non-Blocking Runtime Calibration
+### ADR-002: SQLite as Rebuildable Cache
 
-Some values depend on real office URLs/messages and should be calibrated during Windows manual testing, without changing product scope:
+**Decision:** Use SQLite as a rebuildable local cache for project index, notifications, scheduler entries, and rule logs.
 
-1. CR number extraction pattern from real ITSM URLs.
-2. Drone ticket extraction pattern from real Drone URLs.
-3. Outlook reply matching pattern from real email subjects.
-4. Whether in-memory notifications are enough for MVP or persistence is needed later.
-5. Whether browser-native markdown preview is enough or a markdown dependency needs explicit approval.
+**Context:** Filesystem scan on every filter/sort operation would be slow with many projects. Old PRD excluded SQLite entirely, but this created friction for search, notifications, and scheduler state.
+
+**Constraints:**
+
+- SQLite is NOT the source of truth. Filesystem + JSON files remain canonical.
+- SQLite must be rebuildable from a full filesystem scan at any time.
+- The rebuild must be transparent to the user (triggered automatically on corruption or first run).
+
+**Status:** Locked.
 
 ---
 
-## 27. PRD Completion Statement
+### ADR-003: APScheduler for Background Tasks
 
-This document is complete enough to guide Phase A implementation.
+**Decision:** Use APScheduler 3.x for all background periodic and one-time scheduled tasks.
 
-Any new product behavior, dependency, state transition, storage rule, or automation mode discovered after this point must be added to `PRD.md` first, then implemented in code after approval.
+**Context:** Auto IN-PROGRESS detection, scheduler alarms, and Rules Engine polling all need reliable background execution. Old PRD used Qt’s QTimer, which no longer applies.
+
+**APScheduler provides:** cron, interval, and date triggers; job stores (SQLite compatible); pause/resume per job; clean shutdown.
+
+**Status:** Locked.
+
+---
+
+### ADR-004: Event Queue Pattern for Background → Frontend
+
+**Decision:** Use `queue.Queue` (Python threading) + JS polling every 1.5s as the primary event delivery mechanism.
+
+**Context:** `webview.evaluate_js()` from background threads is unreliable across pywebview versions and operating systems. Polling is predictable and testable.
+
+**Secondary channel:** `evaluate_js()` from main-thread context used only for immediate high-priority events (alarm fires, auto IN-PROGRESS).
+
+**Status:** Locked.
+
+---
+
+### ADR-005: Tauri v2 as Future Migration Path
+
+**Decision:** Tauri v2 + Svelte + Python sidecar is recorded as a future migration option. It is NOT part of MVP.
+
+**Context:** Tauri v2 supports Python sidecars and provides a lighter, more secure desktop shell than pywebview. However, it requires a more complex build setup, different Python integration pattern, and the ecosystem is still maturing.
+
+**When to revisit:** After MVP is stable, if pywebview WebView2 limitations become blockers.
+
+**Status:** Future/ADR only.
+
+---
+
+## 28. Open Calibration Items
+
+These are runtime-calibration items confirmed during Windows manual testing. They do not change product scope — only specific values/patterns.
+
+| #   | Item                                                               | When to Calibrate    |
+| --- | ------------------------------------------------------------------ | -------------------- |
+| 1   | CR number extraction regex from real ITSM URL pattern              | Phase E Windows test |
+| 2   | Drone ticket extraction regex from real Drone URL pattern          | Phase E Windows test |
+| 3   | Outlook reply subject pattern for Rules Engine matching            | Phase G Windows test |
+| 4   | Teams deep link format for target group/channel                    | Phase G Windows test |
+| 5   | Outlook COM contacts folder structure (different Outlook versions) | Phase G Windows test |
+| 6   | Whether notification history in-memory is sufficient for MVP       | Phase H review       |
+| 7   | Whether watchdog is needed or auto-refresh polling is sufficient   | Phase E review       |
+| 8   | Whether Link Bank import should support CSV in addition to JSON    | Phase F review       |
+
+---
+
+## 29. Implementation Handoff Rules
+
+1. This PRD is the single source of truth. `README.md` and previous `PRD.md` versions are superseded.
+1. Implementation follows the phase order in Section 25. Do not skip verification gates.
+1. Changes to product behavior, state transitions, or data models must be reflected in this PRD first, then implemented.
+1. Do not add dependencies without user confirmation (see Section 3.3 baseline).
+1. Do not run Windows-only integrations on Linux.
+1. Do not add speculative features beyond what is documented here.
+1. If a UI prototype file and this PRD disagree, this PRD is authoritative.
+1. Every change is surgical: touch only what the current phase requires.
+1. PyQt6 prototype files stay in a reference directory and are never imported by production code.
