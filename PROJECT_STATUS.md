@@ -99,7 +99,7 @@ Verified scope:
 
 - `ProjectState.CANCELED` exists.
 - `CRState.POSTPONED` exists.
-- `CRState.REOPEN` remains as a deprecated compatibility value because service code still references it.
+- `CRState.REOPEN` remains as a deprecated compatibility value and must not be persisted by REOPEN flows.
 - `ProjectMetadata.to_dict()` does not serialize `project_state`.
 - `ProjectMetadata.to_dict()` does not serialize legacy `notes`.
 - `ProjectMetadata.from_dict()` ignores legacy `notes` input so it is not re-emitted.
@@ -136,7 +136,7 @@ Verified scope:
 - `validate_drone_state_change_allowed()` rejects empty or blank `drone_link` before validating transitions.
 - Strict `ProjectState` folder transition matrix exists.
 - `target_project_state_for_cr_state()` maps `APPROVED`, `FINISHED`, `POSTPONED`, and `CANCELED` correctly.
-- T-10, deployment date guards, CR link guards, auto IN-PROGRESS predicates, and full REOPEN folder action design remain deferred.
+- T-10, deployment date guards, CR link guards, auto IN-PROGRESS predicates, and REOPEN service compatibility cleanup remain deferred.
 - `project_tracker/services/` was not changed; existing `CRState.REOPEN` service compatibility debt remains for Phase A.2.2 or later.
 
 Verification run:
@@ -155,9 +155,42 @@ Result:
 py_compile completed with no output
 ```
 
+### Phase A.2.2 — REOPEN compatibility cleanup
+
+Status: implemented and verified on Linux.
+
+Verified scope:
+
+- `CRState.REOPEN` remains as a deprecated compatibility enum value.
+- `CRState.REOPEN` remains rejected as a persistent CR transition target.
+- REOPEN is now folder-state-based in core helpers.
+- REOPEN is allowed from `ProjectState.POSTPONED` and `ProjectState.CANCELED`.
+- REOPEN is rejected from `ProjectState.UAT_PREPARE`, `ProjectState.PROD_READY`, and `ProjectState.IMPLEMENTED`.
+- REOPEN result targets `ProjectState.UAT_PREPARE` and `CRState.PENDING_SUBMISSION`.
+- `ProjectService.reopen_project()` moves reopened projects to `UAT_PREPARE`.
+- `ProjectService.reopen_project()` persists `CRState.PENDING_SUBMISSION`, not `CRState.REOPEN`.
+- REOPEN is recorded as a history action/event.
+- `cancel_project()`, `postpone_project()`, T-10/rules/link guards, frontend, and pywebview bridge were not changed.
+
+Verification run:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_state_machine.py tests/test_project_service_reopen.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/core/state_machine.py project_tracker/services/project_service.py
+```
+
+Result:
+
+```text
+29 passed
+40 passed
+py_compile completed with no output
+```
+
 ## Next Phase
 
-**Next phase: Phase A.2.2 — REOPEN compatibility cleanup or Phase A.3 — Core rules and guards**
+**Next phase: Phase A.3 — Core rules and guards**
 
 Phase A should verify or implement only core-domain readiness from PRD v3.1:
 
