@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase 0 — Migration readiness and tracking**
+**Phase B readiness — Infrastructure / persistence / SQLite cache planning**
 
-This file supersedes `PROJECT_STATUS_old.md`. Keep `PROJECT_STATUS_old.md` as historical reference only unless deletion is explicitly approved.
+Phase A is completed and verified on Linux. Next work should be Phase B planning before any infrastructure implementation.
 
 ## Source of Truth
 
@@ -14,12 +14,13 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository is partially migrated and not ready for PRD v3.1 implementation beyond Phase 0 documentation work.
+Repository has completed Phase A core-domain migration slices and is ready for Phase B planning.
 
 Current state:
 
 - `PRD.md` v3.1 exists and is authoritative.
-- `CLAUDE.md` already aligns with PRD v3.1 migration direction.
+- `CLAUDE.md` aligns with PRD v3.1 migration direction.
+- Phase A core domain work is implemented and verified.
 - Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
 - Svelte + TypeScript + Vite structure is missing.
@@ -63,7 +64,7 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with partial core, infrastructure, and service modules.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work complete and infrastructure/service/frontend migration still pending.
 
 Known gaps against PRD v3.1:
 
@@ -93,20 +94,20 @@ They must not be imported into production code or used as the basis for new prod
 
 ### Phase A.1 — Core enums and metadata serialization
 
-Status: implemented and verified on Linux.
+Status: completed and verified on Linux.
 
 Verified scope:
 
 - `ProjectState.CANCELED` exists.
 - `CRState.POSTPONED` exists.
 - `CRState.REOPEN` remains as a deprecated compatibility value and must not be persisted by REOPEN flows.
+- `DroneTicket.owner` exists and defaults to an empty string.
 - `ProjectMetadata.to_dict()` does not serialize `project_state`.
 - `ProjectMetadata.to_dict()` does not serialize legacy `notes`.
 - `ProjectMetadata.from_dict()` ignores legacy `notes` input so it is not re-emitted.
-- `DroneTicket.owner` exists and defaults to an empty string.
 - timezone-aware datetime serialization behavior is preserved.
 
-Verification run:
+Verification evidence:
 
 ```bash
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_enums.py tests/test_core_models.py -v
@@ -122,7 +123,7 @@ py_compile completed with no output
 
 ### Phase A.2.1 — Pure state transition matrices and helpers
 
-Status: implemented and verified on Linux.
+Status: completed and verified on Linux.
 
 Verified scope:
 
@@ -136,10 +137,8 @@ Verified scope:
 - `validate_drone_state_change_allowed()` rejects empty or blank `drone_link` before validating transitions.
 - Strict `ProjectState` folder transition matrix exists.
 - `target_project_state_for_cr_state()` maps `APPROVED`, `FINISHED`, `POSTPONED`, and `CANCELED` correctly.
-- T-10, deployment date guards, CR link guards, auto IN-PROGRESS predicates, and REOPEN service compatibility cleanup remain deferred.
-- `project_tracker/services/` was not changed; existing `CRState.REOPEN` service compatibility debt remains for Phase A.2.2 or later.
 
-Verification run:
+Verification evidence:
 
 ```bash
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_enums.py tests/test_core_models.py tests/test_core_state_machine.py -v
@@ -157,22 +156,21 @@ py_compile completed with no output
 
 ### Phase A.2.2 — REOPEN compatibility cleanup
 
-Status: implemented and verified on Linux.
+Status: completed and verified on Linux.
 
 Verified scope:
 
 - `CRState.REOPEN` remains as a deprecated compatibility enum value.
 - `CRState.REOPEN` remains rejected as a persistent CR transition target.
-- REOPEN is now folder-state-based in core helpers.
+- REOPEN is folder-state-based in core helpers.
 - REOPEN is allowed from `ProjectState.POSTPONED` and `ProjectState.CANCELED`.
 - REOPEN is rejected from `ProjectState.UAT_PREPARE`, `ProjectState.PROD_READY`, and `ProjectState.IMPLEMENTED`.
 - REOPEN result targets `ProjectState.UAT_PREPARE` and `CRState.PENDING_SUBMISSION`.
 - `ProjectService.reopen_project()` moves reopened projects to `UAT_PREPARE`.
 - `ProjectService.reopen_project()` persists `CRState.PENDING_SUBMISSION`, not `CRState.REOPEN`.
 - REOPEN is recorded as a history action/event.
-- `cancel_project()`, `postpone_project()`, T-10/rules/link guards, frontend, and pywebview bridge were not changed.
 
-Verification run:
+Verification evidence:
 
 ```bash
 rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_state_machine.py tests/test_project_service_reopen.py -v
@@ -188,39 +186,117 @@ Result:
 py_compile completed with no output
 ```
 
-## Next Phase
+### Phase A.3.1 — Link extraction helpers
 
-**Next phase: Phase A.3 — Core rules and guards**
+Status: completed and verified on Linux.
 
-Phase A should verify or implement only core-domain readiness from PRD v3.1:
+Verified scope:
 
-- enum values
-- pure domain models
-- state machine guards
-- T-10 rule
-- folder name validation
-- CR/Drone link extraction
-- organizational folder exclusion logic
-- history entry model
+- `extract_cr_number()` extracts `CRNumber=CR...` query values.
+- `extract_drone_ticket()` extracts terminal `D-...` Drone ticket path segment.
+- Empty, blank, and unmatched inputs return `None`.
 
-Do not start Svelte, SQLite, APScheduler, pywebview bridge rewrite, or frontend migration during Phase A unless an approved Phase A implementation plan explicitly includes it.
+### Phase A.3.2 — T-10 refinement and transition guards
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- T-10 uses `cr_pending_approval_at`, not `cr_state_updated_at`.
+- Missing T-10 proof fails when CR is beyond `PENDING SUBMISSION`.
+- Missing T-10 proof is neutral while CR remains `PENDING SUBMISSION`.
+- `UAT_PREPARE -> PROD_READY` guard validates start/end datetimes, timezone awareness, backdated values, CR link, CR state, Drone links/states, and T-10 proof.
+- `PROD_READY -> IMPLEMENTED` guard validates CR `FINISHED` and all Drone tickets `FINISHED`.
+
+### Phase A.3.3 — Auto IN-PROGRESS predicates
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+992d1bc implement phase A.3.3 auto in-progress predicates
+```
+
+Verified scope:
+
+- `is_in_deployment_window()` returns true only for timezone-aware `start_datetime <= now <= end_datetime`.
+- `is_in_deployment_window()` returns false for missing start/end, naive datetimes, end-before-start, before-window, and after-window inputs.
+- `should_auto_start_cr()` returns true only for CR `APPROVED` inside deployment window.
+- `should_auto_start_drone()` returns true only for Drone `APPROVED` with non-blank `drone_link` inside deployment window.
+- Predicates do not mutate metadata or tickets.
+- Predicates do not call scheduler, filesystem, metadata store, SQLite, service, or state machine transition validators.
+
+Verification evidence:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_rules_guards.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_state_machine.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/core/rules.py
+```
+
+Result:
+
+```text
+50 passed
+26 passed
+98 passed
+py_compile completed with no output
+```
+
+## Phase A Final Completion Checklist
+
+Completed and verified:
+
+- `ProjectState.CANCELED`
+- `CRState.POSTPONED`
+- `CRState.REOPEN` deprecated compatibility only
+- `DroneTicket.owner`
+- `ProjectMetadata` does not serialize `project_state`
+- `ProjectMetadata` does not serialize legacy `notes`
+- strict CR transition matrix
+- strict Drone transition matrix
+- strict `ProjectState` transition matrix
+- REOPEN action resets folder to `UAT_PREPARE` and CR to `PENDING_SUBMISSION`
+- `extract_cr_number()`
+- `extract_drone_ticket()`
+- T-10 missing proof behavior
+- `UAT_PREPARE -> PROD_READY` guard
+- `PROD_READY -> IMPLEMENTED` guard
+- auto IN-PROGRESS pure predicates
+
+Final Phase A audit evidence:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean before PROJECT_STATUS.md update
+Tests: 98 passed
+Core py_compile: pass
+Core import purity: pass
+Latest completed commit: 992d1bc implement phase A.3.3 auto in-progress predicates
+```
+
+## Next Recommended Phase
+
+**Phase B — Infrastructure / persistence / SQLite cache planning**
+
+Do not start infrastructure implementation until a Phase B plan is approved.
+
+Phase B should cover:
+
+- filesystem operations
+- metadata store
+- settings store
+- link bank store
+- SQLite rebuildable cache/index
+- guarded Outlook/Teams infrastructure stubs
+- safe delete behavior
+
+Do not start Svelte, APScheduler service behavior, pywebview bridge rewrite, or frontend migration during Phase B planning unless explicitly included in an approved Phase B plan.
 
 ## Phase 0 Boundary
 
-Phase 0 allowed documentation files:
+Phase 0 documentation alignment is complete. `PROJECT_STATUS_old.md` remains historical reference unless deletion is explicitly approved.
 
-- `PROJECT_STATUS.md`
-- `MIGRATION_PLAN.md`
-- `redesign_ui/_REFERENCE_ONLY.md`
-
-Phase 0 forbidden files:
-
-- `PRD.md`
-- `requirements.txt`
-- `project_tracker/`
-- `frontend/`
-- `redesign_ui/*.py`
-- `PRD_old.md`
-- `PROJECT_STATUS_old.md`
-
-No production code is implemented in Phase 0.
+No legacy/reference files should be deleted without explicit approval.
