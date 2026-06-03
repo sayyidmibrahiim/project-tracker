@@ -1,6 +1,8 @@
-# CLAUDE.md
+# REFERENCE_GUIDE_OLD.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Historical reference only. This file is not active Claude Code instruction. Root `../CLAUDE.md` and `../PRD.md` are authoritative.
+
+This file previously provided guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Overview
 

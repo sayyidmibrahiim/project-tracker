@@ -7,3 +7,5 @@ Do not run or integrate PyQt6 files into the production application.
 Old static HTML frontend files are legacy/reference only. They are not migrated production screens.
 
 Production frontend target is Svelte + TypeScript + Vite, with Tailwind CSS bundled through the frontend build.
+
+Historical redesign notes live in `REFERENCE_GUIDE_OLD.md`. Root `../CLAUDE.md` and `../PRD.md` are authoritative.
