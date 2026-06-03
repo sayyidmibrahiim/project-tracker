@@ -300,7 +300,7 @@ rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/pyth
 
 Package for Windows transfer from repository root:
 
-rtk zip -r project_tracker_dbs_v$(date +%Y%m%d).zip . --exclude ".venv/_" "**pycache**/_" "_.pyc" ".git/_" "node_modules/\*"
+rtk zip -r project*tracker_dbs_v$(date +%Y%m%d).zip . --exclude ".venv/*" "**pycache**/_" "_.pyc" ".git/\_" "node_modules/\*"
 
 Do not run PyInstaller on Linux. Windows packaging must be done on Windows.
 
