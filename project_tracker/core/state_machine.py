@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidTransitionError
 
-REOPEN_ALLOWED_FROM = frozenset({CRState.APPROVED, CRState.PENDING_APPROVAL})
+REOPEN_ALLOWED_FOLDER_STATES = frozenset({ProjectState.POSTPONED, ProjectState.CANCELED})
 POSTPONED_RESUME_TARGETS = frozenset({ProjectState.UAT_PREPARE})
 
 CR_MANUAL_TRANSITIONS: dict[CRState, frozenset[CRState]] = {
@@ -48,7 +48,6 @@ PROJECT_STATE_TRANSITIONS: dict[ProjectState, frozenset[ProjectState]] = {
 @dataclass(frozen=True, slots=True)
 class ReopenResult:
     folder_state: ProjectState
-    recorded_state: CRState
     next_cr_state: CRState
     history_action: str
 
@@ -110,20 +109,19 @@ def validate_project_state_transition(current_state: ProjectState, target_state:
         raise InvalidTransitionError(f"Invalid Project state transition: {current_state.value} -> {target_state.value}")
 
 
-def can_reopen_cr(current_state: CRState) -> bool:
-    return current_state in REOPEN_ALLOWED_FROM
+def can_reopen_project(folder_state: ProjectState) -> bool:
+    return folder_state in REOPEN_ALLOWED_FOLDER_STATES
 
 
-def validate_reopen_cr(current_state: CRState) -> None:
-    if not can_reopen_cr(current_state):
-        raise InvalidTransitionError(f"Cannot REOPEN CR from {current_state.value}")
+def validate_reopen_project(folder_state: ProjectState) -> None:
+    if not can_reopen_project(folder_state):
+        raise InvalidTransitionError(f"Cannot REOPEN project from {folder_state.value}")
 
 
-def reopen_cr(current_state: CRState) -> ReopenResult:
-    validate_reopen_cr(current_state)
+def reopen_project_state(folder_state: ProjectState) -> ReopenResult:
+    validate_reopen_project(folder_state)
     return ReopenResult(
         folder_state=ProjectState.UAT_PREPARE,
-        recorded_state=CRState.REOPEN,
         next_cr_state=CRState.PENDING_SUBMISSION,
         history_action="REOPEN",
     )

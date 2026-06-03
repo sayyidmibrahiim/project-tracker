@@ -3,6 +3,7 @@ import pytest
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidTransitionError
 from project_tracker.core.state_machine import (
+    reopen_project_state,
     target_project_state_for_cr_state,
     valid_next_cr_states,
     valid_next_drone_states,
@@ -58,6 +59,35 @@ def test_automatic_cr_approved_to_in_progress_is_allowed() -> None:
 def test_reopen_is_rejected_as_persistent_cr_transition_target() -> None:
     with pytest.raises(InvalidTransitionError, match="REOPEN"):
         validate_cr_transition(CRState.CANCELED, CRState.REOPEN)
+
+
+def test_reopen_project_state_from_postponed_returns_uat_prepare_and_pending_submission() -> None:
+    result = reopen_project_state(ProjectState.POSTPONED)
+
+    assert result.folder_state == ProjectState.UAT_PREPARE
+    assert result.next_cr_state == CRState.PENDING_SUBMISSION
+    assert result.history_action == "REOPEN"
+
+
+def test_reopen_project_state_from_canceled_returns_uat_prepare_and_pending_submission() -> None:
+    result = reopen_project_state(ProjectState.CANCELED)
+
+    assert result.folder_state == ProjectState.UAT_PREPARE
+    assert result.next_cr_state == CRState.PENDING_SUBMISSION
+    assert result.history_action == "REOPEN"
+
+
+@pytest.mark.parametrize(
+    "folder_state",
+    [
+        ProjectState.UAT_PREPARE,
+        ProjectState.PROD_READY,
+        ProjectState.IMPLEMENTED,
+    ],
+)
+def test_reopen_project_state_rejects_non_postponed_or_canceled_folder_states(folder_state: ProjectState) -> None:
+    with pytest.raises(InvalidTransitionError, match="REOPEN"):
+        reopen_project_state(folder_state)
 
 
 def test_manual_valid_next_drone_states_exclude_in_progress() -> None:

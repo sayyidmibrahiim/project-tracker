@@ -11,7 +11,7 @@ from project_tracker.core.rules import (
     validate_prod_ready_to_implemented_transition,
     validate_uat_to_prod_ready_transition,
 )
-from project_tracker.core.state_machine import validate_reopen_cr
+from project_tracker.core.state_machine import reopen_project_state
 from project_tracker.infrastructure.metadata_store import MetadataStore
 
 
@@ -29,10 +29,10 @@ class ProjectService:
 
     def reopen_project(self, project_path: Path, settings: AppSettings) -> Path:
         metadata = self.metadata_store.load(project_path)
-        old_state = metadata.cr_state
-        validate_reopen_cr(old_state)
+        old_folder_state = state_from_project_path(project_path)
+        reopen_result = reopen_project_state(old_folder_state)
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.UAT_PREPARE.value
+        target_dir = year_path_from_project_path(project_path) / reopen_result.folder_state.value
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -40,14 +40,14 @@ class ProjectService:
 
         moved_path = Path(shutil.move(str(project_path), str(target_path))) if project_path != target_path else project_path
         now = local_now()
-        metadata.cr_state = CRState.REOPEN
+        metadata.cr_state = reopen_result.next_cr_state
         metadata.cr_state_updated_at = now
         metadata.updated_at = now
         metadata.history.append(
             HistoryEntry(
                 timestamp=now,
-                action="REOPEN",
-                detail=f"REOPEN: {old_state.value} → REOPEN, project reverted to UAT_PREPARE",
+                action=reopen_result.history_action,
+                detail=f"REOPEN: project moved from {old_folder_state.value} to {reopen_result.folder_state.value}",
                 user=current_user(settings),
             )
         )
