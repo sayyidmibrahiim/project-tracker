@@ -89,9 +89,40 @@ PyQt6 code is reference only.
 
 They must not be imported into production code or used as the basis for new production PyQt6 UI.
 
+## Phase A Progress
+
+### Phase A.1 — Core enums and metadata serialization
+
+Status: implemented and verified on Linux.
+
+Verified scope:
+
+- `ProjectState.CANCELED` exists.
+- `CRState.POSTPONED` exists.
+- `CRState.REOPEN` remains as a deprecated compatibility value because service code still references it.
+- `ProjectMetadata.to_dict()` does not serialize `project_state`.
+- `ProjectMetadata.to_dict()` does not serialize legacy `notes`.
+- `ProjectMetadata.from_dict()` ignores legacy `notes` input so it is not re-emitted.
+- `DroneTicket.owner` exists and defaults to an empty string.
+- timezone-aware datetime serialization behavior is preserved.
+
+Verification run:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_enums.py tests/test_core_models.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/core/enums.py project_tracker/core/models.py
+```
+
+Result:
+
+```text
+11 passed
+py_compile completed with no output
+```
+
 ## Next Phase
 
-**Next phase: Phase A — Core Domain readiness**
+**Next phase: Phase A.2 — State machine and transition rules**
 
 Phase A should verify or implement only core-domain readiness from PRD v3.1:
 
