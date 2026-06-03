@@ -6,6 +6,7 @@ class ProjectState(StrEnum):
     PROD_READY = "PROD_READY"
     IMPLEMENTED = "IMPLEMENTED"
     POSTPONED = "POSTPONED"
+    CANCELED = "CANCELED"
 
 
 class CRState(StrEnum):
@@ -14,7 +15,9 @@ class CRState(StrEnum):
     APPROVED = "APPROVED"
     IN_PROGRESS = "IN-PROGRESS"
     FINISHED = "FINISHED"
+    POSTPONED = "POSTPONED"
     CANCELED = "CANCELED"
+    # Deprecated compatibility value. REOPEN is an action/event in PRD v3.1, not a persistent CR state.
     REOPEN = "REOPEN"
 
 

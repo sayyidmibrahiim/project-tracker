@@ -99,6 +99,7 @@ class DroneTicket:
     drone_link: str = ""
     drone_state: DroneState = DroneState.UAT
     drone_state_updated_at: datetime | None = None
+    owner: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DroneTicket:
@@ -108,6 +109,7 @@ class DroneTicket:
             drone_link=str(data.get("drone_link", "")),
             drone_state=DroneState(data.get("drone_state", DroneState.UAT.value)),
             drone_state_updated_at=datetime_from_json(data.get("drone_state_updated_at")),
+            owner=str(data.get("owner", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -116,6 +118,7 @@ class DroneTicket:
             "drone_link": self.drone_link,
             "drone_state": self.drone_state.value,
             "drone_state_updated_at": datetime_to_json(self.drone_state_updated_at),
+            "owner": self.owner,
         }
 
 
@@ -147,7 +150,6 @@ class ProjectMetadata:
             cr_state_updated_at=datetime_from_json(data.get("cr_state_updated_at")),
             cr_pending_approval_at=datetime_from_json(data.get("cr_pending_approval_at")),
             drone_tickets=[DroneTicket.from_dict(item) for item in data.get("drone_tickets", [])],
-            notes=str(data.get("notes", "")),
             implementation_plan=str(data.get("implementation_plan", "")),
             email_flags=EmailFlags.from_dict(data.get("email_flags", {})),
             history=[HistoryEntry.from_dict(item) for item in data.get("history", [])],
@@ -166,7 +168,6 @@ class ProjectMetadata:
             "cr_state_updated_at": datetime_to_json(self.cr_state_updated_at),
             "cr_pending_approval_at": datetime_to_json(self.cr_pending_approval_at),
             "drone_tickets": [ticket.to_dict() for ticket in self.drone_tickets],
-            "notes": self.notes,
             "implementation_plan": self.implementation_plan,
             "email_flags": self.email_flags.to_dict(),
             "history": [entry.to_dict() for entry in self.history],
