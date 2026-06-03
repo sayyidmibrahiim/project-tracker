@@ -8,6 +8,8 @@ from typing import Iterable
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import datetime_from_json, datetime_to_json
+from project_tracker.core.rules import extract_cr_number, extract_drone_ticket
+from project_tracker.infrastructure.filesystem import ScannedProject
 
 
 def _placeholders(values: tuple[str, ...]) -> str:
@@ -22,7 +24,7 @@ class CachedProjectRow:
     project_name: str
     start_datetime: datetime | None = None
     end_datetime: datetime | None = None
-    cr_number: str = ""
+    cr_number: str | None = ""
     cr_state: CRState = CRState.PENDING_SUBMISSION
     updated_at: datetime | None = None
 
@@ -31,11 +33,44 @@ class CachedProjectRow:
 class CachedDroneTicketRow:
     project_path: Path
     subfolder_name: str | None = None
-    drone_ticket: str = ""
+    drone_ticket: str | None = ""
     drone_state: DroneState = DroneState.UAT
     owner: str = ""
-    display: str = ""
+    display: str | None = ""
     updated_at: datetime | None = None
+
+
+def cached_project_row_from_scan(scanned: ScannedProject) -> CachedProjectRow:
+    metadata = scanned.metadata
+    return CachedProjectRow(
+        project_path=scanned.path,
+        year=scanned.year,
+        project_state=scanned.project_state,
+        project_name=metadata.project_name or scanned.path.name,
+        start_datetime=metadata.start_datetime,
+        end_datetime=metadata.end_datetime,
+        cr_number=extract_cr_number(metadata.cr_link),
+        cr_state=metadata.cr_state,
+        updated_at=metadata.updated_at,
+    )
+
+
+def cached_drone_rows_from_scan(scanned: ScannedProject) -> list[CachedDroneTicketRow]:
+    rows: list[CachedDroneTicketRow] = []
+    for ticket in scanned.metadata.drone_tickets:
+        drone_ticket = extract_drone_ticket(ticket.drone_link)
+        rows.append(
+            CachedDroneTicketRow(
+                project_path=scanned.path,
+                subfolder_name=ticket.subfolder_name,
+                drone_ticket=drone_ticket,
+                drone_state=ticket.drone_state,
+                owner=ticket.owner,
+                display=drone_ticket,
+                updated_at=ticket.drone_state_updated_at,
+            )
+        )
+    return rows
 
 
 class CacheDb:
@@ -267,7 +302,7 @@ class CacheDb:
         )
 
     @staticmethod
-    def _project_values(row: CachedProjectRow) -> tuple[str, str, str, str, str | None, str | None, str, str, str | None]:
+    def _project_values(row: CachedProjectRow) -> tuple[str, str, str, str, str | None, str | None, str | None, str, str | None]:
         return (
             str(row.project_path),
             row.year,
@@ -281,7 +316,7 @@ class CacheDb:
         )
 
     @staticmethod
-    def _project_from_row(row: tuple[str, str, str, str, str | None, str | None, str, str, str | None]) -> CachedProjectRow:
+    def _project_from_row(row: tuple[str, str, str, str, str | None, str | None, str | None, str, str | None]) -> CachedProjectRow:
         return CachedProjectRow(
             project_path=Path(row[0]),
             year=row[1],
@@ -295,7 +330,7 @@ class CacheDb:
         )
 
     @staticmethod
-    def _drone_values(row: CachedDroneTicketRow) -> tuple[str, str | None, str, str, str, str, str | None]:
+    def _drone_values(row: CachedDroneTicketRow) -> tuple[str, str | None, str | None, str, str, str | None, str | None]:
         return (
             str(row.project_path),
             row.subfolder_name,
@@ -307,7 +342,7 @@ class CacheDb:
         )
 
     @staticmethod
-    def _drone_from_row(row: tuple[str, str | None, str, str, str, str, str | None]) -> CachedDroneTicketRow:
+    def _drone_from_row(row: tuple[str, str | None, str | None, str, str, str | None, str | None]) -> CachedDroneTicketRow:
         return CachedDroneTicketRow(
             project_path=Path(row[0]),
             subfolder_name=row[1],
