@@ -9,7 +9,8 @@ from typing import Iterable
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import datetime_from_json, datetime_to_json
 from project_tracker.core.rules import extract_cr_number, extract_drone_ticket
-from project_tracker.infrastructure.filesystem import ScannedProject
+from project_tracker.infrastructure.filesystem import ScannedProject, scan_year
+from project_tracker.infrastructure.metadata_store import MetadataStore
 
 
 def _placeholders(values: tuple[str, ...]) -> str:
@@ -71,6 +72,22 @@ def cached_drone_rows_from_scan(scanned: ScannedProject) -> list[CachedDroneTick
             )
         )
     return rows
+
+
+def rebuild_year_cache(
+    cache: CacheDb,
+    year_path: Path,
+    metadata_store: MetadataStore | None = None,
+) -> list[str]:
+    store = metadata_store or MetadataStore()
+    scanned_projects = scan_year(year_path, store)
+    cache.replace_projects_for_year(
+        year_path.name,
+        [cached_project_row_from_scan(scanned) for scanned in scanned_projects],
+    )
+    for scanned in scanned_projects:
+        cache.replace_drone_tickets_for_project(scanned.path, cached_drone_rows_from_scan(scanned))
+    return list(store.warnings)
 
 
 class CacheDb:
@@ -310,7 +327,7 @@ class CacheDb:
             row.project_name,
             datetime_to_json(row.start_datetime),
             datetime_to_json(row.end_datetime),
-            row.cr_number,
+            row.cr_number or "",
             row.cr_state.value,
             datetime_to_json(row.updated_at),
         )
@@ -334,10 +351,10 @@ class CacheDb:
         return (
             str(row.project_path),
             row.subfolder_name,
-            row.drone_ticket,
+            row.drone_ticket or "",
             row.drone_state.value,
             row.owner,
-            row.display,
+            row.display or "",
             datetime_to_json(row.updated_at),
         )
 
