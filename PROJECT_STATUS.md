@@ -120,9 +120,44 @@ Result:
 py_compile completed with no output
 ```
 
+### Phase A.2.1 — Pure state transition matrices and helpers
+
+Status: implemented and verified on Linux.
+
+Verified scope:
+
+- Strict CR transition matrix exists for manual and scheduler-only transitions.
+- `CRState.REOPEN` remains for compatibility but is rejected as a persistent CR transition target.
+- Manual CR `IN_PROGRESS` target is rejected.
+- Automatic CR `APPROVED -> IN_PROGRESS` is allowed.
+- Strict Drone transition matrix exists for manual and scheduler-only transitions.
+- Manual Drone `IN_PROGRESS` target is rejected.
+- Automatic Drone `APPROVED -> IN_PROGRESS` is allowed.
+- `validate_drone_state_change_allowed()` rejects empty or blank `drone_link` before validating transitions.
+- Strict `ProjectState` folder transition matrix exists.
+- `target_project_state_for_cr_state()` maps `APPROVED`, `FINISHED`, `POSTPONED`, and `CANCELED` correctly.
+- T-10, deployment date guards, CR link guards, auto IN-PROGRESS predicates, and full REOPEN folder action design remain deferred.
+- `project_tracker/services/` was not changed; existing `CRState.REOPEN` service compatibility debt remains for Phase A.2.2 or later.
+
+Verification run:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_core_enums.py tests/test_core_models.py tests/test_core_state_machine.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/core/enums.py project_tracker/core/state_machine.py project_tracker/core/exceptions.py
+```
+
+Result:
+
+```text
+32 passed
+32 passed
+py_compile completed with no output
+```
+
 ## Next Phase
 
-**Next phase: Phase A.2 — State machine and transition rules**
+**Next phase: Phase A.2.2 — REOPEN compatibility cleanup or Phase A.3 — Core rules and guards**
 
 Phase A should verify or implement only core-domain readiness from PRD v3.1:
 
