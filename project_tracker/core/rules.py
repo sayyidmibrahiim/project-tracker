@@ -83,6 +83,10 @@ def validate_windows_folder_name(name: str) -> None:
         raise InvalidFolderNameError(f"Folder name is reserved on Windows: {stem}")
 
 
+def _is_timezone_aware(value: datetime) -> bool:
+    return value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None
+
+
 def validate_t10(metadata: ProjectMetadata, *, threshold_days: int = 10) -> T10ValidationResult:
     """
     Validate T-10 rule: CR must reach PENDING APPROVAL no later than threshold_days before start_datetime.
@@ -95,7 +99,7 @@ def validate_t10(metadata: ProjectMetadata, *, threshold_days: int = 10) -> T10V
         return T10ValidationResult(passed=True, reason="No start datetime set")
 
     if metadata.cr_pending_approval_at is None:
-        if metadata.cr_state in {CRState.APPROVED, CRState.IN_PROGRESS, CRState.FINISHED, CRState.CANCELED}:
+        if metadata.cr_state != CRState.PENDING_SUBMISSION:
             return T10ValidationResult(
                 passed=False,
                 reason="CR state is beyond PENDING SUBMISSION but cr_pending_approval_at is missing; cannot prove T-10",
@@ -125,17 +129,40 @@ def validate_uat_to_prod_ready_transition(
 ) -> TransitionGuardResult:
     failed_guards: list[str] = []
 
+    current_time_is_aware = _is_timezone_aware(current_time)
+    if not current_time_is_aware:
+        failed_guards.append("Current time must be timezone-aware")
+
+    start_datetime_is_aware = True
+    end_datetime_is_aware = True
     if metadata.start_datetime is None:
         failed_guards.append("Start datetime is required")
+    else:
+        start_datetime_is_aware = _is_timezone_aware(metadata.start_datetime)
+        if not start_datetime_is_aware:
+            failed_guards.append("Start datetime must be timezone-aware")
+
     if metadata.end_datetime is None:
         failed_guards.append("End datetime is required")
-    if metadata.start_datetime is not None and metadata.end_datetime is not None:
+    else:
+        end_datetime_is_aware = _is_timezone_aware(metadata.end_datetime)
+        if not end_datetime_is_aware:
+            failed_guards.append("End datetime must be timezone-aware")
+
+    dates_are_comparable = (
+        metadata.start_datetime is not None
+        and metadata.end_datetime is not None
+        and start_datetime_is_aware
+        and end_datetime_is_aware
+    )
+    if dates_are_comparable:
         if metadata.end_datetime <= metadata.start_datetime:
             failed_guards.append("End datetime must be after start datetime")
-        if metadata.start_datetime < current_time:
-            failed_guards.append("Start datetime cannot be backdated")
-        if metadata.end_datetime < current_time:
-            failed_guards.append("End datetime cannot be backdated")
+        if current_time_is_aware:
+            if metadata.start_datetime < current_time:
+                failed_guards.append("Start datetime cannot be backdated")
+            if metadata.end_datetime < current_time:
+                failed_guards.append("End datetime cannot be backdated")
 
     if not metadata.cr_link.strip():
         failed_guards.append("CR link is required")
@@ -143,34 +170,29 @@ def validate_uat_to_prod_ready_transition(
         failed_guards.append("CR state must be APPROVED")
 
     for index, ticket in enumerate(metadata.drone_tickets):
-        if ticket.drone_link.strip() and ticket.drone_state != DroneState.APPROVED:
+        if not ticket.drone_link.strip():
+            failed_guards.append(f"{_drone_ticket_label(ticket, index)} link is required")
+        if ticket.drone_state != DroneState.APPROVED:
             failed_guards.append(f"{_drone_ticket_label(ticket, index)} must be APPROVED")
 
-    t10_result = validate_t10(metadata, threshold_days=threshold_days)
-    if not t10_result.passed:
-        failed_guards.append(t10_result.reason or "T-10 rule failed")
+    if metadata.start_datetime is None or start_datetime_is_aware:
+        t10_result = validate_t10(metadata, threshold_days=threshold_days)
+        if not t10_result.passed:
+            failed_guards.append(t10_result.reason or "T-10 rule failed")
 
     return TransitionGuardResult(allowed=not failed_guards, failed_guards=failed_guards)
 
 
 def validate_prod_ready_to_implemented_transition(
-    metadata: ProjectMetadata, *, current_time: datetime
+    metadata: ProjectMetadata, *, current_time: datetime | None = None
 ) -> TransitionGuardResult:
     failed_guards: list[str] = []
-
-    if metadata.start_datetime is None:
-        failed_guards.append("Start datetime is required")
-    if metadata.end_datetime is None:
-        failed_guards.append("End datetime is required")
-    if metadata.start_datetime is not None and metadata.end_datetime is not None:
-        if current_time < metadata.start_datetime or current_time > metadata.end_datetime:
-            failed_guards.append("Current time must be within deployment window")
 
     if metadata.cr_state != CRState.FINISHED:
         failed_guards.append("CR state must be FINISHED")
 
     for index, ticket in enumerate(metadata.drone_tickets):
-        if ticket.drone_link.strip() and ticket.drone_state != DroneState.FINISHED:
+        if ticket.drone_state != DroneState.FINISHED:
             failed_guards.append(f"{_drone_ticket_label(ticket, index)} must be FINISHED")
 
     return TransitionGuardResult(allowed=not failed_guards, failed_guards=failed_guards)

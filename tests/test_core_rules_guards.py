@@ -1,0 +1,278 @@
+from datetime import datetime, timezone, timedelta
+
+import pytest
+
+from project_tracker.core.enums import CRState, DroneState
+from project_tracker.core.models import DroneTicket, ProjectMetadata
+from project_tracker.core.rules import (
+    validate_prod_ready_to_implemented_transition,
+    validate_t10,
+    validate_uat_to_prod_ready_transition,
+)
+
+NOW = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
+START = datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc)
+END = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+T10_PROOF = START - timedelta(days=10)
+LATE_T10_PROOF = START - timedelta(days=9)
+
+
+def _prod_ready_metadata(**overrides: object) -> ProjectMetadata:
+    values = {
+        "start_datetime": START,
+        "end_datetime": END,
+        "cr_link": "https://itsm.example.local/orderDetails?CRNumber=CR202604209900114",
+        "cr_state": CRState.APPROVED,
+        "cr_pending_approval_at": T10_PROOF,
+        "drone_tickets": [],
+    }
+    values.update(overrides)
+    return ProjectMetadata(**values)
+
+
+def _implemented_metadata(**overrides: object) -> ProjectMetadata:
+    values = {
+        "start_datetime": START,
+        "end_datetime": END,
+        "cr_state": CRState.FINISHED,
+        "drone_tickets": [],
+    }
+    values.update(overrides)
+    return ProjectMetadata(**values)
+
+
+@pytest.mark.parametrize(
+    "cr_state",
+    [
+        CRState.PENDING_APPROVAL,
+        CRState.APPROVED,
+        CRState.IN_PROGRESS,
+        CRState.FINISHED,
+        CRState.POSTPONED,
+        CRState.CANCELED,
+    ],
+)
+def test_t10_missing_proof_fails_for_states_beyond_pending_submission(cr_state: CRState) -> None:
+    metadata = ProjectMetadata(start_datetime=START, cr_state=cr_state, cr_pending_approval_at=None)
+
+    result = validate_t10(metadata)
+
+    assert result.passed is False
+    assert result.reason is not None
+    assert "cannot prove T-10" in result.reason
+
+
+def test_t10_missing_proof_passes_neutral_for_pending_submission() -> None:
+    metadata = ProjectMetadata(
+        start_datetime=START,
+        cr_state=CRState.PENDING_SUBMISSION,
+        cr_pending_approval_at=None,
+    )
+
+    result = validate_t10(metadata)
+
+    assert result.passed is True
+
+
+def test_t10_on_time_proof_passes() -> None:
+    metadata = ProjectMetadata(
+        start_datetime=START,
+        cr_state=CRState.APPROVED,
+        cr_pending_approval_at=T10_PROOF,
+    )
+
+    result = validate_t10(metadata)
+
+    assert result.passed is True
+
+
+def test_t10_late_proof_fails() -> None:
+    metadata = ProjectMetadata(
+        start_datetime=START,
+        cr_state=CRState.APPROVED,
+        cr_pending_approval_at=LATE_T10_PROOF,
+    )
+
+    result = validate_t10(metadata)
+
+    assert result.passed is False
+    assert result.reason is not None
+    assert "after T-10 deadline" in result.reason
+
+
+def test_uat_to_prod_ready_valid_metadata_with_no_drone_tickets_passes() -> None:
+    metadata = _prod_ready_metadata()
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is True
+    assert result.failed_guards == []
+
+
+def test_uat_to_prod_ready_missing_start_fails() -> None:
+    metadata = _prod_ready_metadata(start_datetime=None)
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "Start datetime is required" in result.failed_guards
+
+
+def test_uat_to_prod_ready_missing_end_fails() -> None:
+    metadata = _prod_ready_metadata(end_datetime=None)
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "End datetime is required" in result.failed_guards
+
+
+def test_uat_to_prod_ready_naive_datetimes_fail_via_failed_guards() -> None:
+    metadata = _prod_ready_metadata(
+        start_datetime=datetime(2026, 6, 10, 10, 0),
+        end_datetime=datetime(2026, 6, 10, 12, 0),
+    )
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=datetime(2026, 6, 3, 10, 0))
+
+    assert result.allowed is False
+    assert "Start datetime must be timezone-aware" in result.failed_guards
+    assert "End datetime must be timezone-aware" in result.failed_guards
+    assert "Current time must be timezone-aware" in result.failed_guards
+
+
+def test_uat_to_prod_ready_end_before_or_equal_start_fails() -> None:
+    metadata = _prod_ready_metadata(end_datetime=START)
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "End datetime must be after start datetime" in result.failed_guards
+
+
+def test_uat_to_prod_ready_backdated_start_and_end_fail() -> None:
+    metadata = _prod_ready_metadata(
+        start_datetime=NOW - timedelta(hours=2),
+        end_datetime=NOW - timedelta(hours=1),
+    )
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "Start datetime cannot be backdated" in result.failed_guards
+    assert "End datetime cannot be backdated" in result.failed_guards
+
+
+def test_uat_to_prod_ready_blank_cr_link_fails() -> None:
+    metadata = _prod_ready_metadata(cr_link="   ")
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "CR link is required" in result.failed_guards
+
+
+def test_uat_to_prod_ready_cr_not_approved_fails() -> None:
+    metadata = _prod_ready_metadata(cr_state=CRState.PENDING_APPROVAL)
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "CR state must be APPROVED" in result.failed_guards
+
+
+def test_uat_to_prod_ready_missing_t10_proof_fails() -> None:
+    metadata = _prod_ready_metadata(cr_pending_approval_at=None)
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert any("cannot prove T-10" in guard for guard in result.failed_guards)
+
+
+def test_uat_to_prod_ready_drone_ticket_blank_link_fails() -> None:
+    metadata = _prod_ready_metadata(
+        drone_tickets=[DroneTicket(drone_link=" ", drone_state=DroneState.APPROVED)]
+    )
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "Drone ticket 1 link is required" in result.failed_guards
+
+
+def test_uat_to_prod_ready_drone_ticket_with_link_but_not_approved_fails() -> None:
+    metadata = _prod_ready_metadata(
+        drone_tickets=[DroneTicket(drone_link="https://drone.example.local/deployment/D-SSIDBI-159", drone_state=DroneState.UAT)]
+    )
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "Drone ticket 1 must be APPROVED" in result.failed_guards
+
+
+def test_uat_to_prod_ready_all_linked_drone_tickets_approved_passes() -> None:
+    metadata = _prod_ready_metadata(
+        drone_tickets=[
+            DroneTicket(drone_link="https://drone.example.local/deployment/D-SSIDBI-159", drone_state=DroneState.APPROVED),
+            DroneTicket(
+                subfolder_name="script_change",
+                drone_link="https://drone.example.local/deployment/D-SSIDBI-160",
+                drone_state=DroneState.APPROVED,
+            ),
+        ]
+    )
+
+    result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
+
+    assert result.allowed is True
+    assert result.failed_guards == []
+
+
+def test_prod_ready_to_implemented_cr_finished_with_no_drone_tickets_passes_outside_time_window() -> None:
+    metadata = _implemented_metadata()
+    outside_window = START + timedelta(days=1)
+
+    result = validate_prod_ready_to_implemented_transition(metadata, current_time=outside_window)
+
+    assert result.allowed is True
+    assert result.failed_guards == []
+
+
+def test_prod_ready_to_implemented_cr_not_finished_fails() -> None:
+    metadata = _implemented_metadata(cr_state=CRState.IN_PROGRESS)
+
+    result = validate_prod_ready_to_implemented_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "CR state must be FINISHED" in result.failed_guards
+
+
+def test_prod_ready_to_implemented_drone_ticket_not_finished_fails_even_when_link_blank() -> None:
+    metadata = _implemented_metadata(
+        drone_tickets=[DroneTicket(drone_link="", drone_state=DroneState.APPROVED)]
+    )
+
+    result = validate_prod_ready_to_implemented_transition(metadata, current_time=NOW)
+
+    assert result.allowed is False
+    assert "Drone ticket 1 must be FINISHED" in result.failed_guards
+
+
+def test_prod_ready_to_implemented_all_drone_tickets_finished_passes() -> None:
+    metadata = _implemented_metadata(
+        drone_tickets=[
+            DroneTicket(drone_link="", drone_state=DroneState.FINISHED),
+            DroneTicket(
+                subfolder_name="script_change",
+                drone_link="https://drone.example.local/deployment/D-SSIDBI-160",
+                drone_state=DroneState.FINISHED,
+            ),
+        ]
+    )
+
+    result = validate_prod_ready_to_implemented_transition(metadata, current_time=NOW)
+
+    assert result.allowed is True
+    assert result.failed_guards == []
