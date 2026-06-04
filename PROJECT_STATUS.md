@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase C.3a complete — Services / event queue foundation**
+**Phase C service slice planning — next slice after C.4b**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.3a are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.4b are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -14,7 +14,7 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.3a service slices.
+Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.4b service slices.
 
 Current state:
 
@@ -25,11 +25,14 @@ Current state:
 - Phase C.1 ScannerService cache integration is implemented and verified.
 - Phase C.2 DashboardService read-only cache-backed DTOs and summary are implemented and verified.
 - Phase C.3a event queue foundation (`web/event_queue.py`) is implemented and verified.
+- Phase C.3b NotificationService event queue integration is implemented and verified.
+- Phase C.3c1 auto-transition event emission is implemented and verified.
+- Phase C.3c2 ProjectService auto-transition cleanup is implemented and verified.
+- Phase C.4a scheduler service foundation is implemented and verified.
+- Phase C.4b auto-transition scheduler integration is implemented and verified.
 - Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
 - Svelte + TypeScript + Vite structure is missing.
-- APScheduler-backed scheduler/event flow is missing.
-- NotificationService and auto_transition_service are not yet wired to event queue.
 - `web/js_api.py` bridge module is missing.
 - PyQt6 files under `redesign_ui/` are UX/function reference only and are not production code.
 
@@ -68,16 +71,16 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service slices complete through C.3a.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service slices complete through C.4b.
 
 Known remaining gaps against PRD v3.1:
 
-- APScheduler usage is missing.
-- NotificationService is not yet wired to event queue.
-- auto_transition_service is not yet wired to event queue.
 - Target `web/js_api.py` bridge module is missing.
 - `web/event_queue.py` exists with `push_event()`, `drain_events()`, `clear_events()` API.
 - Existing bridge logic lives inside `project_tracker/app_web.py` and does not yet match the PRD bridge architecture.
+- Automation service remains deferred.
+- Report service remains deferred.
+- Second Brain service remains deferred.
 
 ## PyQt6 Status
 
@@ -339,27 +342,26 @@ py_compile completed with no output
 
 ## Next Recommended Phase
 
-**Phase C.3b — NotificationService event queue integration**
+**Next Phase C service slice planning**
 
 Recommended next slice:
 
-- Wire NotificationService to push events through `web/event_queue.py` on `add()`.
-- Wire auto_transition_service to push `AUTO_IN_PROGRESS` events through event queue.
-- Add tests for service → event queue integration.
+- Select next Phase C service slice from remaining PRD gaps.
+- Keep changes surgical and phase-scoped.
+- Add targeted tests for selected service slice.
 - Run full Python test suite.
-- Update `PROJECT_STATUS.md` with Phase C.3b status.
+- Update `PROJECT_STATUS.md` with next slice status.
 
 Deferred (not yet implemented):
 
-- APScheduler / `scheduler_service.py`
 - `BridgeResponse` dataclass / `web/js_api.py`
+- frontend / Svelte / pywebview bridge
 - `automation_service.py`
 - `report_service.py` / CSV export
 - `second_brain_service.py`
-- `project_service` cleanup
-- frontend / Svelte / pywebview bridge
+- actual Windows manual testing
 
-Do not start Svelte, APScheduler service behavior, pywebview bridge rewrite, or frontend migration until the appropriate later phase is approved.
+Do not start Svelte, pywebview bridge rewrite, automation/report/second-brain services, or frontend migration until the appropriate later phase is approved.
 
 ## Phase C Progress
 
@@ -473,6 +475,65 @@ Working tree: clean before PROJECT_STATUS.md update
 Tests: 184 passed
 py_compile: pass
 Latest completed commit: 1db1bfe implement phase C.3a event queue foundation
+```
+
+### Phase C.3b — NotificationService event queue integration
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+8838e21 implement phase C.3b notification event queue integration
+```
+
+### Phase C.3c1 — Auto-transition event emission
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+75e90a1 implement phase C.3c1 auto-transition event emission
+```
+
+### Phase C.3c2 — ProjectService auto-transition cleanup
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+f8e9059 implement phase C.3c2 project service auto-transition cleanup
+```
+
+### Phase C.4a — Scheduler service foundation
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+9fafd65 implement phase C.4a scheduler service foundation
+```
+
+### Phase C.4b — Auto-transition scheduler integration
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+39f2370 implement phase C.4b auto-transition scheduler integration
+```
+
+Phase C.4b audit evidence:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean before PROJECT_STATUS.md update
+Tests: 222 passed
+Latest completed commit: 39f2370 implement phase C.4b auto-transition scheduler integration
 ```
 
 ## Phase 0 Boundary
