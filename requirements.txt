@@ -6,3 +6,4 @@ pyperclip>=1.8.2
 send2trash>=1.8.3
 watchdog>=4.0.0
 python-dateutil>=2.9.0
+APScheduler>=3.10,<4
