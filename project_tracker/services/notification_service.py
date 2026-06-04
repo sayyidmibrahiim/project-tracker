@@ -3,6 +3,7 @@ from collections.abc import Callable
 import uuid
 
 from project_tracker.core.models import Notification, local_now
+from project_tracker.web.event_queue import push_event
 
 
 class Signal:
@@ -18,9 +19,13 @@ class Signal:
 
 
 class NotificationService:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        event_publisher: Callable[[str, dict[str, object] | None], None] | None = push_event,
+    ) -> None:
         self.notification_added = Signal()  # emits Notification
         self.notification_dismissed = Signal()  # emits notification_id
+        self._event_publisher = event_publisher
         self._notifications: list[Notification] = []
 
     def add(
@@ -41,7 +46,21 @@ class NotificationService:
         )
         self._notifications.append(notification)
         self.notification_added.emit(notification)
+        if self._event_publisher is not None:
+            self._event_publisher("NOTIFICATION", self._to_event_payload(notification))
         return notification
+
+    @staticmethod
+    def _to_event_payload(notification: Notification) -> dict[str, object]:
+        return {
+            "id": notification.id,
+            "type": notification.type,
+            "title": notification.title,
+            "message": notification.message,
+            "timestamp": notification.timestamp.isoformat(),
+            "project_path": str(notification.project_path) if notification.project_path else None,
+            "dismissed": notification.dismissed,
+        }
 
     def get_all(self) -> list[Notification]:
         return list(self._notifications)
