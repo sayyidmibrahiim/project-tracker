@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase B readiness — Infrastructure / persistence / SQLite cache planning**
+**Phase B.3 complete — Infrastructure / persistence / SQLite cache / guarded stubs**
 
-Phase A is completed and verified on Linux. Next work should be Phase B planning before any infrastructure implementation.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -14,17 +14,17 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository has completed Phase A core-domain migration slices and is ready for Phase B planning.
+Repository has completed Phase A core-domain migration slices and Phase B.1 through B.3 infrastructure slices.
 
 Current state:
 
 - `PRD.md` v3.1 exists and is authoritative.
 - `CLAUDE.md` aligns with PRD v3.1 migration direction.
 - Phase A core domain work is implemented and verified.
+- Phase B infrastructure stores, SQLite cache foundation/mapping/rebuild, safe delete helpers, and guarded Windows integration stubs are implemented and verified.
 - Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
 - Svelte + TypeScript + Vite structure is missing.
-- SQLite rebuildable cache/index is missing.
 - APScheduler-backed scheduler/event flow is missing.
 - Background-to-frontend event queue is missing.
 - PyQt6 files under `redesign_ui/` are UX/function reference only and are not production code.
@@ -64,12 +64,10 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with Phase A core-domain work complete and infrastructure/service/frontend migration still pending.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work and Phase B infrastructure slices complete through B.3.
 
-Known gaps against PRD v3.1:
+Known remaining gaps against PRD v3.1:
 
-- SQLite cache/index is missing.
-- `project_tracker/infrastructure/cache_db.py` is missing.
 - APScheduler usage is missing.
 - Event queue is missing.
 - Target `web/js_api.py` bridge module is missing.
@@ -277,23 +275,76 @@ Core import purity: pass
 Latest completed commit: 992d1bc implement phase A.3.3 auto in-progress predicates
 ```
 
+## Phase B Progress
+
+### Phase B.1 — Infrastructure baseline tests
+
+Status: completed and verified on Linux.
+
+### Phase B.2.1 — SQLite cache DB foundation
+
+Status: completed and verified on Linux.
+
+### Phase B.2.2a — Cache mapping helpers
+
+Status: completed and verified on Linux.
+
+### Phase B.2.2b — Year cache rebuild orchestration
+
+Status: completed and verified on Linux.
+
+### Phase B.2.3 — PRD-aligned cache schema and safe filesystem helpers
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- SQLite project cache table is named `project_index` per PRD v3.1.
+- `project_index` includes PRD cache columns: `path`, `name`, `year`, `folder_state`, `cr_link`, `cr_number`, `cr_state`, `cr_pending_approval_at`, `start_datetime`, `end_datetime`, `drone_tickets_json`, `t10_status`, `updated_at`, `scanned_at`.
+- Existing normalized `drone_tickets` table remains for query-friendly Drone ticket rows.
+- Safe delete helper routes paths through `send2trash.send2trash(str(path))`.
+- Linux `open_folder()` dev behavior is guarded and non-crashing.
+
+### Phase B.3 — Guarded Outlook/Teams infrastructure stubs
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `project_tracker/infrastructure/outlook_client.py` imports without Windows dependencies on Linux.
+- Outlook draft creation returns a dev-skipped response on Linux.
+- Outlook contact lookup returns a dev fallback contact on Linux.
+- `project_tracker/infrastructure/teams_client.py` imports without Windows dependencies on Linux.
+- Teams message sending returns a dev-skipped response on Linux.
+- Windows-only imports remain lazy and guarded.
+
+Verification evidence:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/infrastructure/cache_db.py project_tracker/infrastructure/filesystem.py project_tracker/infrastructure/outlook_client.py project_tracker/infrastructure/teams_client.py
+```
+
+Result:
+
+```text
+154 passed
+py_compile completed with no output
+```
+
 ## Next Recommended Phase
 
-**Phase B — Infrastructure / persistence / SQLite cache planning**
+**Phase B.4 — Phase B exit audit and handoff to Phase C planning**
 
-Do not start infrastructure implementation until a Phase B plan is approved.
+Recommended next slice:
 
-Phase B should cover:
+- Re-read Phase B exit criteria.
+- Verify no Phase B PRD gaps remain except intentionally deferred service/automation tables (`notifications`, `scheduler_entries`, `automation_rule_logs`, `email_jobs`) that belong to Phase C/G service behavior.
+- Run final full Python test suite.
+- Run read-only review/audit per memory guidance.
+- Update `PROJECT_STATUS.md` with Phase B exit decision.
 
-- filesystem operations
-- metadata store
-- settings store
-- link bank store
-- SQLite rebuildable cache/index
-- guarded Outlook/Teams infrastructure stubs
-- safe delete behavior
-
-Do not start Svelte, APScheduler service behavior, pywebview bridge rewrite, or frontend migration during Phase B planning unless explicitly included in an approved Phase B plan.
+Do not start Svelte, APScheduler service behavior, pywebview bridge rewrite, or frontend migration until the appropriate later phase is approved.
 
 ## Phase 0 Boundary
 
