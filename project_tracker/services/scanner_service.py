@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from project_tracker.core.models import ProjectMetadata
+from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
+from project_tracker.infrastructure.metadata_store import MetadataStore
 
 ORGANIZATIONAL_FOLDERS = frozenset({
     "doc", "docs", "document", "documents",
@@ -17,6 +19,28 @@ ORGANIZATIONAL_FOLDERS = frozenset({
 class ScanWarning:
     project_path: Path
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class ScanYearResult:
+    year: str
+    project_count: int
+    warnings: list[str]
+
+
+class ScannerService:
+    def __init__(self, cache: CacheDb, metadata_store: MetadataStore | None = None) -> None:
+        self.cache = cache
+        self.metadata_store = metadata_store
+
+    def rebuild_year(self, year_path: Path) -> ScanYearResult:
+        warnings = rebuild_year_cache(self.cache, year_path, self.metadata_store)
+        year = year_path.name
+        return ScanYearResult(
+            year=year,
+            project_count=len(self.cache.list_projects(year)),
+            warnings=warnings,
+        )
 
 
 def is_organizational_folder(path: Path) -> bool:
