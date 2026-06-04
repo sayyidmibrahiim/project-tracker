@@ -1,18 +1,20 @@
-"""Auto transition service — timer-based background checker for deployment windows."""
+"""Auto transition service — scheduler-backed background checker for deployment windows."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from threading import Event, Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from project_tracker.core.models import AppSettings, local_now
 from project_tracker.services.project_service import ProjectService
+from project_tracker.services.scheduler_service import SchedulerService
 from project_tracker.web.event_queue import push_event
 
 if TYPE_CHECKING:
     from project_tracker.services.notification_service import NotificationService
+
+AUTO_TRANSITION_JOB_ID = "auto_transition_check"
 
 
 class Signal:
@@ -35,6 +37,7 @@ class AutoTransitionService:
         settings: AppSettings,
         notification_service: NotificationService | None = None,
         event_publisher: Callable[[str, dict[str, object] | None], None] | None = push_event,
+        scheduler: Any | None = None,
     ) -> None:
         self.transition_completed = Signal()
         self.error_occurred = Signal()
@@ -42,35 +45,37 @@ class AutoTransitionService:
         self.notification_service = notification_service
         self._event_publisher = event_publisher
         self._project_service = ProjectService()
-        self._interval_seconds = 60.0
-        self._stop_event = Event()
-        self._thread: Thread | None = None
-        self._running = False
+        self._interval_seconds = 60
+        self._scheduler = scheduler
+        self._scheduler_service: SchedulerService | None = None
+        if scheduler is not None:
+            self._scheduler_service = self._build_scheduler_service(scheduler)
+
+    def _build_scheduler_service(self, scheduler: Any | None = None) -> SchedulerService:
+        return SchedulerService(
+            job=self._check_and_transition,
+            interval_seconds=self._interval_seconds,
+            scheduler=scheduler,
+            job_id=AUTO_TRANSITION_JOB_ID,
+        )
 
     def start(self) -> None:
-        """Start the background timer."""
-        if not self._running:
-            self._running = True
-            self._stop_event.clear()
-            self._thread = Thread(target=self._run_loop, daemon=True)
-            self._thread.start()
+        """Start the background scheduler."""
+        if self._scheduler_service is None:
+            self._scheduler_service = self._build_scheduler_service(self._scheduler)
+        self._scheduler_service.start()
 
     def stop(self) -> None:
-        """Stop the background timer."""
-        if self._running:
-            self._running = False
-            self._stop_event.set()
-            if self._thread is not None:
-                self._thread.join(timeout=1.0)
-                self._thread = None
+        """Stop the background scheduler."""
+        if self._scheduler_service is not None:
+            self._scheduler_service.stop()
 
     def set_interval(self, milliseconds: int) -> None:
-        """Set the timer interval in milliseconds."""
-        self._interval_seconds = milliseconds / 1000
-
-    def _run_loop(self) -> None:
-        while not self._stop_event.wait(self._interval_seconds):
-            self._check_and_transition()
+        """Set the timer interval in milliseconds. Rebuilds SchedulerService if already created."""
+        self._interval_seconds = milliseconds // 1000
+        if self._scheduler_service is not None:
+            self._scheduler = self._scheduler_service._scheduler
+            self._scheduler_service = self._build_scheduler_service(self._scheduler)
 
     def _check_and_transition(self) -> None:
         """Check all projects and auto-transition those in deployment window."""

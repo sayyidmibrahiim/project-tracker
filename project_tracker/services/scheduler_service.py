@@ -20,10 +20,12 @@ class SchedulerService:
         job: Callable[[], None],
         interval_seconds: int = 60,
         scheduler: Any | None = None,
+        job_id: str = DEFAULT_JOB_ID,
     ) -> None:
         self._job = job
         self._interval_seconds = interval_seconds
         self._scheduler = scheduler if scheduler is not None else self._create_scheduler()
+        self._job_id = job_id
         self._started = False
 
     @property
@@ -39,7 +41,7 @@ class SchedulerService:
             self._job,
             trigger="interval",
             seconds=self._interval_seconds,
-            id=DEFAULT_JOB_ID,
+            id=self._job_id,
             replace_existing=True,
         )
         self._scheduler.start()

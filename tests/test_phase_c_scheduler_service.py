@@ -59,6 +59,15 @@ def test_start_adds_interval_job_and_starts_scheduler():
     assert job["replace_existing"] is True
 
 
+def test_start_uses_custom_job_id():
+    scheduler = FakeScheduler()
+    service = SchedulerService(job=lambda: None, interval_seconds=30, scheduler=scheduler, job_id="custom_job")
+
+    service.start()
+
+    assert scheduler.jobs[0]["id"] == "custom_job"
+
+
 def test_repeated_start_does_not_duplicate_job_or_restart_scheduler():
     scheduler = FakeScheduler()
     service = SchedulerService(job=lambda: None, interval_seconds=60, scheduler=scheduler)
