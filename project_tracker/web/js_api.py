@@ -82,6 +82,30 @@ class NotificationServiceProtocol(Protocol):
         """Dismiss notification."""
 
 
+class ScannerServiceProtocol(Protocol):
+    """Scanner service surface used by JsApi."""
+
+    def rebuild_year(self, year_path: Path) -> object:
+        """Rebuild cache for a year folder."""
+
+
+class SchedulerServiceProtocol(Protocol):
+    """Scheduler service surface used by JsApi."""
+
+    @property
+    def is_running(self) -> bool:
+        """Return scheduler running status."""
+
+    def start(self) -> None:
+        """Start scheduler."""
+
+    def stop(self) -> None:
+        """Stop scheduler."""
+
+    def run_once(self) -> None:
+        """Run scheduled job once."""
+
+
 class JsApi:
     """pywebview-safe API facade without importing pywebview."""
 
@@ -89,9 +113,13 @@ class JsApi:
         self,
         dashboard_service: DashboardServiceProtocol | None,
         notification_service: NotificationServiceProtocol | None = None,
+        scanner_service: ScannerServiceProtocol | None = None,
+        scheduler_service: SchedulerServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
+        self._scanner_service = scanner_service
+        self._scheduler_service = scheduler_service
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
@@ -155,6 +183,49 @@ class JsApi:
             return ok()
         except Exception as exc:
             return fail(str(exc), code="NOTIFICATION_DISMISS_FAILED")
+
+    def scanner_rebuild_year(self, year_path: str) -> dict[str, object]:
+        """Rebuild scanner cache for one year path."""
+        try:
+            return ok(_to_frontend_safe(self._scanner_service.rebuild_year(Path(year_path))))
+        except Exception as exc:
+            return fail(str(exc), code="SCANNER_REBUILD_YEAR_FAILED")
+
+    def scheduler_start(self) -> dict[str, object]:
+        """Start scheduler."""
+        try:
+            self._scheduler_service.start()
+            return ok(_scheduler_status_payload(self._scheduler_service))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_START_FAILED")
+
+    def scheduler_stop(self) -> dict[str, object]:
+        """Stop scheduler."""
+        try:
+            self._scheduler_service.stop()
+            return ok(_scheduler_status_payload(self._scheduler_service))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_STOP_FAILED")
+
+    def scheduler_run_once(self) -> dict[str, object]:
+        """Run scheduler job once."""
+        try:
+            self._scheduler_service.run_once()
+            return ok(_scheduler_status_payload(self._scheduler_service))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_RUN_ONCE_FAILED")
+
+    def scheduler_status(self) -> dict[str, object]:
+        """Return scheduler status."""
+        try:
+            return ok(_scheduler_status_payload(self._scheduler_service))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_STATUS_FAILED")
+
+
+def _scheduler_status_payload(scheduler_service: SchedulerServiceProtocol) -> dict[str, object]:
+    """Return frontend-safe scheduler status."""
+    return {"is_running": bool(scheduler_service.is_running)}
 
 
 def _to_frontend_safe(value: object) -> object:
