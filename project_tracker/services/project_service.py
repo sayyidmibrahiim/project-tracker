@@ -8,10 +8,16 @@ from project_tracker.core.models import AppSettings, HistoryEntry, local_now
 from project_tracker.core.rules import (
     TransitionGuardResult,
     current_user,
+    should_auto_start_cr,
+    should_auto_start_drone,
     validate_prod_ready_to_implemented_transition,
     validate_uat_to_prod_ready_transition,
 )
-from project_tracker.core.state_machine import reopen_project_state
+from project_tracker.core.state_machine import (
+    reopen_project_state,
+    validate_cr_transition,
+    validate_drone_state_change_allowed,
+)
 from project_tracker.infrastructure.metadata_store import MetadataStore
 
 
@@ -203,26 +209,28 @@ class ProjectService:
         metadata = self.metadata_store.load(project_path)
         now = current_time or local_now()
 
-        if not metadata.start_datetime or not metadata.end_datetime:
-            return False
-
-        if now < metadata.start_datetime or now >= metadata.end_datetime:
-            return False
-
         changed = False
-        detail_parts = []
+        detail_parts: list[str] = []
 
-        if metadata.cr_state == CRState.APPROVED:
+        if should_auto_start_cr(metadata, now):
+            validate_cr_transition(CRState.APPROVED, CRState.IN_PROGRESS, automatic=True)
             metadata.cr_state = CRState.IN_PROGRESS
             metadata.cr_state_updated_at = now
             detail_parts.append("CR: APPROVED → IN-PROGRESS")
             changed = True
 
-        for drone in metadata.drone_tickets:
-            if drone.drone_state == DroneState.APPROVED:
+        for index, drone in enumerate(metadata.drone_tickets):
+            if should_auto_start_drone(drone, metadata, now):
+                validate_drone_state_change_allowed(
+                    drone.drone_link,
+                    DroneState.APPROVED,
+                    DroneState.IN_PROGRESS,
+                    automatic=True,
+                )
                 drone.drone_state = DroneState.IN_PROGRESS
                 drone.drone_state_updated_at = now
-                detail_parts.append(f"Drone {drone.subfolder_name}: APPROVED → IN-PROGRESS")
+                label = drone.subfolder_name or f"ticket {index + 1}"
+                detail_parts.append(f"Drone {label}: APPROVED → IN-PROGRESS")
                 changed = True
 
         if changed:
