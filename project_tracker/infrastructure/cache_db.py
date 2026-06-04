@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,8 +8,8 @@ from pathlib import Path
 from typing import Iterable
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import datetime_from_json, datetime_to_json
-from project_tracker.core.rules import extract_cr_number, extract_drone_ticket
+from project_tracker.core.models import datetime_from_json, datetime_to_json, local_now
+from project_tracker.core.rules import extract_cr_number, extract_drone_ticket, validate_t10
 from project_tracker.infrastructure.filesystem import ScannedProject, scan_year
 from project_tracker.infrastructure.metadata_store import MetadataStore
 
@@ -17,17 +18,29 @@ def _placeholders(values: tuple[str, ...]) -> str:
     return ", ".join("?" for _ in values)
 
 
+def _t10_status(scanned: ScannedProject) -> str:
+    metadata = scanned.metadata
+    if metadata.start_datetime is None:
+        return "UNKNOWN"
+    return "PASS" if validate_t10(metadata).passed else "FAIL"
+
+
 @dataclass(frozen=True, slots=True)
 class CachedProjectRow:
     project_path: Path
     year: str
     project_state: ProjectState
     project_name: str
+    cr_link: str = ""
     start_datetime: datetime | None = None
     end_datetime: datetime | None = None
     cr_number: str | None = ""
     cr_state: CRState = CRState.PENDING_SUBMISSION
+    cr_pending_approval_at: datetime | None = None
+    drone_tickets_json: str = "[]"
+    t10_status: str = "UNKNOWN"
     updated_at: datetime | None = None
+    scanned_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +61,16 @@ def cached_project_row_from_scan(scanned: ScannedProject) -> CachedProjectRow:
         year=scanned.year,
         project_state=scanned.project_state,
         project_name=metadata.project_name or scanned.path.name,
+        cr_link=metadata.cr_link,
         start_datetime=metadata.start_datetime,
         end_datetime=metadata.end_datetime,
         cr_number=extract_cr_number(metadata.cr_link),
         cr_state=metadata.cr_state,
+        cr_pending_approval_at=metadata.cr_pending_approval_at,
+        drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
+        t10_status=_t10_status(scanned),
         updated_at=metadata.updated_at,
+        scanned_at=local_now(),
     )
 
 
@@ -113,11 +131,11 @@ class CacheDb:
                 cr_states = tuple(state.value for state in CRState)
                 drone_states = tuple(state.value for state in DroneState)
                 invalid_project_states = connection.execute(
-                    f"SELECT 1 FROM projects WHERE project_state NOT IN ({_placeholders(project_states)}) LIMIT 1",
+                    f"SELECT 1 FROM project_index WHERE folder_state NOT IN ({_placeholders(project_states)}) LIMIT 1",
                     project_states,
                 ).fetchone()
                 invalid_cr_states = connection.execute(
-                    f"SELECT 1 FROM projects WHERE cr_state NOT IN ({_placeholders(cr_states)}) LIMIT 1",
+                    f"SELECT 1 FROM project_index WHERE cr_state IS NULL OR cr_state NOT IN ({_placeholders(cr_states)}) LIMIT 1",
                     cr_states,
                 ).fetchone()
                 invalid_drone_states = connection.execute(
@@ -128,7 +146,7 @@ class CacheDb:
             return False
         return (
             integrity == ("ok",)
-            and tables == {"projects", "drone_tickets", "scan_warnings"}
+            and tables == {"project_index", "drone_tickets", "scan_warnings"}
             and invalid_project_states is None
             and invalid_cr_states is None
             and invalid_drone_states is None
@@ -143,26 +161,36 @@ class CacheDb:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO projects (
-                    project_path,
+                INSERT INTO project_index (
+                    path,
+                    name,
                     year,
-                    project_state,
-                    project_name,
-                    start_datetime,
-                    end_datetime,
+                    folder_state,
+                    cr_link,
                     cr_number,
                     cr_state,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(project_path) DO UPDATE SET
+                    cr_pending_approval_at,
+                    start_datetime,
+                    end_datetime,
+                    drone_tickets_json,
+                    t10_status,
+                    updated_at,
+                    scanned_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    name = excluded.name,
                     year = excluded.year,
-                    project_state = excluded.project_state,
-                    project_name = excluded.project_name,
-                    start_datetime = excluded.start_datetime,
-                    end_datetime = excluded.end_datetime,
+                    folder_state = excluded.folder_state,
+                    cr_link = excluded.cr_link,
                     cr_number = excluded.cr_number,
                     cr_state = excluded.cr_state,
-                    updated_at = excluded.updated_at
+                    cr_pending_approval_at = excluded.cr_pending_approval_at,
+                    start_datetime = excluded.start_datetime,
+                    end_datetime = excluded.end_datetime,
+                    drone_tickets_json = excluded.drone_tickets_json,
+                    t10_status = excluded.t10_status,
+                    updated_at = excluded.updated_at,
+                    scanned_at = excluded.scanned_at
                 """,
                 self._project_values(row),
             )
@@ -176,37 +204,47 @@ class CacheDb:
             existing_paths = {
                 row[0]
                 for row in connection.execute(
-                    "SELECT project_path FROM projects WHERE year = ?",
+                    "SELECT path FROM project_index WHERE year = ?",
                     (year,),
                 ).fetchall()
             }
             removed_paths = existing_paths - replacement_paths
             for project_path in removed_paths:
                 connection.execute("DELETE FROM drone_tickets WHERE project_path = ?", (project_path,))
-                connection.execute("DELETE FROM projects WHERE project_path = ?", (project_path,))
+                connection.execute("DELETE FROM project_index WHERE path = ?", (project_path,))
             for row in replacement_rows:
                 connection.execute(
                     """
-                    INSERT INTO projects (
-                        project_path,
+                    INSERT INTO project_index (
+                        path,
+                        name,
                         year,
-                        project_state,
-                        project_name,
-                        start_datetime,
-                        end_datetime,
+                        folder_state,
+                        cr_link,
                         cr_number,
                         cr_state,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(project_path) DO UPDATE SET
+                        cr_pending_approval_at,
+                        start_datetime,
+                        end_datetime,
+                        drone_tickets_json,
+                        t10_status,
+                        updated_at,
+                        scanned_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        name = excluded.name,
                         year = excluded.year,
-                        project_state = excluded.project_state,
-                        project_name = excluded.project_name,
-                        start_datetime = excluded.start_datetime,
-                        end_datetime = excluded.end_datetime,
+                        folder_state = excluded.folder_state,
+                        cr_link = excluded.cr_link,
                         cr_number = excluded.cr_number,
                         cr_state = excluded.cr_state,
-                        updated_at = excluded.updated_at
+                        cr_pending_approval_at = excluded.cr_pending_approval_at,
+                        start_datetime = excluded.start_datetime,
+                        end_datetime = excluded.end_datetime,
+                        drone_tickets_json = excluded.drone_tickets_json,
+                        t10_status = excluded.t10_status,
+                        updated_at = excluded.updated_at,
+                        scanned_at = excluded.scanned_at
                     """,
                     self._project_values(row),
                 )
@@ -216,20 +254,22 @@ class CacheDb:
             if year is None:
                 rows = connection.execute(
                     """
-                    SELECT project_path, year, project_state, project_name, start_datetime,
-                           end_datetime, cr_number, cr_state, updated_at
-                    FROM projects
-                    ORDER BY year, project_name, project_path
+                    SELECT path, year, folder_state, name, cr_link, start_datetime,
+                           end_datetime, cr_number, cr_state, cr_pending_approval_at,
+                           drone_tickets_json, t10_status, updated_at, scanned_at
+                    FROM project_index
+                    ORDER BY year, name, path
                     """
                 ).fetchall()
             else:
                 rows = connection.execute(
                     """
-                    SELECT project_path, year, project_state, project_name, start_datetime,
-                           end_datetime, cr_number, cr_state, updated_at
-                    FROM projects
+                    SELECT path, year, folder_state, name, cr_link, start_datetime,
+                           end_datetime, cr_number, cr_state, cr_pending_approval_at,
+                           drone_tickets_json, t10_status, updated_at, scanned_at
+                    FROM project_index
                     WHERE year = ?
-                    ORDER BY year, project_name, project_path
+                    ORDER BY year, name, path
                     """,
                     (year,),
                 ).fetchall()
@@ -279,16 +319,21 @@ class CacheDb:
     def _create_schema(connection: sqlite3.Connection) -> None:
         connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS projects (
-                project_path TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS project_index (
+                path TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
                 year TEXT NOT NULL,
-                project_state TEXT NOT NULL,
-                project_name TEXT NOT NULL,
+                folder_state TEXT NOT NULL,
+                cr_link TEXT,
+                cr_number TEXT,
+                cr_state TEXT,
+                cr_pending_approval_at TEXT,
                 start_datetime TEXT,
                 end_datetime TEXT,
-                cr_number TEXT NOT NULL DEFAULT '',
-                cr_state TEXT NOT NULL,
-                updated_at TEXT
+                drone_tickets_json TEXT,
+                t10_status TEXT,
+                updated_at TEXT,
+                scanned_at TEXT DEFAULT (datetime('now'))
             )
             """
         )
@@ -319,31 +364,60 @@ class CacheDb:
         )
 
     @staticmethod
-    def _project_values(row: CachedProjectRow) -> tuple[str, str, str, str, str | None, str | None, str | None, str, str | None]:
+    def _project_values(
+        row: CachedProjectRow,
+    ) -> tuple[str, str, str, str, str, str | None, str, str | None, str | None, str | None, str, str, str | None, str | None]:
         return (
             str(row.project_path),
+            row.project_name,
             row.year,
             row.project_state.value,
-            row.project_name,
-            datetime_to_json(row.start_datetime),
-            datetime_to_json(row.end_datetime),
+            row.cr_link,
             row.cr_number or "",
             row.cr_state.value,
+            datetime_to_json(row.cr_pending_approval_at),
+            datetime_to_json(row.start_datetime),
+            datetime_to_json(row.end_datetime),
+            row.drone_tickets_json,
+            row.t10_status,
             datetime_to_json(row.updated_at),
+            datetime_to_json(row.scanned_at),
         )
 
     @staticmethod
-    def _project_from_row(row: tuple[str, str, str, str, str | None, str | None, str | None, str, str | None]) -> CachedProjectRow:
+    def _project_from_row(
+        row: tuple[
+            str,
+            str,
+            str,
+            str,
+            str | None,
+            str | None,
+            str | None,
+            str,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+            str | None,
+        ]
+    ) -> CachedProjectRow:
         return CachedProjectRow(
             project_path=Path(row[0]),
             year=row[1],
             project_state=ProjectState(row[2]),
             project_name=row[3],
-            start_datetime=datetime_from_json(row[4]),
-            end_datetime=datetime_from_json(row[5]),
-            cr_number=row[6],
-            cr_state=CRState(row[7]),
-            updated_at=datetime_from_json(row[8]),
+            cr_link=row[4] or "",
+            start_datetime=datetime_from_json(row[5]),
+            end_datetime=datetime_from_json(row[6]),
+            cr_number=row[7],
+            cr_state=CRState(row[8]),
+            cr_pending_approval_at=datetime_from_json(row[9]),
+            drone_tickets_json=row[10] or "[]",
+            t10_status=row[11] or "UNKNOWN",
+            updated_at=datetime_from_json(row[12]),
+            scanned_at=datetime_from_json(row[13]),
         )
 
     @staticmethod

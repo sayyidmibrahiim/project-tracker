@@ -39,13 +39,16 @@ def test_cached_project_row_from_scan_derives_year_and_folder_state_from_scan(tm
 def test_cached_project_row_from_scan_maps_project_metadata_fields(tmp_path: Path) -> None:
     start_datetime = datetime(2026, 6, 3, 10, 0, tzinfo=timezone.utc)
     end_datetime = datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc)
+    pending_approval_at = datetime(2026, 5, 20, 9, 0, tzinfo=timezone.utc)
     updated_at = datetime(2026, 6, 3, 9, 30, tzinfo=timezone.utc)
+    cr_link = "https://cr.example.local/change?CRNumber=CR202604209900114"
     metadata = ProjectMetadata(
         project_name="PAYMENT_MODULE_UPGRADE",
         start_datetime=start_datetime,
         end_datetime=end_datetime,
-        cr_link="https://cr.example.local/change?CRNumber=CR202604209900114",
+        cr_link=cr_link,
         cr_state=CRState.APPROVED,
+        cr_pending_approval_at=pending_approval_at,
         updated_at=updated_at,
     )
     scanned = _scanned_project(tmp_path / "CR" / "2026" / "PROD_READY" / "PAYMENT_MODULE_UPGRADE", metadata=metadata)
@@ -55,8 +58,20 @@ def test_cached_project_row_from_scan_maps_project_metadata_fields(tmp_path: Pat
     assert row.project_name == "PAYMENT_MODULE_UPGRADE"
     assert row.start_datetime == start_datetime
     assert row.end_datetime == end_datetime
+    assert row.cr_link == cr_link
     assert row.cr_state == CRState.APPROVED
+    assert row.cr_pending_approval_at == pending_approval_at
     assert row.updated_at == updated_at
+    assert row.t10_status == "PASS"
+
+
+def test_cached_project_row_from_scan_sets_scanned_at_timestamp(tmp_path: Path) -> None:
+    scanned = _scanned_project(tmp_path / "CR" / "2026" / "PROD_READY" / "PAYMENT_MODULE_UPGRADE")
+
+    row = cached_project_row_from_scan(scanned)
+
+    assert row.scanned_at is not None
+    assert row.scanned_at.tzinfo is not None
 
 
 def test_cached_project_row_from_scan_extracts_cr_number_into_existing_display_field(tmp_path: Path) -> None:

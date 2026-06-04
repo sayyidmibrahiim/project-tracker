@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import types
 from datetime import datetime, timezone
 from pathlib import Path
 
 from project_tracker.core.enums import CRState, ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata
+from project_tracker.infrastructure import filesystem
 from project_tracker.infrastructure.filesystem import ensure_year_structure, scan_year
 from project_tracker.infrastructure.link_bank_store import LinkBank, LinkBankStore
 from project_tracker.infrastructure.metadata_store import METADATA_FILE, MetadataStore
@@ -129,6 +131,25 @@ def test_scan_year_excludes_organizational_folders_from_subprojects(tmp_path: Pa
 
     assert len(projects) == 1
     assert projects[0].subproject_paths == [project_path / "APP_COMPONENT"]
+
+
+def test_send_to_recycle_bin_uses_send2trash_with_string_path(tmp_path: Path, monkeypatch) -> None:
+    calls: list[str] = []
+    fake_module = types.SimpleNamespace(send2trash=lambda value: calls.append(value))
+    monkeypatch.setitem(__import__("sys").modules, "send2trash", fake_module)
+    target = tmp_path / "PROJECT"
+
+    filesystem.send_to_recycle_bin(target)
+
+    assert calls == [str(target)]
+
+
+def test_open_folder_logs_dev_message_on_linux(tmp_path: Path, capsys) -> None:
+    target = tmp_path / "PROJECT"
+
+    filesystem.open_folder(target)
+
+    assert capsys.readouterr().out == f"[DEV] Would open folder: {target}\n"
 
 
 def test_link_bank_store_missing_file_returns_default(tmp_path: Path) -> None:

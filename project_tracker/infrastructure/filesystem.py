@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,8 @@ class ScannedProject:
     metadata: ProjectMetadata
     subproject_paths: list[Path]
 
+
+IS_WINDOWS = sys.platform == "win32"
 
 STATE_FOLDER_NAMES = tuple(state.value for state in ProjectState)
 
@@ -67,3 +70,18 @@ def discover_subproject_paths(project_path: Path) -> list[Path]:
         for child in project_path.iterdir()
         if child.is_dir() and not is_organizational_folder(child)
     )
+
+
+def open_folder(path: Path) -> None:
+    if IS_WINDOWS:
+        import os
+
+        os.startfile(str(path))
+        return
+    print(f"[DEV] Would open folder: {path}")
+
+
+def send_to_recycle_bin(path: Path) -> None:
+    import send2trash
+
+    send2trash.send2trash(str(path))

@@ -70,7 +70,35 @@ def test_initialize_creates_expected_tables(tmp_path: Path) -> None:
 
     CacheDb(db_path).initialize()
 
-    assert _table_names(db_path) == {"projects", "drone_tickets", "scan_warnings"}
+    assert _table_names(db_path) == {"project_index", "drone_tickets", "scan_warnings"}
+
+
+def test_project_index_schema_matches_prd_cache_columns(tmp_path: Path) -> None:
+    import sqlite3
+
+    db_path = tmp_path / "cache.sqlite3"
+
+    CacheDb(db_path).initialize()
+
+    with sqlite3.connect(db_path) as connection:
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(project_index)").fetchall()]
+
+    assert columns == [
+        "path",
+        "name",
+        "year",
+        "folder_state",
+        "cr_link",
+        "cr_number",
+        "cr_state",
+        "cr_pending_approval_at",
+        "start_datetime",
+        "end_datetime",
+        "drone_tickets_json",
+        "t10_status",
+        "updated_at",
+        "scanned_at",
+    ]
 
 
 def test_health_check_returns_true_for_initialized_db(tmp_path: Path) -> None:
@@ -79,6 +107,25 @@ def test_health_check_returns_true_for_initialized_db(tmp_path: Path) -> None:
     cache.initialize()
 
     assert cache.health_check() is True
+
+
+def test_health_check_returns_false_when_project_index_has_null_cr_state(tmp_path: Path) -> None:
+    import sqlite3
+
+    db_path = tmp_path / "cache.sqlite3"
+    cache = CacheDb(db_path)
+    cache.initialize()
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO project_index (path, name, year, folder_state, cr_state)
+            VALUES (?, ?, ?, ?, NULL)
+            """,
+            (str(tmp_path / "PROJECT"), "PROJECT", "2026", ProjectState.UAT_PREPARE.value),
+        )
+
+    assert cache.health_check() is False
 
 
 def test_health_check_returns_false_for_corrupt_non_sqlite_file(tmp_path: Path) -> None:
@@ -96,7 +143,7 @@ def test_reset_recreates_corrupt_db(tmp_path: Path) -> None:
     cache.reset()
 
     assert cache.health_check() is True
-    assert _table_names(db_path) == {"projects", "drone_tickets", "scan_warnings"}
+    assert _table_names(db_path) == {"project_index", "drone_tickets", "scan_warnings"}
 
 
 def test_upsert_project_and_list_projects_round_trip_cache_fields(tmp_path: Path) -> None:

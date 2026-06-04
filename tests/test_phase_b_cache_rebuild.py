@@ -32,16 +32,15 @@ def test_rebuild_year_cache_populates_project_rows_from_filesystem_scan(tmp_path
     warnings = rebuild_year_cache(cache, root_folder / "2026")
 
     assert warnings == []
-    assert cache.list_projects("2026") == [
-        CachedProjectRow(
-            project_path=project_path,
-            year="2026",
-            project_state=ProjectState.PROD_READY,
-            project_name="PAYMENT_MODULE_UPGRADE",
-            cr_number="",
-            cr_state=CRState.APPROVED,
-        )
-    ]
+    rows = cache.list_projects("2026")
+    assert len(rows) == 1
+    assert rows[0].project_path == project_path
+    assert rows[0].year == "2026"
+    assert rows[0].project_state == ProjectState.PROD_READY
+    assert rows[0].project_name == "PAYMENT_MODULE_UPGRADE"
+    assert rows[0].cr_number == ""
+    assert rows[0].cr_state == CRState.APPROVED
+    assert rows[0].scanned_at is not None
 
 
 def test_rebuild_year_cache_populates_drone_rows_for_current_projects(tmp_path: Path) -> None:
@@ -159,15 +158,14 @@ def test_rebuild_year_cache_missing_metadata_returns_warning_and_caches_default_
     warnings = rebuild_year_cache(cache, root_folder / "2026")
 
     assert warnings == [f"Missing project_data.json: {project_path}"]
-    assert cache.list_projects("2026") == [
-        CachedProjectRow(
-            project_path=project_path,
-            year="2026",
-            project_state=ProjectState.UAT_PREPARE,
-            project_name="MISSING_METADATA",
-            cr_number="",
-        )
-    ]
+    rows = cache.list_projects("2026")
+    assert len(rows) == 1
+    assert rows[0].project_path == project_path
+    assert rows[0].year == "2026"
+    assert rows[0].project_state == ProjectState.UAT_PREPARE
+    assert rows[0].project_name == "MISSING_METADATA"
+    assert rows[0].cr_number == ""
+    assert rows[0].scanned_at is not None
 
 
 def test_rebuild_year_cache_corrupt_metadata_returns_warning_and_skips_project(tmp_path: Path) -> None:
