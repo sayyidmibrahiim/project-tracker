@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase B.3 complete — Infrastructure / persistence / SQLite cache / guarded stubs**
+**Phase C.3a complete — Services / event queue foundation**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.3a are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -14,7 +14,7 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository has completed Phase A core-domain migration slices and Phase B.1 through B.3 infrastructure slices.
+Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.3a service slices.
 
 Current state:
 
@@ -22,11 +22,15 @@ Current state:
 - `CLAUDE.md` aligns with PRD v3.1 migration direction.
 - Phase A core domain work is implemented and verified.
 - Phase B infrastructure stores, SQLite cache foundation/mapping/rebuild, safe delete helpers, and guarded Windows integration stubs are implemented and verified.
+- Phase C.1 ScannerService cache integration is implemented and verified.
+- Phase C.2 DashboardService read-only cache-backed DTOs and summary are implemented and verified.
+- Phase C.3a event queue foundation (`web/event_queue.py`) is implemented and verified.
 - Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
 - Svelte + TypeScript + Vite structure is missing.
 - APScheduler-backed scheduler/event flow is missing.
-- Background-to-frontend event queue is missing.
+- NotificationService and auto_transition_service are not yet wired to event queue.
+- `web/js_api.py` bridge module is missing.
 - PyQt6 files under `redesign_ui/` are UX/function reference only and are not production code.
 
 ## Frontend Status
@@ -64,14 +68,15 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with Phase A core-domain work and Phase B infrastructure slices complete through B.3.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service slices complete through C.3a.
 
 Known remaining gaps against PRD v3.1:
 
 - APScheduler usage is missing.
-- Event queue is missing.
+- NotificationService is not yet wired to event queue.
+- auto_transition_service is not yet wired to event queue.
 - Target `web/js_api.py` bridge module is missing.
-- Target `web/event_queue.py` module is missing.
+- `web/event_queue.py` exists with `push_event()`, `drain_events()`, `clear_events()` API.
 - Existing bridge logic lives inside `project_tracker/app_web.py` and does not yet match the PRD bridge architecture.
 
 ## PyQt6 Status
@@ -334,17 +339,141 @@ py_compile completed with no output
 
 ## Next Recommended Phase
 
-**Phase B.4 — Phase B exit audit and handoff to Phase C planning**
+**Phase C.3b — NotificationService event queue integration**
 
 Recommended next slice:
 
-- Re-read Phase B exit criteria.
-- Verify no Phase B PRD gaps remain except intentionally deferred service/automation tables (`notifications`, `scheduler_entries`, `automation_rule_logs`, `email_jobs`) that belong to Phase C/G service behavior.
-- Run final full Python test suite.
-- Run read-only review/audit per memory guidance.
-- Update `PROJECT_STATUS.md` with Phase B exit decision.
+- Wire NotificationService to push events through `web/event_queue.py` on `add()`.
+- Wire auto_transition_service to push `AUTO_IN_PROGRESS` events through event queue.
+- Add tests for service → event queue integration.
+- Run full Python test suite.
+- Update `PROJECT_STATUS.md` with Phase C.3b status.
+
+Deferred (not yet implemented):
+
+- APScheduler / `scheduler_service.py`
+- `BridgeResponse` dataclass / `web/js_api.py`
+- `automation_service.py`
+- `report_service.py` / CSV export
+- `second_brain_service.py`
+- `project_service` cleanup
+- frontend / Svelte / pywebview bridge
 
 Do not start Svelte, APScheduler service behavior, pywebview bridge rewrite, or frontend migration until the appropriate later phase is approved.
+
+## Phase C Progress
+
+### Phase C.1 — ScannerService cache integration
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `ScannerService` wraps cache rebuild with `ScanWarning` and `ScanYearResult` DTOs.
+- Service coordinates `MetadataStore` and `CacheDb` for year-level cache rebuild.
+- Service layer does not expose raw infrastructure APIs.
+
+Verification evidence:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_phase_c_scanner_service.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+```
+
+Result:
+
+```text
+172 passed (after C.2)
+```
+
+Latest completed commit:
+
+```text
+cce9fec implement phase C.1 scanner service cache integration
+```
+
+### Phase C.2 — DashboardService read-only cache-backed DTOs
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `DashboardService` reads from SQLite cache via `CacheDb`.
+- `list_projects()` returns `DashboardProject` DTOs with all PRD dashboard columns.
+- `list_drone_tickets()` returns `DashboardDroneTicket` DTOs.
+- `get_summary()` returns `DashboardSummary` with state counts and KPI data.
+- `get_dashboard()` returns combined `DashboardData` DTO.
+- No frontend/bridge wiring implemented.
+
+Verification evidence:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_phase_c_dashboard_service.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+```
+
+Result:
+
+```text
+172 passed
+```
+
+Latest completed commit:
+
+```text
+a4d3f4f implement phase C.2 dashboard read service
+```
+
+### Phase C.3a — Event queue foundation
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `web/event_queue.py` created with pure stdlib `queue.Queue` implementation.
+- `push_event(event_type, payload)` pushes events with timezone-aware ISO timestamps.
+- `drain_events(limit)` drains FIFO, removes returned events, supports optional limit.
+- `clear_events()` removes all queued events (test isolation).
+- Payload defaults to `{}` when omitted.
+- Event shape: `{"type": str, "payload": dict, "timestamp": str}`.
+- Thread-safe: concurrent push from multiple threads drains all events without loss.
+- No pywebview, service, or frontend dependencies.
+- No NotificationService wiring yet.
+- No auto_transition_service wiring yet.
+- No APScheduler or scheduler_service yet.
+- No BridgeResponse or js_api.py yet.
+
+Verification evidence:
+
+```bash
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_phase_c_event_queue.py -v
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m py_compile project_tracker/web/event_queue.py
+```
+
+Result:
+
+```text
+12 passed (targeted)
+184 passed (full suite)
+py_compile completed with no output
+```
+
+Latest completed commit:
+
+```text
+1db1bfe implement phase C.3a event queue foundation
+```
+
+Phase C.3a audit evidence:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean before PROJECT_STATUS.md update
+Tests: 184 passed
+py_compile: pass
+Latest completed commit: 1db1bfe implement phase C.3a event queue foundation
+```
 
 ## Phase 0 Boundary
 
