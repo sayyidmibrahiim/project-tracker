@@ -63,11 +63,35 @@ class DashboardServiceProtocol(Protocol):
         """Return dashboard data DTO."""
 
 
+class NotificationServiceProtocol(Protocol):
+    """Read-only notification service surface used by JsApi."""
+
+    def get_all(self) -> object:
+        """Return all notifications."""
+
+    def get_undismissed(self) -> object:
+        """Return undismissed notifications."""
+
+    def get_latest(self, limit: int = 3, undismissed_only: bool = False) -> object:
+        """Return latest notifications."""
+
+    def count(self, undismissed_only: bool = False) -> int:
+        """Return notification count."""
+
+    def dismiss(self, notification_id: str) -> None:
+        """Dismiss notification."""
+
+
 class JsApi:
     """pywebview-safe API facade without importing pywebview."""
 
-    def __init__(self, dashboard_service: DashboardServiceProtocol) -> None:
+    def __init__(
+        self,
+        dashboard_service: DashboardServiceProtocol | None,
+        notification_service: NotificationServiceProtocol | None = None,
+    ) -> None:
         self._dashboard_service = dashboard_service
+        self._notification_service = notification_service
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
@@ -89,6 +113,48 @@ class JsApi:
             return ok(_to_frontend_safe(self._dashboard_service.get_dashboard(year)))
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_DATA_FAILED")
+
+    def notification_list(self, undismissed_only: bool = False) -> dict[str, object]:
+        """Return notifications."""
+        try:
+            source = (
+                self._notification_service.get_undismissed()
+                if undismissed_only
+                else self._notification_service.get_all()
+            )
+            return ok(_to_frontend_safe(source))
+        except Exception as exc:
+            return fail(str(exc), code="NOTIFICATION_LIST_FAILED")
+
+    def notification_latest(
+        self,
+        limit: int = 3,
+        undismissed_only: bool = False,
+    ) -> dict[str, object]:
+        """Return latest notifications."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._notification_service.get_latest(limit, undismissed_only)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="NOTIFICATION_LATEST_FAILED")
+
+    def notification_count(self, undismissed_only: bool = False) -> dict[str, object]:
+        """Return notification count."""
+        try:
+            return ok(self._notification_service.count(undismissed_only))
+        except Exception as exc:
+            return fail(str(exc), code="NOTIFICATION_COUNT_FAILED")
+
+    def notification_dismiss(self, notification_id: str) -> dict[str, object]:
+        """Dismiss notification by id."""
+        try:
+            self._notification_service.dismiss(notification_id)
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="NOTIFICATION_DISMISS_FAILED")
 
 
 def _to_frontend_safe(value: object) -> object:
