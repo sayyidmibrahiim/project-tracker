@@ -1,7 +1,8 @@
 """JsApi response contract helpers."""
 
 from dataclasses import asdict, dataclass
-from typing import Any
+
+from project_tracker.web.event_queue import drain_events
 
 
 @dataclass(frozen=True)
@@ -34,3 +35,11 @@ def fail(
         "details": details,
     }
     return BridgeResponse(ok=False, data=None, error=error_payload).to_dict()
+
+
+def poll_events(limit: int | None = None) -> dict[str, object]:
+    """Drain queued bridge events."""
+    try:
+        return ok(drain_events(limit))
+    except Exception as exc:
+        return fail(str(exc), code="EVENT_POLL_FAILED")
