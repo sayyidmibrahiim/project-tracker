@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from project_tracker.core.models import AppSettings, local_now
 from project_tracker.services.project_service import ProjectService
+from project_tracker.web.event_queue import push_event
 
 if TYPE_CHECKING:
     from project_tracker.services.notification_service import NotificationService
@@ -33,11 +34,13 @@ class AutoTransitionService:
         self,
         settings: AppSettings,
         notification_service: NotificationService | None = None,
+        event_publisher: Callable[[str, dict[str, object] | None], None] | None = push_event,
     ) -> None:
         self.transition_completed = Signal()
         self.error_occurred = Signal()
         self.settings = settings
         self.notification_service = notification_service
+        self._event_publisher = event_publisher
         self._project_service = ProjectService()
         self._interval_seconds = 60.0
         self._stop_event = Event()
@@ -111,16 +114,31 @@ class AutoTransitionService:
                     if metadata.cr_state.value == "APPROVED":
                         self._transition_project(project_path, metadata)
 
+    @staticmethod
+    def _auto_in_progress_payload(project_path: Path, old_state: str, new_state: str) -> dict[str, object]:
+        return {
+            "project_path": str(project_path),
+            "project_name": project_path.name,
+            "old_state": old_state,
+            "new_state": new_state,
+        }
+
     def _transition_project(self, project_path: Path, metadata: object) -> None:
         """Perform the auto-transition for a project."""
         try:
             old_state = metadata.cr_state.value
-            self._project_service.auto_transition_in_progress(
+            changed = self._project_service.auto_transition_in_progress(
                 project_path, self.settings, current_time=local_now()
             )
+            if not changed:
+                return
+
             new_state = "IN-PROGRESS"
 
             self.transition_completed.emit(project_path, old_state, new_state)
+
+            if self._event_publisher is not None:
+                self._event_publisher("AUTO_IN_PROGRESS", self._auto_in_progress_payload(project_path, old_state, new_state))
 
             if self.notification_service:
                 self.notification_service.add(
