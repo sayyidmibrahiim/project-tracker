@@ -176,6 +176,38 @@ class ProjectServiceProtocol(Protocol):
     def reopen_project(self, project_path: Path) -> object:
         """Reopen project and return result."""
 
+    def list_subprojects(self, project_path: Path) -> object:
+        """Return subproject list."""
+
+    def create_subproject(self, project_path: Path, name: str) -> object:
+        """Create subproject."""
+
+    def delete_subproject(self, project_path: Path, name: str) -> object:
+        """Delete subproject."""
+
+
+class FileServiceProtocol(Protocol):
+    """File service surface used by JsApi."""
+
+    def list_files(self, path: Path) -> object:
+        """Return file list."""
+
+    def open_file(self, path: Path) -> None:
+        """Open file through service layer."""
+
+    def open_folder(self, path: Path) -> None:
+        """Open folder through service layer."""
+
+
+class NotesServiceProtocol(Protocol):
+    """Notes service surface used by JsApi."""
+
+    def get_notes(self, project_path: Path) -> object:
+        """Return project notes."""
+
+    def update_notes(self, project_path: Path, notes: str) -> object:
+        """Update project notes."""
+
 
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
@@ -205,6 +237,8 @@ class JsApi:
         report_service: ReportServiceProtocol | None = None,
         project_service: ProjectServiceProtocol | None = None,
         year_service: YearServiceProtocol | None = None,
+        file_service: FileServiceProtocol | None = None,
+        notes_service: NotesServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -213,6 +247,8 @@ class JsApi:
         self._report_service = report_service
         self._project_service = project_service
         self._year_service = year_service
+        self._file_service = file_service
+        self._notes_service = notes_service
 
     def app_get_status(self) -> dict[str, object]:
         """Return static app/backend status."""
@@ -539,6 +575,96 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="FOLDER_REOPEN_FAILED")
+
+    def subproject_list(self, project_path: str) -> dict[str, object]:
+        """List subprojects through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.list_subprojects(Path(project_path))
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SUBPROJECT_LIST_FAILED")
+
+    def subproject_create(self, project_path: str, name: str) -> dict[str, object]:
+        """Create subproject through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.create_subproject(Path(project_path), name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SUBPROJECT_CREATE_FAILED")
+
+    def subproject_delete(self, project_path: str, name: str) -> dict[str, object]:
+        """Delete subproject through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.delete_subproject(Path(project_path), name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SUBPROJECT_DELETE_FAILED")
+
+    def file_list(self, path: str) -> dict[str, object]:
+        """List files through service layer."""
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._file_service.list_files(Path(path))))
+        except Exception as exc:
+            return fail(str(exc), code="FILE_LIST_FAILED")
+
+    def file_open(self, path: str) -> dict[str, object]:
+        """Open file through service layer."""
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._file_service.open_file(Path(path))
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="FILE_OPEN_FAILED")
+
+    def folder_open(self, path: str) -> dict[str, object]:
+        """Open folder through service layer."""
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._file_service.open_folder(Path(path))
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_OPEN_FAILED")
+
+    def notes_get(self, project_path: str) -> dict[str, object]:
+        """Return notes through service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._notes_service.get_notes(Path(project_path))))
+        except Exception as exc:
+            return fail(str(exc), code="NOTES_GET_FAILED")
+
+    def notes_update(self, project_path: str, notes: str) -> dict[str, object]:
+        """Update notes through service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._notes_service.update_notes(Path(project_path), notes)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="NOTES_UPDATE_FAILED")
 
     def report_filter_projects(
         self,
