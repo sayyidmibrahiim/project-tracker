@@ -4,13 +4,14 @@
   import Header from "./lib/components/Header.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
   import Report from "./lib/components/Report.svelte";
+  import Settings from "./lib/components/Settings.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
 
-  const pageShells: Record<Exclude<PageId, "dashboard" | "report">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
+  const pageShells: Record<Exclude<PageId, "dashboard" | "report" | "settings">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
     "project-detail": {
       title: "Project Details",
       subtitle: "Operational workspace shell for NEW_PROJECT and SHOW_EDIT flows. Data binding lands in Phase E.",
@@ -38,15 +39,6 @@
         { title: "Scheduler & Rules", detail: "APScheduler entries plus trigger-condition-action rules." },
       ],
     },
-    settings: {
-      title: "Settings",
-      subtitle: "Configuration shell for app behavior, storage paths, and help docs.",
-      sections: [
-        { title: "General", detail: "Root folder, display name, language, and datetime format." },
-        { title: "Behavior", detail: "T-10 threshold, refresh interval, and startup behavior." },
-        { title: "Paths & Help", detail: "Second Brain path, template folder, and searchable help center." },
-      ],
-    },
   };
 
   let currentPage: PageId = $state("dashboard");
@@ -64,7 +56,8 @@
   const POLL_INTERVAL_MS = 5000;
 
   function navigate(id: string) {
-    if (id in pageShells || id === "dashboard") {
+    const validPages = ["dashboard", "report", "settings"];
+    if (id in pageShells || validPages.includes(id)) {
       currentPage = id as PageId;
     }
   }
@@ -173,6 +166,8 @@
       <Dashboard {selectedYear} {searchQuery} key={refreshKey} />
     {:else if currentPage === "report"}
       <Report {selectedYear} {searchQuery} key={refreshKey} />
+    {:else if currentPage === "settings"}
+      <Settings />
     {:else}
       {@const shell = pageShells[currentPage]}
       <PagePlaceholder title={shell.title} subtitle={shell.subtitle} sections={shell.sections} />
