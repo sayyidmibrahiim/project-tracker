@@ -3,10 +3,61 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Header from "./lib/components/Header.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
+  import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
-  let currentPage = $state("dashboard");
+  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
+
+  const pageShells: Record<Exclude<PageId, "dashboard">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
+    "project-detail": {
+      title: "Project Details",
+      subtitle: "Operational workspace shell for NEW_PROJECT and SHOW_EDIT flows. Data binding lands in Phase E.",
+      sections: [
+        { title: "Project Command Center", detail: "Year, project, sub project selectors plus open/delete actions." },
+        { title: "Metadata Forms", detail: "CR link, Drone tickets, schedule, implementation plan, and state controls." },
+        { title: "Files, Notes, History", detail: "File list, markdown notes, autosave indicators, and read-only activity history." },
+      ],
+    },
+    "second-brain": {
+      title: "Second Brain",
+      subtitle: "Local knowledge shell for Notes and Link Bank. No search/index calls yet.",
+      sections: [
+        { title: "Notes Tree", detail: "Pinned, Favorites, Second Brain Notes, and Project Documents." },
+        { title: "Editor / Preview", detail: "Markdown editor, image preview, external file affordance." },
+        { title: "Link Bank", detail: "Categories, link cards, tags, pin/favorite, import/export." },
+      ],
+    },
+    report: {
+      title: "Report",
+      subtitle: "Filterable deployment report shell. CSV export remains backend-only until Phase F UI work.",
+      sections: [
+        { title: "Filters", detail: "Year, month, folder state, CR state, Drone state, and search." },
+        { title: "Summaries", detail: "KPI cards and utilitarian status breakdowns." },
+        { title: "Report Table", detail: "Export-ready table matching PRD columns." },
+      ],
+    },
+    automations: {
+      title: "Automations",
+      subtitle: "Automation command deck shell. Outlook, Teams, Scheduler, and Rules Engine stay deferred.",
+      sections: [
+        { title: "Outlook", detail: "Email categories, templates, conditions, and send/download logs." },
+        { title: "Teams", detail: "Preview-first message automations with guarded Windows execution." },
+        { title: "Scheduler & Rules", detail: "APScheduler entries plus trigger-condition-action rules." },
+      ],
+    },
+    settings: {
+      title: "Settings",
+      subtitle: "Configuration shell for app behavior, storage paths, and help docs.",
+      sections: [
+        { title: "General", detail: "Root folder, display name, language, and datetime format." },
+        { title: "Behavior", detail: "T-10 threshold, refresh interval, and startup behavior." },
+        { title: "Paths & Help", detail: "Second Brain path, template folder, and searchable help center." },
+      ],
+    },
+  };
+
+  let currentPage: PageId = $state("dashboard");
   let selectedYear = $state("all");
   let searchQuery = $state("");
   let refreshKey = $state(0);
@@ -21,7 +72,9 @@
   const POLL_INTERVAL_MS = 5000;
 
   function navigate(id: string) {
-    currentPage = id;
+    if (id in pageShells || id === "dashboard") {
+      currentPage = id as PageId;
+    }
   }
 
   function handleYearChange(year: string) {
@@ -119,6 +172,7 @@
       {currentPage}
       {selectedYear}
       {searchQuery}
+      showDashboardControls={currentPage === "dashboard"}
       onYearChange={handleYearChange}
       onSearchChange={handleSearchChange}
       onRefresh={handleRefresh}
@@ -126,12 +180,8 @@
     {#if currentPage === "dashboard"}
       <Dashboard {selectedYear} {searchQuery} key={refreshKey} />
     {:else}
-      <div class="placeholder-screen">
-        <div class="placeholder-card">
-          <p class="placeholder-title">{currentPage.replace("-", " ")}</p>
-          <p class="placeholder-sub">Page not yet implemented. Static scaffold only.</p>
-        </div>
-      </div>
+      {@const shell = pageShells[currentPage]}
+      <PagePlaceholder title={shell.title} subtitle={shell.subtitle} sections={shell.sections} />
     {/if}
   </main>
 </div>
