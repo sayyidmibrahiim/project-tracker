@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.7 complete — Svelte frontend scaffold, design shell, dashboard, bridge, and notifications**
+**Phase D.1–D.9 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, and navigation shell**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.7 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.9 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -37,15 +37,15 @@ Current state:
 - Phase C.5e-C.5g JsApi scanner, scheduler, and integration service facades are implemented and verified.
 - Phase C.6 ReportService backend foundation is implemented and verified.
 - Phase C.7 JsApi report facade is implemented and verified.
-- Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
+- Current pywebview shell in `project_tracker/app_web.py` serves built Svelte output from `web/static/index.html` through pywebview HTTP server mode.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
-- Svelte + TypeScript + Vite structure is missing.
-- `web/js_api.py` bridge module is implemented but not wired into `app_web.py` production shell.
+- Svelte + TypeScript + Vite structure is implemented and verified through Phase D.9.
+- `web/js_api.py` bridge module is wired into `app_web.py` production shell.
 - PyQt6 files under `redesign_ui/` are UX/function reference only and are not production code.
 
 ## Frontend Status
 
-Svelte + TypeScript + Vite + Tailwind frontend scaffold is **complete** (Phase D.1–D.7).
+Svelte + TypeScript + Vite + Tailwind frontend scaffold, dashboard binding, notifications, static serving, and navigation shell are **complete** (Phase D.1–D.9).
 
 Existing static HTML files under `frontend/` remain as **legacy/reference only** — not wired into the production shell.
 
@@ -77,7 +77,7 @@ Known remaining gaps against PRD v3.1:
 - Project action JsApi facade implemented (Phase C.8c-C.8e).
 - Settings/link bank JsApi facade implemented (Phase C.11).
 - SecondBrainService foundation implemented (Phase C.12-C.13).
-- Frontend/pywebview production wiring remains deferred.
+- Frontend/pywebview production wiring to built Svelte output is implemented and verified through Phase D.8.
 - Outlook/Teams real execution remains deferred (stubs in place).
 - Automation action execution beyond rule evaluation remains deferred.
 - Persistent automation logs not yet implemented.
@@ -819,28 +819,65 @@ Latest completed commit:
 44e5182 implement phase D.7 notification event binding
 ```
 
+### Phase D.8 — app_web serves built Svelte static output
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `project_tracker/app_web.py` resolves `web/static/index.html` for production startup.
+- Built Svelte output under `web/static/` is served through pywebview HTTP server mode.
+- Vite build output remains `web/static/`.
+- `svelte-check` clean, `vite build` clean, Python tests clean.
+
+Latest completed commit:
+
+```text
+8ac46de implement phase D.8 app web svelte static serving
+```
+
+### Phase D.9 — App navigation/page shell
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `App.svelte` tracks active page state.
+- `Sidebar.svelte` nav routes between Dashboard, Project Details, Second Brain, Report, Automations, and Settings shells.
+- `Header.svelte` title/controls update by active page.
+- `PagePlaceholder.svelte` provides deferred-page shells for non-dashboard pages.
+- Dashboard remains the only real data-bound frontend page in this phase.
+- `svelte-check` clean, `vite build` clean, Python tests clean.
+
+Latest completed commit:
+
+```text
+852c764 implement phase D.9 app navigation shell
+```
+
 ## Phase D Exit Audit
 
 ```text
 Branch: prd-v31-migration
 Working tree: 2 untracked files (frontend/package-lock.json, redesign_ui/*.html)
-svelte-check: 84 files, 0 errors, 0 warnings
+svelte-check: 85 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
-Tests: 348 passed
-Latest completed commit: 44e5182 implement phase D.7 notification event binding
+Tests: 354 passed
+D.8 completed commit: 8ac46de implement phase D.8 app web svelte static serving
+Latest completed commit: 852c764 implement phase D.9 app navigation shell
 ```
 
-Phase D.1 through D.7 frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, and notification event binding are complete and verified on Linux.
+Phase D.1 through D.9 frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, and app navigation/page shell are complete and verified on Linux.
 
 Remaining deferred:
 
-- app/pywebview production wiring to built Svelte output (`serve_folder="web/static"`)
-- dashboard mutations / project actions (inline state changes, CR/Drone link paste, row action menu)
-- project details page
-- report page frontend
-- settings/link bank frontend
-- second brain frontend
-- automations frontend
+- Project Details real page/data binding
+- Report frontend page/data binding
+- Settings frontend page/data binding
+- Link Bank frontend page/data binding
+- Second Brain frontend page/data binding
+- Automations frontend page/data binding
+- dashboard/project mutations
 - Windows manual test
 - packaging
 
