@@ -3,13 +3,14 @@
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Header from "./lib/components/Header.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
+  import Report from "./lib/components/Report.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
 
-  const pageShells: Record<Exclude<PageId, "dashboard">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
+  const pageShells: Record<Exclude<PageId, "dashboard" | "report">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
     "project-detail": {
       title: "Project Details",
       subtitle: "Operational workspace shell for NEW_PROJECT and SHOW_EDIT flows. Data binding lands in Phase E.",
@@ -26,15 +27,6 @@
         { title: "Notes Tree", detail: "Pinned, Favorites, Second Brain Notes, and Project Documents." },
         { title: "Editor / Preview", detail: "Markdown editor, image preview, external file affordance." },
         { title: "Link Bank", detail: "Categories, link cards, tags, pin/favorite, import/export." },
-      ],
-    },
-    report: {
-      title: "Report",
-      subtitle: "Filterable deployment report shell. CSV export remains backend-only until Phase F UI work.",
-      sections: [
-        { title: "Filters", detail: "Year, month, folder state, CR state, Drone state, and search." },
-        { title: "Summaries", detail: "KPI cards and utilitarian status breakdowns." },
-        { title: "Report Table", detail: "Export-ready table matching PRD columns." },
       ],
     },
     automations: {
@@ -179,6 +171,8 @@
     />
     {#if currentPage === "dashboard"}
       <Dashboard {selectedYear} {searchQuery} key={refreshKey} />
+    {:else if currentPage === "report"}
+      <Report {selectedYear} {searchQuery} key={refreshKey} />
     {:else}
       {@const shell = pageShells[currentPage]}
       <PagePlaceholder title={shell.title} subtitle={shell.subtitle} sections={shell.sections} />
