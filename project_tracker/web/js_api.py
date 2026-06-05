@@ -209,6 +209,32 @@ class NotesServiceProtocol(Protocol):
         """Update project notes."""
 
 
+class SettingsDependencyProtocol(Protocol):
+    """Settings service/store surface used by JsApi."""
+
+    def get_settings(self) -> object:
+        """Return settings."""
+
+    def update_settings(self, data: dict[str, object]) -> object:
+        """Update settings."""
+
+
+class LinkBankDependencyProtocol(Protocol):
+    """Link bank service/store surface used by JsApi."""
+
+    def get_linkbank(self) -> object:
+        """Return link bank data."""
+
+    def update_linkbank(self, data: dict[str, object]) -> object:
+        """Update link bank data."""
+
+    def add_link(self, data: dict[str, object]) -> object:
+        """Add link."""
+
+    def archive_link(self, link_id: str) -> object:
+        """Archive link."""
+
+
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
 
@@ -239,6 +265,10 @@ class JsApi:
         year_service: YearServiceProtocol | None = None,
         file_service: FileServiceProtocol | None = None,
         notes_service: NotesServiceProtocol | None = None,
+        settings_service: SettingsDependencyProtocol | None = None,
+        settings_store: SettingsDependencyProtocol | None = None,
+        linkbank_service: LinkBankDependencyProtocol | None = None,
+        linkbank_store: LinkBankDependencyProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -249,6 +279,8 @@ class JsApi:
         self._year_service = year_service
         self._file_service = file_service
         self._notes_service = notes_service
+        self._settings_dependency = settings_service or settings_store
+        self._linkbank_dependency = linkbank_service or linkbank_store
 
     def app_get_status(self) -> dict[str, object]:
         """Return static app/backend status."""
@@ -665,6 +697,60 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="NOTES_UPDATE_FAILED")
+
+    def settings_get(self) -> dict[str, object]:
+        """Return settings through injected dependency."""
+        try:
+            if self._settings_dependency is None:
+                return fail("settings dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._settings_dependency.get_settings()))
+        except Exception as exc:
+            return fail(str(exc), code="SETTINGS_GET_FAILED")
+
+    def settings_update(self, data: dict[str, object]) -> dict[str, object]:
+        """Update settings through injected dependency."""
+        try:
+            if self._settings_dependency is None:
+                return fail("settings dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._settings_dependency.update_settings(data)))
+        except Exception as exc:
+            return fail(str(exc), code="SETTINGS_UPDATE_FAILED")
+
+    def linkbank_get(self) -> dict[str, object]:
+        """Return link bank through injected dependency."""
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.get_linkbank()))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_GET_FAILED")
+
+    def linkbank_update(self, data: dict[str, object]) -> dict[str, object]:
+        """Update link bank through injected dependency."""
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.update_linkbank(data)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_UPDATE_FAILED")
+
+    def linkbank_add_link(self, data: dict[str, object]) -> dict[str, object]:
+        """Add link through injected dependency."""
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.add_link(data)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_ADD_LINK_FAILED")
+
+    def linkbank_archive_link(self, link_id: str) -> dict[str, object]:
+        """Archive link through injected dependency."""
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.archive_link(link_id)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_ARCHIVE_LINK_FAILED")
 
     def report_filter_projects(
         self,
