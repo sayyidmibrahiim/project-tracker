@@ -1,2 +1,12 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Project Tracker DBS</title><script src="assets/tailwind.min.js"></script><script>tailwind.config={theme:{extend:{colors:{dbs:{bg:'#0b0b0d',panel:'#151518',card:'#ffffff',ink:'#111827',muted:'#6b7280',line:'#d1d5db',red:'#b91c1c',red2:'#991b1b',soft:'#f3f4f6'}},fontFamily:{ui:['Segoe UI','Arial','sans-serif']}}}};</script></head><body class="min-h-screen bg-dbs-soft font-ui text-dbs-ink"><main class="mx-auto grid min-h-screen max-w-4xl place-items-center p-6"><section class="w-full rounded border border-dbs-line bg-white p-8"><p class="text-xs font-black uppercase tracking-widest text-dbs-red">Project Tracker DBS</p><h1 class="mt-2 text-4xl font-black">Local-first desktop dashboard</h1><p class="mt-3 max-w-2xl text-sm text-dbs-muted">pywebview HTML shell. Dashboard uses real filesystem data from configured root folder.</p><div class="mt-6 flex gap-2"><a href="dashboard.html" class="rounded bg-dbs-red px-4 py-2 text-sm font-black text-white">Open Dashboard</a><a href="settings.html" class="rounded border border-dbs-line px-4 py-2 text-sm font-bold">Settings</a></div><pre id="status" class="mt-6 rounded bg-dbs-soft p-3 text-xs text-dbs-muted">Ready.</pre></section></main><script>if(window.pywebview?.api?.get_projects){window.pywebview.api.get_projects().then(p=>{status.textContent=`Bridge ready. ${Array.isArray(p)?p.length:0} project(s) loaded.`}).catch(e=>{status.textContent=e.message})}</script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Tracker DBS</title>
+  </head>
+  <body class="bg-gray-50 text-gray-900 font-sans antialiased">
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

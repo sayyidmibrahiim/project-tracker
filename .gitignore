@@ -6,3 +6,5 @@ __pycache__/
 .hermes/
 .rtk/
 .pytest_cache/
+node_modules/
+web/static/
