@@ -4,6 +4,13 @@
   import type { DashboardProject, DashboardSummary } from "../types";
   import { BridgeErrorCode } from "../types";
 
+  // ── Props from parent ──
+  let { selectedYear, searchQuery }: {
+    selectedYear: string;
+    searchQuery: string;
+    [key: string]: unknown;
+  } = $props();
+
   // ── State ──
   type LoadState = "idle" | "loading" | "error" | "loaded";
 
@@ -11,6 +18,7 @@
   let errorMessage: string = $state("");
   let errorCode: string = $state("");
   let activeStatus: string = $state("all");
+  let fetchKey: number = $state(0);
 
   // Data from bridge
   let projects: DashboardProject[] = $state([]);
@@ -32,10 +40,24 @@
     { key: "POSTPONED", label: "Postponed", count: (summary as DashboardSummary | null)?.by_project_state?.["POSTPONED"] ?? 0 },
   ]);
 
-  // ── Filtered projects ──
+  // ── Filtered projects: status tab + search query (local) ──
   let filteredProjects: DashboardProject[] = $derived.by(() => {
-    if (activeStatus === "all") return projects;
-    return projects.filter((p) => p.project_state === activeStatus);
+    let result = activeStatus === "all" ? projects : projects.filter((p) => p.project_state === activeStatus);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((p) => {
+        const haystack = [
+          p.project_name,
+          p.cr_number,
+          p.cr_state,
+          p.project_state,
+          p.year,
+          p.project_path,
+        ].join(" ").toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    return result;
   });
 
   // ── Columns ──
@@ -117,7 +139,8 @@
 
     isBridgeAvailable = true;
 
-    const response = await callBridge<DashboardProject[]>("dashboard_list_projects");
+    const yearParam = selectedYear === "all" ? undefined : selectedYear;
+    const response = await callBridge<DashboardProject[]>("dashboard_list_projects", yearParam);
 
     if (!response.ok) {
       errorCode = response.error.code;
@@ -130,9 +153,18 @@
     loadState = "loaded";
   }
 
-  onMount(() => {
+  // ── Re-fetch when year or refresh changes ──
+  $effect(() => {
+    // Track selectedYear + fetchKey to trigger re-fetch
+    void selectedYear;
+    void fetchKey;
     loadDashboard();
   });
+
+  // Expose refresh for parent
+  export function refresh() {
+    fetchKey++;
+  }
 </script>
 
 <div class="dashboard-screen">
