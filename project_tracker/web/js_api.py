@@ -127,6 +127,44 @@ class ProjectServiceProtocol(Protocol):
     def rename_project(self, project_path: Path, new_name: str) -> object:
         """Rename project and return project DTO."""
 
+    def update_cr_link(self, project_path: Path, cr_link: str) -> object:
+        """Update CR link and return project DTO."""
+
+    def update_cr_state(self, project_path: Path, cr_state: str) -> object:
+        """Update CR state and return project DTO."""
+
+    def add_drone(self, project_path: Path, data: dict[str, object]) -> object:
+        """Add Drone ticket and return project DTO."""
+
+    def update_drone(
+        self,
+        project_path: Path,
+        drone_index: int,
+        data: dict[str, object],
+    ) -> object:
+        """Update Drone ticket and return project DTO."""
+
+    def delete_drone(self, project_path: Path, drone_index: int) -> object:
+        """Delete Drone ticket and return project DTO."""
+
+    def move_to_prod_ready(self, project_path: Path) -> object:
+        """Move project to PROD_READY and return result."""
+
+    def move_to_implemented(self, project_path: Path) -> object:
+        """Move project to IMPLEMENTED and return result."""
+
+    def postpone_project(self, project_path: Path) -> object:
+        """Postpone project and return result."""
+
+    def resume_project(self, project_path: Path) -> object:
+        """Resume project and return result."""
+
+    def cancel_project(self, project_path: Path) -> object:
+        """Cancel project and return result."""
+
+    def reopen_project(self, project_path: Path) -> object:
+        """Reopen project and return result."""
+
 
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
@@ -318,6 +356,128 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="PROJECT_RENAME_FAILED")
+
+    def cr_update_link(self, project_path: str, cr_link: str) -> dict[str, object]:
+        """Update project CR link through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.update_cr_link(Path(project_path), cr_link)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="CR_UPDATE_LINK_FAILED")
+
+    def cr_update_state(self, project_path: str, cr_state: str) -> dict[str, object]:
+        """Update project CR state through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.update_cr_state(Path(project_path), cr_state)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="CR_UPDATE_STATE_FAILED")
+
+    def drone_add(self, project_path: str, data: dict[str, object]) -> dict[str, object]:
+        """Add Drone ticket through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(self._project_service.add_drone(Path(project_path), data))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="DRONE_ADD_FAILED")
+
+    def drone_update(
+        self,
+        project_path: str,
+        drone_index: int,
+        data: dict[str, object],
+    ) -> dict[str, object]:
+        """Update Drone ticket through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.update_drone(
+                        Path(project_path),
+                        drone_index,
+                        data,
+                    )
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="DRONE_UPDATE_FAILED")
+
+    def drone_delete(self, project_path: str, drone_index: int) -> dict[str, object]:
+        """Delete Drone ticket through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.delete_drone(Path(project_path), drone_index)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="DRONE_DELETE_FAILED")
+
+    def folder_move_to_prod_ready(self, project_path: str) -> dict[str, object]:
+        """Move project to PROD_READY through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.move_to_prod_ready(Path(project_path))
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_MOVE_TO_PROD_READY_FAILED")
+
+    def folder_move_to_implemented(self, project_path: str) -> dict[str, object]:
+        """Move project to IMPLEMENTED through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.move_to_implemented(Path(project_path))
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_MOVE_TO_IMPLEMENTED_FAILED")
+
+    def folder_postpone(self, project_path: str) -> dict[str, object]:
+        """Postpone project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.postpone_project(Path(project_path))
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_POSTPONE_FAILED")
+
+    def folder_resume(self, project_path: str) -> dict[str, object]:
+        """Resume project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(self._project_service.resume_project(Path(project_path)))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_RESUME_FAILED")
+
+    def folder_cancel(self, project_path: str) -> dict[str, object]:
+        """Cancel project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(self._project_service.cancel_project(Path(project_path)))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_CANCEL_FAILED")
+
+    def folder_reopen(self, project_path: str) -> dict[str, object]:
+        """Reopen project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(self._project_service.reopen_project(Path(project_path)))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_REOPEN_FAILED")
 
     def report_filter_projects(
         self,
