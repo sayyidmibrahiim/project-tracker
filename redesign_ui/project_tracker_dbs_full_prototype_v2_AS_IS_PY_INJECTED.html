@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Tracker DBS · Full PyQt-Matched HTML Prototype</title>
+<style>
+  :root {
+    --black-chrome: #0A0A0B;
+    --surface-dark: #141416;
+    --dark-border: #2C2C30;
+    --main-bg: #FFFFFF;
+    --card-white: #FFFFFF;
+    --light-border: #E5E7EB;
+    --input-border: #D7D7DC;
+    --text-primary: #171717;
+    --text-strong: #111111;
+    --text-secondary: #6B7280;
+    --text-muted: #A1A1AA;
+    --placeholder: #71717A;
+    --primary-red: #B91C1C;
+    --red-hover: #991B1B;
+    --active-red: #DC2626;
+    --soft-pink-surface: #FFF1F4;
+    --soft-pink-border: #FFD4DF;
+    --soft-pink-accent: #F4A7B9;
+    --row-alt: #FAFAFA;
+    --active-nav-bg: #231112;
+    --inactive-nav-text: #B9B9C0;
+    --secondary-button-border: #F2B8C6;
+    --error-red: #991B1B;
+    --workspace-bg: #FFFFFF;
+    --main-panel-bg: #E6E8EB;
+    --inner-card-bg: #FFFFFF;
+    --notification-bg: #1E2023;
+    --notification-border: #F3F4F6;
+    --soft-white-border: #D7DCE2;
+    --subtle-white-border: #E5E7EB;
+    --header-h: 58px;
+    --control-h: 26px;
+    --sidebar-expanded: 160px;
+    --sidebar-collapsed: 52px;
+    --font: Inter, "Segoe UI", Arial, sans-serif;
+    --shadow-header: 0 5px 20px rgba(0,0,0,.50);
+    --shadow-notif: 0 10px 35px rgba(0,0,0,.95);
+    --shadow-date: 0 1px 10px rgba(0,0,0,.28);
+    --shadow-panel: 0 3px 14px rgba(0,0,0,.24);
+    --shadow-card: 0 6px 25px rgba(0,0,0,.20);
+    --shadow-inner: 0 5px 18px rgba(0,0,0,.36);
+    --shadow-button: 0 3px 10px rgba(0,0,0,.40);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    overflow: hidden;
+    background: var(--black-chrome);
+    color: var(--text-primary);
+    font-family: var(--font);
+    font-size: 11px;
+  }
+  button, input, select, textarea { font-family: inherit; font-size: inherit; }
+  button { cursor: pointer; }
+  ::-webkit-scrollbar { width: 4px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(45,61,52,.35); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(45,61,52,.55); }
+
+  .app-shell { width: 100%; height: 100%; display: flex; min-width: 0; min-height: 0; }
+  .sidebar {
+    width: var(--sidebar-expanded);
+    min-width: var(--sidebar-expanded);
+    background: var(--black-chrome);
+    border-right: 1px solid var(--dark-border);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    transition: width .18s ease, min-width .18s ease;
+    z-index: 50;
+  }
+  .sidebar.collapsed { width: var(--sidebar-collapsed); min-width: var(--sidebar-collapsed); padding: 12px 8px; }
+  .brand { display: flex; align-items: center; gap: 8px; height: 28px; margin-bottom: 14px; min-width: 0; }
+  .brand-icon { width: 14px; height: 14px; border-radius: 3px; background: var(--primary-red); color: #fff; display: grid; place-items: center; font-weight: 900; font-size: 9px; box-shadow: inset 0 0 0 1px var(--red-hover); flex: 0 0 auto; }
+  .brand-title { color: #fff; font-weight: 900; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  .sidebar.collapsed .brand-title { display: none; }
+
+  .nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-btn {
+    min-height: 26px;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--inactive-nav-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 8px;
+    font-weight: 800;
+    text-align: left;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .nav-btn:hover, .nav-btn.active { background: var(--active-nav-bg); color: #fff; border-left-color: var(--active-red); }
+  .nav-btn.active { font-weight: 900; }
+  .nav-icon { width: 12px; text-align: center; flex: 0 0 auto; font-size: 11px; }
+  .nav-text { overflow: hidden; white-space: nowrap; }
+  .sidebar.collapsed .nav-btn { justify-content: center; padding-left: 4px; padding-right: 4px; }
+  .sidebar.collapsed .nav-text { display: none; }
+  .nav-notif-collapsed { display: none; margin-top: 4px; }
+  .sidebar.collapsed .nav-notif-collapsed { display: flex; }
+
+  .sidebar-fill { min-height: 0; flex: 1; display: flex; flex-direction: column; margin-top: 8px; }
+  .notification-panel {
+    min-height: 190px;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--notification-border);
+    background: var(--notification-bg);
+    border-radius: 6px;
+    box-shadow: var(--shadow-notif);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .sidebar.collapsed .notification-panel { display: none; }
+  .notification-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .notification-title { color: #fff; font-weight: 900; font-size: 11px; display: flex; align-items: center; gap: 6px; }
+  .notification-dot { color: var(--primary-red); font-size: 12px; }
+  .link-button { border: 0; background: transparent; color: var(--text-muted); font-size: 10px; font-weight: 900; padding: 0; }
+  .link-button:hover { color: #fff; text-decoration: underline; }
+  .notification-list { overflow: auto; padding-right: 2px; }
+  .notification-item { background: rgba(255,255,255,.62); border: 1px solid rgba(45,61,52,.10); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+  .notification-item-title { font-size: 11px; font-weight: 900; color: var(--text-strong); margin-bottom: 3px; }
+  .notification-time { color: rgba(45,61,52,.75); font-weight: 800; margin-bottom: 3px; }
+  .notification-message { color: rgba(45,61,52,.92); font-weight: 650; line-height: 1.28; }
+  .collapse-btn {
+    margin-top: 8px; height: 26px; border: 1px solid var(--dark-border); border-radius: 5px; background: var(--surface-dark); color: #fff; font-weight: 900;
+  }
+  .collapse-btn:hover { background: var(--active-nav-bg); border-color: var(--active-red); }
+
+  .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--workspace-bg); }
+  .app-header {
+    min-height: var(--header-h);
+    flex: 0 0 var(--header-h);
+    background: var(--primary-red);
+    border-bottom: 2px solid var(--red-hover);
+    box-shadow: var(--shadow-header);
+    display: grid;
+    grid-template-columns: minmax(210px, 1fr) minmax(230px, 1fr) minmax(320px, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 10px 16px;
+    z-index: 20;
+  }
+  .header-title-box, .header-action-box { display: flex; align-items: center; min-width: 0; }
+  .header-title-box { justify-content: flex-start; gap: 8px; }
+  .header-center { justify-content: center; }
+  .header-action-box { justify-content: flex-end; gap: 7px; }
+  .page-title-divider { width: 4px; min-width: 4px; height: 26px; border-radius: 2px; background: var(--black-chrome); }
+  .page-title { color: #fff; font-size: 22px; font-weight: 900; letter-spacing: 1px; margin: 0; white-space: nowrap; line-height: 1; }
+  .date-time-badge { height: 28px; min-width: 230px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; background: #fff; border: 1px solid var(--black-chrome); border-radius: 6px; box-shadow: var(--shadow-date); color: var(--black-chrome); font-weight: 900; white-space: nowrap; }
+  .date-time-badge .icon { color: var(--primary-red); font-size: 12px; }
+  .header-actions.hidden { display: none; }
+  .screen { display: none; flex-direction: column; flex: 1; min-height: 0; padding: 14px; gap: 12px; overflow: hidden; background: var(--workspace-bg); }
+  .screen.active { display: flex; }
+
+  .combo, .input, .textarea {
+    height: var(--control-h);
+    border: 1px solid var(--input-border);
+    border-radius: 5px;
+    background: #fff;
+    color: var(--text-strong);
+    font-weight: 750;
+    outline: none;
+  }
+  .input { padding: 4px 8px; }
+  .textarea { height: auto; padding: 8px; line-height: 1.4; resize: none; }
+  .input:focus, .textarea:focus, .combo:focus { border: 2px solid var(--primary-red); }
+  .combo { min-width: 82px; padding: 3px 26px 3px 8px; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--text-strong) 50%), linear-gradient(135deg, var(--text-strong) 50%, transparent 50%); background-position: calc(100% - 14px) 10px, calc(100% - 9px) 10px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+  .search-shell { position: relative; height: var(--control-h); display: flex; align-items: center; }
+  .search-shell .search-icon { position: absolute; left: 8px; top: 5px; font-weight: 900; color: var(--text-strong); pointer-events: none; }
+  .search-shell .input { width: 180px; padding-left: 25px; transition: width .16s ease; }
+  .search-shell .input:focus { width: 260px; }
+
+  .btn-primary, .btn-secondary, .btn-tiny, .btn-danger, .btn-black, .refresh-button {
+    height: 30px;
+    border-radius: 5px;
+    font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    transition: background .15s ease, transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .btn-primary { background: var(--primary-red); color: #fff; border-color: var(--red-hover); padding: 0 16px; box-shadow: var(--shadow-button); }
+  .btn-primary:hover { background: var(--red-hover); transform: translateY(-1px); }
+  .btn-black { background: var(--black-chrome); color: #fff; border-color: var(--black-chrome); padding: 0 16px; box-shadow: var(--shadow-button); }
+  .btn-black:hover { background: var(--surface-dark); transform: translateY(-1px); }
+  .btn-secondary { background: #fff; color: var(--primary-red); border-color: var(--secondary-button-border); padding: 0 10px; height: 26px; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
+  .btn-secondary:hover { background: var(--soft-pink-surface); border-color: var(--soft-pink-border); }
+  .btn-tiny { height: 24px; background: #fff; color: var(--primary-red); border-color: var(--secondary-button-border); padding: 0 8px; border-radius: 4px; }
+  .btn-tiny:hover { background: var(--soft-pink-surface); }
+  .btn-danger { background: #B5382F; color: #fff; border: 0; padding: 0 12px; height: 30px; }
+  .btn-danger:hover { background: #942D26; }
+  .refresh-button { width: 28px; min-width: 28px; height: 26px; background: #fff; color: var(--primary-red); border-color: var(--black-chrome); box-shadow: 0 2px 9px rgba(0,0,0,.30); font-size: 15px; padding: 0; }
+  .refresh-button:hover { background: var(--main-panel-bg); transform: translateY(-1px); }
+  .refresh-button.spinning { animation: spin .65s linear; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(720deg); } }
+
+  .filter-frame, .panel-frame { background: var(--main-panel-bg); border: 1px solid var(--soft-white-border); border-radius: 8px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,.30); }
+  .status-inner { background: #fff; border: 1px solid var(--soft-white-border); border-radius: 6px; padding: 8px; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-inner); min-width: 0; overflow-x: auto; }
+  .status-tab, .sb-tab {
+    height: 28px;
+    border-radius: 5px;
+    padding: 0 10px;
+    background: #fff;
+    border: 1px solid var(--soft-white-border);
+    color: var(--text-primary);
+    font-weight: 850;
+    white-space: nowrap;
+  }
+  .status-tab:hover, .sb-tab:hover { background: var(--soft-pink-surface); color: var(--primary-red); border-color: var(--soft-pink-border); }
+  .status-tab.active, .sb-tab.active { background: var(--primary-red); color: #fff; border-color: var(--red-hover); font-weight: 900; }
+  .sb-tab { height: 26px; background: rgba(227,230,228,.68); border-color: rgba(45,61,52,.18); color: var(--text-strong); border-radius: 4px; }
+
+  .panel-card { background: var(--inner-card-bg); border: 1px solid var(--subtle-white-border); border-radius: 7px; box-shadow: var(--shadow-panel); padding: 12px; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .panel-card.accent { border-left: 3px solid var(--primary-red); }
+  .panel-title-row { display: flex; align-items: center; gap: 7px; min-height: 18px; margin-bottom: 10px; }
+  .panel-title-icon { color: var(--primary-red); font-weight: 900; }
+  .panel-title { font-weight: 900; color: var(--text-strong); font-size: 11px; }
+  .panel-subtitle { color: var(--text-secondary); font-weight: 750; margin-left: 4px; }
+  .metric-row { display: grid; grid-template-columns: repeat(5, minmax(135px, 1fr)); gap: 10px; flex: 0 0 auto; }
+  .metric-card { background: var(--inner-card-bg); border: 1px solid var(--subtle-white-border); border-left: 3px solid var(--primary-red); border-radius: 7px; padding: 12px; box-shadow: 0 3px 14px rgba(0,0,0,.18); display: flex; align-items: center; gap: 10px; min-height: 70px; }
+  .metric-icon { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: var(--soft-pink-surface); color: var(--primary-red); font-weight: 900; }
+  .metric-value { font-size: 18px; font-weight: 900; color: var(--text-strong); line-height: 1; }
+  .metric-label { margin-top: 4px; color: var(--text-strong); font-weight: 900; }
+  .metric-helper { color: var(--text-secondary); font-weight: 700; font-size: 10px; margin-top: 2px; }
+
+  .table-card { background: var(--main-panel-bg); border: 1px solid var(--soft-white-border); border-radius: 8px; border-top: 0; padding: 14px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .table-card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-weight: 900; color: var(--text-strong); }
+  .table-card-head .icon { color: var(--primary-red); }
+  .table-scroll { flex: 1; min-height: 0; overflow: auto; background: #fff; border: 1px solid var(--text-strong); border-radius: 10px; box-shadow: var(--shadow-inner); padding: 8px; }
+  .project-table { min-width: 1540px; border: 1px solid var(--text-strong); border-radius: 8px; overflow: hidden; background: #fff; }
+  .project-grid { display: grid; grid-template-columns: 42px 140px minmax(300px, 1fr) 150px 150px 245px 150px 210px 185px 48px; }
+  .table-header-cell { min-height: 30px; background: var(--text-strong); color: #fff; text-transform: uppercase; font-size: 9px; letter-spacing: .2px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-align: center; padding: 7px 6px; border-right: 1px solid var(--text-strong); white-space: nowrap; }
+  .table-header-cell:last-child { border-right: 0; }
+  .project-row { border-top: 1px solid var(--text-strong); align-items: stretch; min-height: 154px; background: #fff; }
+  .project-row.alt { background: var(--row-alt); min-height: 86px; }
+  .project-row.selected { outline: 2px solid var(--primary-red); outline-offset: -2px; }
+  .table-cell { border-right: 1px solid var(--text-strong); padding: 8px; display: flex; min-width: 0; align-items: center; overflow: hidden; }
+  .table-cell:last-child { border-right: 0; }
+  .cell-center { align-items: center; justify-content: center; text-align: center; }
+  .cell-top { align-items: flex-start; }
+  .project-name { color: var(--primary-red); font-size: 12px; font-weight: 900; line-height: 1.1; }
+  .project-name.dark { color: var(--text-strong); }
+  .project-folder { margin-top: 7px; color: var(--text-secondary); font-weight: 750; font-size: 10px; }
+  .stack-lines { width: 100%; display: flex; flex-direction: column; }
+  .stack-line { min-height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 2px; border-bottom: 1px solid rgba(45,61,52,.18); min-width: 0; }
+  .stack-line:last-child { border-bottom: 0; }
+  .stack-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; color: var(--text-strong); }
+  .date-block { font-weight: 900; color: var(--text-strong); line-height: 1.35; white-space: nowrap; font-size: 10px; }
+  .date-block .time { font-size: 10px; color: var(--text-secondary); font-weight: 800; }
+  .link-edit { height: 24px; min-width: 0; width: 100%; border: 1px solid rgba(45,61,52,.16); border-radius: 4px; background: rgba(255,255,255,.65); color: var(--primary-red); font-weight: 850; outline: none; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
+  .link-edit:focus { border-color: var(--primary-red); background: #fff; color: var(--text-strong); }
+  .state-combo { min-height: 24px; width: 100%; border: 1px solid rgba(45,61,52,.35); border-radius: 7px; background: var(--primary-red); color: #fff; font-weight: 900; font-size: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 8px; line-height: 1.05; text-align: center; }
+  .state-combo:hover { background: var(--red-hover); }
+  .state-combo::after { content: "⌄"; font-size: 12px; margin-left: auto; }
+  .cell-action { width: 28px; height: 28px; border: 0; background: transparent; color: var(--text-strong); border-radius: 4px; font-weight: 900; font-size: 16px; }
+  .cell-action:hover { background: var(--main-panel-bg); }
+
+  .split { display: flex; gap: 12px; flex: 1; min-height: 0; }
+  .split > .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .splitter { display: grid; grid-template-columns: minmax(260px, 3fr) 10px minmax(260px, 4fr); gap: 0; flex: 1; min-height: 0; }
+  .splitter .handle { background: var(--workspace-bg); border-left: 1px solid var(--soft-white-border); border-right: 1px solid var(--soft-white-border); cursor: col-resize; margin: 0 8px; border-radius: 4px; }
+  .splitter .handle:hover { background: var(--soft-pink-surface); border-color: var(--primary-red); }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.full { grid-column: 1 / -1; }
+  .field-label { color: var(--text-strong); text-transform: uppercase; font-size: 10px; font-weight: 900; }
+  .mini-table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 6px; font-size: 10px; }
+  .mini-table th { background: var(--text-strong); color: #fff; text-transform: uppercase; font-weight: 900; padding: 7px; border-right: 1px solid #333; text-align: center; white-space: nowrap; }
+  .mini-table th:last-child { border-right: 0; }
+  .mini-table td { border: 1px solid var(--text-strong); padding: 8px; font-weight: 750; color: var(--text-strong); background: #fff; vertical-align: middle; }
+  .mini-table tr:nth-child(even) td { background: var(--row-alt); }
+  .list-box { border: 1px solid var(--input-border); border-radius: 5px; background: #fff; overflow: auto; min-height: 0; }
+  .list-item { min-height: 26px; padding: 6px 8px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--light-border); font-weight: 750; }
+  .list-item:last-child { border-bottom: 0; }
+  .list-item:hover, .list-item.selected { background: var(--soft-pink-surface); color: var(--primary-red); }
+  .tree { border: 1px solid var(--input-border); border-radius: 4px; background: #fff; overflow: auto; padding: 4px; flex: 1; min-height: 0; color: var(--text-strong); font-weight: 650; }
+  .tree-group { padding: 5px 6px 3px; color: var(--primary-red); font-weight: 900; text-transform: uppercase; font-size: 10px; }
+  .tree-item { min-height: 24px; display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 16px; border-radius: 3px; }
+  .tree-item:hover, .tree-item.selected { background: var(--soft-pink-surface); color: var(--text-primary); }
+  .toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .muted { color: var(--text-secondary); font-weight: 750; }
+  .status-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 18px; padding: 2px 7px; border-radius: 11px; background: var(--primary-red); color: #fff; font-weight: 900; }
+  .editor { flex: 1; width: 100%; min-height: 160px; }
+  .workspace-tab-inner { background: #fff; border: 1px solid var(--soft-white-border); border-radius: 6px; padding: 8px; display: flex; align-items: center; gap: 8px; box-shadow: var(--shadow-inner); }
+  .page-stack { display: none; min-height: 0; flex: 1; }
+  .page-stack.active { display: flex; flex-direction: column; }
+  .category-grid { display: grid; grid-template-columns: minmax(260px, 1fr) 10px minmax(520px, 2.2fr); gap: 0; flex: 1; min-height: 0; }
+  .link-row { background: #fff; border: 1px solid var(--light-border); border-radius: 7px; padding: 8px; cursor: pointer; margin-bottom: 8px; }
+  .link-row:hover, .link-row.selected { background: var(--soft-pink-surface); border-color: var(--primary-red); }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .badge { border-radius: 11px; border: 1px solid var(--soft-pink-border); color: var(--primary-red); background: #fff; padding: 2px 6px; font-weight: 900; font-size: 9px; }
+  .dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.46); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .dialog-backdrop.open { display: flex; }
+  .dialog { width: min(760px, 92vw); max-height: min(720px, 88vh); overflow: auto; background: var(--main-panel-bg); border: 1px solid var(--soft-white-border); border-radius: 10px; padding: 14px; box-shadow: 0 18px 60px rgba(0,0,0,.55); }
+  .dialog .panel-card { box-shadow: none; }
+  .toast { position: absolute; right: 16px; bottom: 16px; z-index: 70; background: var(--black-chrome); color: #fff; padding: 9px 12px; border-radius: 6px; box-shadow: var(--shadow-notif); font-weight: 800; opacity: 0; pointer-events: none; transform: translateY(6px); transition: opacity .18s ease, transform .18s ease; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .hidden { display: none !important; }
+
+
+  .link-bank-grid { grid-template-columns: minmax(280px, 2fr) 10px minmax(680px, 8fr); }
+  .link-category-card { min-width: 230px; }
+  .link-search-toolbar { align-items: stretch; }
+  .date-filter-button { min-width: 92px; color: var(--text-strong); }
+  .icon-menu-button { min-width: 72px; }
+  .link-category-list { flex: 1; min-height: 210px; }
+  .link-category-list .list-item { cursor: pointer; user-select: none; }
+  .link-category-list .list-item[contenteditable="true"] { outline: 2px solid var(--primary-red); background: #fff; color: var(--text-strong); }
+  .link-bank-right { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .quick-link-panel { flex: 0 0 auto; }
+  .quick-link-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(240px, 1fr); grid-template-rows: auto auto auto; gap: 10px; }
+  .quick-link-grid .field:nth-child(2) { grid-row: 1 / span 3; grid-column: 2; }
+  .link-detail-card { flex: 1; min-height: 0; }
+  .link-detail-top { align-items: stretch; }
+  .link-content-splitter { display: grid; grid-template-columns: minmax(280px, 1fr) 10px minmax(300px, 1fr); gap: 10px; flex: 1; min-height: 0; overflow: hidden; }
+  .link-content-splitter::before { content: ""; order: 2; background: var(--workspace-bg); border-left: 1px solid var(--soft-white-border); border-right: 1px solid var(--soft-white-border); border-radius: 4px; }
+  .link-list-area { order: 1; border: 1px solid var(--input-border); border-radius: 5px; background: #fff; overflow: auto; min-height: 0; }
+  .selected-link-detail-box { order: 3; box-shadow: none; min-height: 0; overflow: auto; }
+  .link-list-content { padding: 6px; min-height: 100%; }
+  .link-row { position: relative; min-height: 72px; }
+  .link-row.hidden { display: none; }
+  .link-modified { text-align: right; color: var(--text-secondary); font-size: 9px; font-weight: 800; margin-top: 5px; }
+  .selected-link-title { color: var(--text-strong); font-weight: 900; font-size: 13px; margin: 4px 0; }
+  .clickable-link { display: block; color: var(--primary-red); font-weight: 900; word-break: break-all; margin-bottom: 8px; }
+  .selected-link-body { border: 1px solid var(--light-border); border-radius: 7px; padding: 12px; background: #fff; color: var(--text-secondary); font-weight: 750; line-height: 1.45; }
+  .flow-status { margin-top: 10px; padding: 7px 8px; border-radius: 6px; background: var(--soft-pink-surface); border: 1px solid var(--soft-pink-border); color: var(--primary-red); font-weight: 900; }
+
+  @media (max-width: 1360px) {
+    .app-header { grid-template-columns: minmax(180px, .8fr) minmax(230px, .8fr) minmax(300px, 1.4fr); padding: 10px 12px; }
+    .page-title { font-size: 19px; }
+    .metric-row { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
+    .splitter, .category-grid { grid-template-columns: 1fr; gap: 12px; overflow: auto; }
+    .splitter .handle, .category-grid .handle { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside id="sidebar" class="sidebar">
+    <div class="brand"><div class="brand-icon">▦</div><div class="brand-title">Project Tracker</div></div>
+    <nav class="nav">
+      <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">◔</span><span class="nav-text">Dashboard</span></button>
+      <button class="nav-btn" data-page="details"><span class="nav-icon">▣</span><span class="nav-text">Project Details</span></button>
+      <button class="nav-btn" data-page="secondbrain"><span class="nav-icon">◆</span><span class="nav-text">Second Brain</span></button>
+      <button class="nav-btn" data-page="report"><span class="nav-icon">▤</span><span class="nav-text">Report</span></button>
+      <button class="nav-btn" data-page="automations"><span class="nav-icon">⚙</span><span class="nav-text">Automations</span></button>
+      <button class="nav-btn" data-page="settings"><span class="nav-icon">◌</span><span class="nav-text">Settings</span></button>
+      <button class="nav-btn nav-notif-collapsed" data-toast="Notifications clicked"><span class="nav-icon">●</span></button>
+    </nav>
+    <div class="sidebar-fill">
+      <section class="notification-panel">
+        <div class="notification-head">
+          <div class="notification-title"><span class="notification-dot">●</span>Notifications</div>
+          <button class="link-button" id="dismissNotifs">Dismiss</button>
+        </div>
+        <div class="notification-list" id="notifList">
+          <div class="notification-item">
+            <div class="notification-item-title">T-10 reminder</div>
+            <div class="notification-time">Just now</div>
+            <div class="notification-message">Approval check visual sample. Check UAT Prepare approvals.</div>
+          </div>
+          <div class="notification-item">
+            <div class="notification-item-title">Folder scan</div>
+            <div class="notification-time">5m ago</div>
+            <div class="notification-message">2 projects found under year 2026.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <button class="collapse-btn" id="collapseBtn">‹</button>
+  </aside>
+
+  <main class="main">
+    <header class="app-header">
+      <div class="header-title-box"><div class="page-title-divider"></div><h1 class="page-title" id="headerTitle">Dashboard.</h1></div>
+      <div class="header-title-box header-center"><div class="date-time-badge"><span class="icon">▣</span><span id="clock">Mon, 01 Jun 2026 14:32:11</span></div></div>
+      <div class="header-action-box header-actions" id="headerActions">
+        <select class="combo" id="headerYear" aria-label="Year"><option>2026</option><option>2025</option><option>2024</option></select>
+        <div class="search-shell" id="headerSearchShell"><span class="search-icon">⌕</span><input id="headerSearch" class="input" placeholder="Search projects here..." /></div>
+        <select class="combo" id="headerFilter" aria-label="Filter"><option>All CR</option><option>Pending</option><option>Approved</option></select>
+        <button class="btn-black" id="headerAddProject">＋ Add Project</button>
+        <button class="refresh-button" data-refresh title="Refresh Data">↻</button>
+      </div>
+    </header>
+
+    <div style="position:relative; flex:1; min-height:0; display:flex; flex-direction:column;">
+      <div class="toast" id="toast">Message</div>
+
+      <section class="screen active" id="screen-dashboard">
+        <div class="filter-frame">
+          <div class="status-inner" data-tab-group="dashboard-status">
+            <button class="status-tab active" data-count="2">All (2)</button>
+            <button class="status-tab" data-count="2">UAT Prepare (2)</button>
+            <button class="status-tab" data-count="0">Prod Ready (0)</button>
+            <button class="status-tab" data-count="0">Implemented (0)</button>
+            <button class="status-tab" data-count="0">Postponed (0)</button>
+            <div style="margin-left:auto; font-weight:900; white-space:nowrap; color:var(--text-primary);" id="projectCount">2 project(s)</div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-card-head"><span class="icon">▦</span><span>CR - Project Summary Table</span></div>
+          <div class="table-scroll" id="dashboardTableArea">
+            <div class="project-table">
+              <div class="project-grid">
+                <div class="table-header-cell">No</div><div class="table-header-cell">Main Project</div><div class="table-header-cell">Sub Project</div><div class="table-header-cell">Start Datetime</div><div class="table-header-cell">End Datetime</div><div class="table-header-cell">Drone Ticket</div><div class="table-header-cell">Drone State</div><div class="table-header-cell">CR Number</div><div class="table-header-cell">CR State</div><div class="table-header-cell"></div>
+              </div>
+              <div class="project-grid project-row" data-row>
+                <div class="table-cell cell-center"><strong>1</strong></div>
+                <div class="table-cell cell-top"><div><div class="project-name">SOP CR</div><div class="project-folder">project folder · 2026</div></div></div>
+                <div class="table-cell"><div class="stack-lines"><div class="stack-line"><span class="stack-text">a</span></div><div class="stack-line"><span class="stack-text">b</span></div><div class="stack-line"><span class="stack-text">c</span></div><div class="stack-line"><span class="stack-text">sub project a</span></div></div></div>
+                <div class="table-cell cell-center"><div class="date-block">Fri, 22 May 2026<br><span class="time">00:00:00</span></div></div>
+                <div class="table-cell cell-center"><div class="date-block">Sat, 10 Jan 2026<br><span class="time">00:00:00</span></div></div>
+                <div class="table-cell"><div class="stack-lines"><div class="stack-line"><input class="link-edit" value="D-SSIDBI-159" /></div><div class="stack-line"><input class="link-edit" value="D-SSIDBI-160" /></div><div class="stack-line"><input class="link-edit" value="D-SSIDBI-161" /></div><div class="stack-line"><input class="link-edit" value="D-SSIDBI-162" /></div></div></div>
+                <div class="table-cell"><div class="stack-lines"><div class="stack-line"><button class="state-combo" data-state-options="UAT|SIT|UAT PREPARE|PROD READY">UAT</button></div><div class="stack-line"><button class="state-combo" data-state-options="UAT|SIT|UAT PREPARE|PROD READY">UAT</button></div><div class="stack-line"><button class="state-combo" data-state-options="UAT|SIT|UAT PREPARE|PROD READY">UAT</button></div><div class="stack-line"><button class="state-combo" data-state-options="UAT|SIT|UAT PREPARE|PROD READY">UAT</button></div></div></div>
+                <div class="table-cell"><input class="link-edit" value="CR202604209900114" /></div>
+                <div class="table-cell"><button class="state-combo" data-state-options="PENDING SUBMISSION|PENDING APPROVAL|APPROVED|IN-PROGRESS|FINISHED|CANCELED|REOPEN">PENDING SUBMISSION</button></div>
+                <div class="table-cell cell-center"><button class="cell-action" data-toast="Action menu">⋮</button></div>
+              </div>
+              <div class="project-grid project-row alt" data-row>
+                <div class="table-cell cell-center"><strong>2</strong></div>
+                <div class="table-cell"><div><div class="project-name dark">project_tracker</div><div class="project-folder">project folder · 2026</div></div></div>
+                <div class="table-cell"><span class="stack-text">—</span></div>
+                <div class="table-cell cell-center"><span class="stack-text">—</span></div>
+                <div class="table-cell cell-center"><span class="stack-text">—</span></div>
+                <div class="table-cell"><input class="link-edit" value="—" /></div>
+                <div class="table-cell"><button class="state-combo" data-state-options="UAT|SIT|UAT PREPARE|PROD READY">UAT</button></div>
+                <div class="table-cell"><input class="link-edit" value="—" /></div>
+                <div class="table-cell"><button class="state-combo" data-state-options="PENDING SUBMISSION|PENDING APPROVAL|APPROVED|IN-PROGRESS|FINISHED|CANCELED|REOPEN">PENDING SUBMISSION</button></div>
+                <div class="table-cell cell-center"><button class="cell-action" data-toast="Action menu">⋮</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-details">
+        <div class="panel-card" style="flex:0 0 auto;">
+          <div class="toolbar">
+            <div class="panel-title-row" style="margin:0 18px 0 0;"><span class="panel-title-icon">▣</span><span class="panel-title">Project Command Center</span><span class="panel-subtitle">compact editing workspace</span></div>
+            <label class="field-label">Project</label><select class="combo" style="width:190px"><option>SOP CR</option><option>project_tracker</option></select>
+            <label class="field-label">Sub Project</label><select class="combo" style="width:190px"><option>All Sub Projects</option><option>a</option><option>b</option><option>c</option><option>sub project a</option></select>
+            <div style="margin-left:auto; display:flex; gap:8px;"><button class="btn-secondary" data-toast="Open project folder">↗ Open</button><button class="btn-danger" data-toast="Delete is disabled in prototype">🗑 Delete</button></div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="pane">
+            <div class="panel-card accent">
+              <div class="panel-title-row"><span class="panel-title-icon">🪪</span><span class="panel-title">Project Identity</span><span class="panel-subtitle">rename with Enter or click-out</span></div>
+              <div class="form-grid">
+                <div class="field full"><label class="field-label">Project Name</label><input class="input" value="SOP CR" /></div>
+                <div class="field"><label class="field-label">CR Number</label><input class="input" value="CR202604209900114" /></div>
+                <div class="field"><label class="field-label">Drone Ticket</label><input class="input" value="D-SSIDBI-159" /></div>
+                <div class="field"><label class="field-label">CR State</label><button class="state-combo" data-state-options="PENDING SUBMISSION|PENDING APPROVAL|APPROVED|IN-PROGRESS|FINISHED|CANCELED|REOPEN">PENDING SUBMISSION</button></div>
+                <div class="field"><label class="field-label">Drone State</label><button class="state-combo" data-state-options="UAT|SIT|APPROVED|FINISHED">UAT</button></div>
+              </div>
+            </div>
+            <div class="panel-card accent">
+              <div class="panel-title-row"><span class="panel-title-icon">📅</span><span class="panel-title">Schedule</span><span class="panel-subtitle">dashboard datetime format</span></div>
+              <div class="form-grid"><div class="field"><label class="field-label">Start Datetime</label><input class="input" value="Fri, 22 May 2026 00:00:00" /></div><div class="field"><label class="field-label">End Datetime</label><input class="input" value="Sat, 10 Jan 2026 00:00:00" /></div></div>
+            </div>
+            <div class="panel-card accent" style="flex:1;">
+              <div class="panel-title-row"><span class="panel-title-icon">☰</span><span class="panel-title">Sub Projects</span><span class="panel-subtitle">line-level work items</span><div style="margin-left:auto"><button class="btn-secondary" data-toast="Add Sub Project clicked">＋ Add Sub Project</button></div></div>
+              <div style="overflow:auto;"><table class="mini-table"><thead><tr><th>Sub Project</th><th>Drone Ticket</th><th>Drone State</th></tr></thead><tbody><tr><td>a</td><td>D-SSIDBI-159</td><td><button class="state-combo">UAT</button></td></tr><tr><td>b</td><td>D-SSIDBI-160</td><td><button class="state-combo">UAT</button></td></tr><tr><td>c</td><td>D-SSIDBI-161</td><td><button class="state-combo">UAT</button></td></tr><tr><td>sub project a</td><td>D-SSIDBI-162</td><td><button class="state-combo">UAT</button></td></tr></tbody></table></div>
+            </div>
+          </div>
+          <div class="pane">
+            <div class="panel-card accent">
+              <div class="panel-title-row"><span class="panel-title-icon">📎</span><span class="panel-title">Files</span><span class="panel-subtitle">documents and templates</span><div style="margin-left:auto" class="toolbar"><button class="btn-secondary" data-toast="Add File clicked">＋ Add File</button><button class="btn-secondary" data-toast="Template picker">◇ From Template</button></div></div>
+              <div class="list-box" style="height:112px;"><div class="list-item selected">📄 CR202604209900114_uat_signoff.docx</div><div class="list-item">📝 cmd_onboard.md</div><div class="list-item">📝 cmd_rollback.md</div><div class="list-item">📦 deployment_evidence.zip</div></div>
+            </div>
+            <div class="panel-card accent" style="flex:2;">
+              <div class="panel-title-row"><span class="panel-title-icon">🗒</span><span class="panel-title">Notes</span><span class="panel-subtitle">markdown workspace</span></div>
+              <div class="toolbar" data-tab-group="details-note-mode"><button class="btn-tiny active" data-mode="edit">Edit</button><button class="btn-tiny" data-mode="preview">Preview</button><button class="btn-tiny" data-toast="Bold markdown inserted">B</button><button class="btn-tiny" data-toast="Italic markdown inserted">I</button><button class="btn-tiny" data-toast="Link markdown inserted">Link</button></div>
+              <textarea class="textarea editor" id="detailsNotes"># SOP CR Notes\n- Confirm UAT evidence\n- Validate Drone ticket approval\n- Prepare rollback command</textarea>
+            </div>
+            <div class="panel-card accent">
+              <div class="panel-title-row"><span class="panel-title-icon">↺</span><span class="panel-title">Activity History</span><span class="panel-subtitle">audit trail</span></div>
+              <div class="list-box" style="height:82px;"><div class="list-item">STATE_CHANGE · PENDING SUBMISSION → PENDING APPROVAL</div><div class="list-item">UPDATED · Drone ticket changed</div><div class="list-item">NOTE · UAT evidence reminder added</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-secondbrain">
+        <div class="workspace-tab-inner" data-tab-group="secondbrain-main">
+          <span class="panel-title-icon">◆</span><span class="panel-title">Second Brain Workspace</span><span class="panel-subtitle" style="margin-right:auto;">Notes, documents, and reusable links</span>
+          <button class="sb-tab active" data-stack="notes">Notes</button><button class="sb-tab" data-stack="linkbank">Link Bank</button>
+        </div>
+        <div class="page-stack active" id="secondbrain-notes">
+          <div class="splitter">
+            <div class="panel-card accent">
+              <div class="panel-title-row"><span class="panel-title-icon">📂</span><span class="panel-title">Notes & Documents</span><span class="panel-subtitle">daily captures, files, and fast indexed search</span></div>
+              <div class="toolbar"><div class="search-shell" style="flex:1"><span class="search-icon">⌕</span><input class="input" id="notesSearch" placeholder="Indexed search..." style="width:100%;" /></div><input class="input" type="date" style="width:132px"><select class="combo" style="width:150px"><option>Modified desc</option><option>Title asc</option><option>Title desc</option></select><button class="btn-secondary" data-clear="notesSearch">Clear</button></div>
+              <div class="toolbar" style="margin:8px 0;"><button class="btn-secondary" data-toast="New folder created">＋ Add Folder</button><button class="btn-secondary" data-toast="New file created">＋ Add File</button><button class="btn-secondary" data-toast="Filter opened">Filter</button><select class="combo"><option>.md</option><option>.txt</option><option>.py</option><option>.sql</option><option>.json</option></select></div>
+              <div class="tree"><div class="tree-group">Pinned</div><div class="tree-item selected">📌 Deployment Evidence Follow-up</div><div class="tree-item">📌 UAT Screenshot Request</div><div class="tree-group">Favorites</div><div class="tree-item">★ Release Board Cleanup</div><div class="tree-group">Second Brain Notes</div><div class="tree-item">📝 UAT Checklist.md</div><div class="tree-item">📝 Release Playbook.md</div><div class="tree-item">📝 Incident Notes.md</div><div class="tree-group">Project Documents</div><div class="tree-item">📄 project_data.json</div><div class="tree-item">📄 cmd_rollback.md</div><div class="tree-item">🖼 evidence.png</div></div>
+              <div class="muted" style="margin-top:8px;">Text-like files edit in-app. Images preview only. Unsupported files open with Windows default app.</div>
+            </div>
+            <div class="handle"></div>
+            <div style="display:flex; flex-direction:column; gap:12px; min-height:0;">
+              <div class="panel-card accent" style="flex:1;">
+                <div class="panel-title-row"><span class="panel-title-icon">✒</span><span class="panel-title">Editor / Preview</span><span class="panel-subtitle">autosave draft · UAT Checklist.md</span></div>
+                <div class="form-grid"><div class="field"><label class="field-label">Title</label><input class="input" value="UAT Checklist.md" /></div><div class="field"><label class="field-label">Tags</label><input class="input" value="uat, release, checklist" /></div></div>
+                <div class="muted" style="margin:8px 0;">Second Brain Notes / UAT Checklist.md · editable prototype</div>
+                <div class="toolbar"><span class="status-pill" id="docState">Editable text</span><span style="flex:1"></span><button class="btn-tiny" data-editor-mode="edit">Edit</button><button class="btn-tiny" data-editor-mode="preview">Preview</button><button class="btn-tiny" data-toast="Pinned">Pin</button><button class="btn-tiny" data-toast="Favorited">Favorite</button></div>
+                <div class="toolbar" style="margin:8px 0;"><button class="btn-tiny">Bold</button><button class="btn-tiny">Italic</button><button class="btn-tiny">H1</button><button class="btn-tiny">H2</button><button class="btn-tiny">Code</button><button class="btn-tiny">Link</button><button class="btn-tiny">Quote</button></div>
+                <textarea class="textarea editor" id="notesEditor"># UAT Checklist\n\n- [ ] Check CR approval\n- [ ] Check Drone approval\n- [ ] Collect screenshot evidence\n- [ ] Prepare implementation plan</textarea>
+              </div>
+              <div class="split" style="flex:0 0 116px;"><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">⛓</span><span class="panel-title">Backlinks / Related Notes</span></div><div class="muted">Release Playbook.md · same tag</div><div class="muted">[[Deployment Evidence Follow-up]] · wiki-style link</div></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">↺</span><span class="panel-title">Recent Activity</span></div><div class="muted">edited UAT Checklist · 2m</div><div class="muted">opened evidence.png · 15m</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="page-stack" id="secondbrain-linkbank">
+          <div class="category-grid link-bank-grid">
+            <div class="panel-card accent link-category-card">
+              <div class="panel-title-row"><span class="panel-title-icon">📁</span><span class="panel-title">Link Categories</span><span class="panel-subtitle">category-first link bank</span></div>
+              <div class="toolbar link-search-toolbar">
+                <div class="search-shell" style="flex:1"><span class="search-icon">⌕</span><input class="input" id="linkSearch" placeholder="Search title, link, tags, details, path, content..." style="width:100%;" /></div>
+                <button class="btn-tiny date-filter-button" id="linkDateFilter" data-cycle-dates="All dates|20260529|20260528|20260527">📅 All dates</button>
+                <select class="combo" id="linkSearchSort" style="width:96px"><option>Newest</option><option>Oldest</option><option>A-Z</option><option>Favorite</option><option>Pinned</option></select>
+                <button class="btn-tiny" data-clear="linkSearch" data-link-clear-search>Clear</button>
+              </div>
+              <div class="toolbar" style="margin:8px 0">
+                <button class="btn-secondary" id="addLinkCategory">＋ Add Category</button>
+                <button class="btn-secondary" id="renameLinkCategory">✎ Rename</button>
+                <button class="btn-secondary" id="archiveLinkCategory">▣ Archive</button>
+                <button class="btn-secondary icon-menu-button" id="linkFilterBtn">⌕ Filter</button>
+              </div>
+              <div class="list-box link-category-list" id="linkCategoryList">
+                <div class="list-item selected" data-category="PROD">📁 PROD · 3 links · red badge</div>
+                <div class="list-item" data-category="UAT">📁 UAT · 3 links · blue badge</div>
+                <div class="list-item" data-category="CR & ITSM Tools">📁 CR &amp; ITSM Tools · 2 links · tool badge</div>
+                <div class="list-item" data-category="Personal">📁 Personal · 0 links · gray badge</div>
+                <div class="list-item" data-category="Archived">📁 Archived · 4 links · restore available</div>
+              </div>
+              <div class="toolbar" style="margin-top:8px"><button class="btn-secondary" data-toast="Import links clicked">⇪ Import</button><button class="btn-secondary" data-toast="Export links clicked">⇩ Export</button></div>
+            </div>
+            <div class="handle"></div>
+            <div class="link-bank-right">
+              <div class="panel-card accent quick-link-panel">
+                <div class="panel-title-row"><span class="panel-title-icon">✎</span><span class="panel-title">Add/Edit Link</span><span class="panel-subtitle">create or update selected link</span></div>
+                <div class="quick-link-grid">
+                  <div class="field"><label class="field-label">Link Title</label><input class="input" id="linkTitleEdit" value="PROD Portal" /></div>
+                  <div class="field"><label class="field-label">Description</label><textarea class="textarea" id="linkDetailsEdit" rows="4">Daily PROD validation and release checks</textarea></div>
+                  <div class="field"><label class="field-label">Link</label><input class="input" id="linkUrlEdit" value="https://prod.example.local/" /></div>
+                  <div class="field"><label class="field-label">Tags</label><input class="input" id="linkTagsEdit" value="PROD, Portal, Working" /></div>
+                </div>
+                <div class="toolbar" style="justify-content:flex-end; margin-top:8px"><button class="btn-tiny" id="pinLinkBtn">📌 Pin</button><button class="btn-tiny" id="favoriteLinkBtn">★ Favorite</button><button class="btn-primary" id="saveLinkBtn">💾 Save</button></div>
+              </div>
+              <div class="panel-card accent link-detail-card">
+                <div class="panel-title-row"><span class="panel-title-icon">🔗</span><span class="panel-title" id="linkCategoryTitle">PROD</span><span class="panel-subtitle" id="linkCategorySubtitle">3 saved links</span></div>
+                <div class="toolbar link-detail-top">
+                  <div class="search-shell" style="flex:1"><span class="search-icon">⌕</span><input class="input" id="linkDetailSearch" placeholder="Search title, URL, tags, details, path, or pattern..." style="width:100%;" /></div>
+                  <select class="combo" id="linkHeaderSort" style="width:96px"><option>Newest</option><option>Oldest</option><option>A-Z</option><option>Favorite</option><option>Pinned</option></select>
+                </div>
+                <div class="toolbar" style="margin:8px 0"><button class="btn-secondary" id="copySelectedUrl">⧉ Copy URL</button><button class="btn-secondary" id="editSelectedLink">✎ Edit</button><button class="btn-secondary" id="removeSelectedLink">▣ Remove</button></div>
+                <div class="link-content-splitter">
+                  <div class="link-list-area">
+                    <div id="linkListContent" class="link-list-content">
+                      <div class="link-row selected" data-title="PROD Portal" data-url="https://prod.example.local/" data-tags="PROD,Portal,Working" data-details="Daily PROD validation and release checks" data-category="PROD" data-path="PROD/PROD Portal" data-date="20260529" data-modified="20260529" data-pinned="true" data-favorite="true"><strong>PROD Portal</strong><div class="muted">https://prod.example.local/</div><div class="badge-row"><span class="badge">PROD</span><span class="badge">Portal</span><span class="badge">Working</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                      <div class="link-row" data-title="Weekly SOP" data-url="https://sop.example.local/weekly" data-tags="SOP,Login Needed" data-details="Weekly operational SOP and login checklist" data-category="PROD" data-path="PROD/Weekly SOP" data-date="20260528" data-modified="20260528" data-pinned="false" data-favorite="false"><strong>Weekly SOP</strong><div class="muted">https://sop.example.local/weekly</div><div class="badge-row"><span class="badge">SOP</span><span class="badge">Login Needed</span></div><div class="link-modified">Last modified: 20260528</div></div>
+                      <div class="link-row" data-title="Release Board" data-url="https://release-board.example.local/" data-tags="Dashboard,Internal Only" data-details="Release tracking dashboard with deployment pattern notes" data-category="PROD" data-path="PROD/Release Board" data-date="20260529" data-modified="20260529" data-pinned="false" data-favorite="false"><strong>Release Board</strong><div class="muted">https://release-board.example.local/</div><div class="badge-row"><span class="badge">Dashboard</span><span class="badge">Internal Only</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                      <div class="link-row" data-title="Evidence Folder" data-url="https://files.example.local/evidence" data-tags="Evidence,Working" data-details="Shared evidence folder with capture documents" data-category="UAT" data-path="UAT/Evidence Folder" data-date="20260529" data-modified="20260529" data-pinned="false" data-favorite="false"><strong>Evidence Folder</strong><div class="muted">https://files.example.local/evidence</div><div class="badge-row"><span class="badge">Evidence</span><span class="badge">Working</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                      <div class="link-row" data-title="Deployment Calendar" data-url="https://calendar.example.local/deploy" data-tags="Release,Internal Only" data-details="Deployment windows and blackout dates" data-category="PROD" data-path="PROD/Deployment Calendar" data-date="20260528" data-modified="20260528" data-pinned="false" data-favorite="false"><strong>Deployment Calendar</strong><div class="muted">https://calendar.example.local/deploy</div><div class="badge-row"><span class="badge">Release</span><span class="badge">Internal Only</span></div><div class="link-modified">Last modified: 20260528</div></div>
+                      <div class="link-row" data-title="Rollback Checklist" data-url="https://sop.example.local/rollback" data-tags="SOP,Release" data-details="Rollback checklist content and SQL path references" data-category="PROD" data-path="PROD/Rollback Checklist" data-date="20260527" data-modified="20260527" data-pinned="false" data-favorite="false"><strong>Rollback Checklist</strong><div class="muted">https://sop.example.local/rollback</div><div class="badge-row"><span class="badge">SOP</span><span class="badge">Release</span></div><div class="link-modified">Last modified: 20260527</div></div>
+                      <div class="link-row" data-title="CR Portal" data-url="https://cr.example.local/" data-tags="CR,Portal" data-details="Change request portal and approval data" data-category="CR & ITSM Tools" data-path="CR & ITSM Tools/CR Portal" data-date="20260529" data-modified="20260529" data-pinned="false" data-favorite="false"><strong>CR Portal</strong><div class="muted">https://cr.example.local/</div><div class="badge-row"><span class="badge">CR</span><span class="badge">Portal</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                      <div class="link-row" data-title="ITSM Queue" data-url="https://itsm.example.local/queue" data-tags="ITSM,Login Needed" data-details="ITSM queue and incident link data" data-category="CR & ITSM Tools" data-path="CR & ITSM Tools/ITSM Queue" data-date="20260528" data-modified="20260528" data-pinned="false" data-favorite="false"><strong>ITSM Queue</strong><div class="muted">https://itsm.example.local/queue</div><div class="badge-row"><span class="badge">ITSM</span><span class="badge">Login Needed</span></div><div class="link-modified">Last modified: 20260528</div></div>
+                      <div class="link-row" data-title="UAT Evidence" data-url="https://uat.example.local/evidence" data-tags="UAT,Evidence" data-details="UAT evidence document content" data-category="UAT" data-path="UAT/UAT Evidence" data-date="20260529" data-modified="20260529" data-pinned="false" data-favorite="false"><strong>UAT Evidence</strong><div class="muted">https://uat.example.local/evidence</div><div class="badge-row"><span class="badge">UAT</span><span class="badge">Evidence</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                      <div class="link-row" data-title="SIT Dashboard" data-url="https://sit.example.local/dashboard" data-tags="SIT,Dashboard" data-details="SIT status and defect pattern dashboard" data-category="UAT" data-path="UAT/SIT Dashboard" data-date="20260527" data-modified="20260527" data-pinned="false" data-favorite="false"><strong>SIT Dashboard</strong><div class="muted">https://sit.example.local/dashboard</div><div class="badge-row"><span class="badge">SIT</span><span class="badge">Dashboard</span></div><div class="link-modified">Last modified: 20260527</div></div>
+                      <div class="link-row" data-title="VPN Guide" data-url="https://access.example.local/vpn" data-tags="Access,Internal Only" data-details="VPN guide for protected internal links" data-category="Personal" data-path="Personal/VPN Guide" data-date="20260528" data-modified="20260528" data-pinned="false" data-favorite="false"><strong>VPN Guide</strong><div class="muted">https://access.example.local/vpn</div><div class="badge-row"><span class="badge">Access</span><span class="badge">Internal Only</span></div><div class="link-modified">Last modified: 20260528</div></div>
+                      <div class="link-row" data-title="Monitoring Board" data-url="https://monitoring.example.local/" data-tags="Dashboard,Working" data-details="Monitoring board for release validation" data-category="PROD" data-path="PROD/Monitoring Board" data-date="20260529" data-modified="20260529" data-pinned="false" data-favorite="false"><strong>Monitoring Board</strong><div class="muted">https://monitoring.example.local/</div><div class="badge-row"><span class="badge">Dashboard</span><span class="badge">Working</span></div><div class="link-modified">Last modified: 20260529</div></div>
+                    </div>
+                  </div>
+                  <div class="panel-card selected-link-detail-box">
+                    <div class="panel-title-row"><span class="panel-title-icon">ⓘ</span><span class="panel-title">Selected Link Detail</span><span class="panel-subtitle" id="selectedLinkSubtitle">PROD Portal</span></div>
+                    <div class="selected-link-title" id="selectedLinkTitle">PROD Portal</div>
+                    <a href="#" class="clickable-link" id="selectedLinkUrl">https://prod.example.local/</a>
+                    <div class="selected-link-body"><div id="selectedLinkMeta">Tags: PROD · Portal · Working<br>Details: Daily PROD validation and release checks<br>Category: PROD<br>Path: PROD/PROD Portal<br>Date: 20260529 · status: selected for toolbar actions</div><p class="muted">Select link card body on the left, then use toolbar actions above. Click URL above for prototype open flow.</p><div class="flow-status" id="linkFlowStatus">Ready · select link, click toolbar action, or click detail URL</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-report">
+        <div class="filter-frame"><div class="status-inner"><label class="field-label">Year</label><select class="combo"><option>2026</option><option>2025</option></select><label class="field-label">Folder State</label><select class="combo"><option>All Folder</option><option>UAT_PREPARE</option><option>PROD_READY</option><option>IMPLEMENTED</option><option>POSTPONED</option></select><label class="field-label">CR State</label><select class="combo"><option>All CR</option><option>APPROVED</option><option>PENDING APPROVAL</option></select><div class="search-shell"><span class="search-icon">⌕</span><input id="reportSearch" class="input" placeholder="Search report..." /></div><button class="btn-secondary" data-clear="reportSearch">Clear</button><button class="btn-primary" data-toast="CSV exported">Export CSV</button></div></div>
+        <div class="metric-row"><div class="metric-card"><div class="metric-icon">Σ</div><div><div class="metric-value">2</div><div class="metric-label">Total CR</div><div class="metric-helper">All folder states</div></div></div><div class="metric-card"><div class="metric-icon">U</div><div><div class="metric-value">2</div><div class="metric-label">Folder: UAT_PREPARE</div><div class="metric-helper">Preparation state</div></div></div><div class="metric-card"><div class="metric-icon">P</div><div><div class="metric-value">0</div><div class="metric-label">Folder: PROD_READY</div><div class="metric-helper">Ready for release</div></div></div><div class="metric-card"><div class="metric-icon">I</div><div><div class="metric-value">0</div><div class="metric-label">Folder: IMPLEMENTED</div><div class="metric-helper">Completed work</div></div></div><div class="metric-card"><div class="metric-icon">⏸</div><div><div class="metric-value">0</div><div class="metric-label">Folder: POSTPONED</div><div class="metric-helper">Deferred delivery</div></div></div></div>
+        <div class="panel-card accent" style="flex:1;"><div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Report Table</span><span class="panel-subtitle">export-ready view</span></div><div style="overflow:auto;"><table class="mini-table"><thead><tr><th>Year</th><th>Project</th><th>Folder State</th><th>CR State</th><th>Drone State</th><th>Start</th><th>End</th></tr></thead><tbody><tr><td>2026</td><td>SOP CR</td><td>UAT_PREPARE</td><td>PENDING SUBMISSION</td><td>UAT</td><td>Fri, 22 May 2026</td><td>Sat, 10 Jan 2026</td></tr><tr><td>2026</td><td>project_tracker</td><td>UAT_PREPARE</td><td>PENDING SUBMISSION</td><td>UAT</td><td>—</td><td>—</td></tr></tbody></table></div></div>
+      </section>
+
+      <section class="screen" id="screen-automations">
+        <div class="workspace-tab-inner" data-tab-group="automation-main"><span class="panel-title-icon">⚙</span><span class="panel-title">Automation Workspace</span><span class="panel-subtitle" style="margin-right:auto;">Outlook, Teams, and Reminder rules</span><button class="sb-tab active" data-stack="outlook">Outlook</button><button class="sb-tab" data-stack="teams">Teams</button><button class="sb-tab" data-stack="reminder">Reminder</button></div>
+        <div class="page-stack active" id="automation-outlook"><div class="splitter"><div class="pane"><div class="panel-card accent" style="flex:2"><div class="panel-title-row"><span class="panel-title-icon">✈</span><span class="panel-title">Outlook Send Automation</span><span class="panel-subtitle">double-click row to edit</span></div><div style="overflow:auto"><table class="mini-table" id="sendTable"><thead><tr><th>Category</th><th>Purpose</th><th>Conditions</th></tr></thead><tbody><tr data-open-dialog><td>ACK_UAT</td><td>Send UAT acknowledgement</td><td>CR link exists</td></tr><tr data-open-dialog><td>ACK_SOP</td><td>Send SOP acknowledgement</td><td>Attachment optional</td></tr><tr data-open-dialog><td>APRVL_CR</td><td>Request CR approval</td><td>Pending approval</td></tr><tr data-open-dialog><td>APRVL_SOP</td><td>Request SOP approval</td><td>Drone ready</td></tr></tbody></table></div><div class="toolbar" style="justify-content:flex-end; margin-top:8px"><button class="btn-secondary" data-toast="New send automation">＋ Add Send</button></div></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">↺</span><span class="panel-title">Send Log</span></div><div class="list-box" style="height:88px"><div class="list-item">Ready · no sent email yet</div><div class="list-item">Draft mode enabled</div></div></div></div><div class="handle"></div><div class="pane"><div class="panel-card accent" style="flex:2"><div class="panel-title-row"><span class="panel-title-icon">⬇</span><span class="panel-title">Outlook Download Automation</span></div><div class="muted">Download jobs are linked to sent acknowledgement flows.</div><div style="overflow:auto; margin-top:8px"><table class="mini-table"><thead><tr><th>Name</th><th>Folder</th><th>Status</th></tr></thead><tbody><tr><td>UAT Evidence Download</td><td>Project folder</td><td>Waiting trigger</td></tr><tr><td>SOP Attachment Watch</td><td>Project folder</td><td>Waiting trigger</td></tr></tbody></table></div><div class="toolbar" style="justify-content:flex-end; margin-top:8px"><button class="btn-secondary" data-toast="Downloaded email opened">Downloaded Email</button></div></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">↺</span><span class="panel-title">Download Log</span></div><div class="list-box" style="height:88px"><div class="list-item">Ready · no download job running</div></div></div></div></div></div>
+        <div class="page-stack" id="automation-teams"><div class="split"><div class="panel-card accent" style="flex:7"><div class="panel-title-row"><span class="panel-title-icon">💬</span><span class="panel-title">Teams Message Automation</span><span class="panel-subtitle">deep link + clipboard + countdown</span></div><div style="overflow:auto"><table class="mini-table"><thead><tr><th>Active</th><th>Name</th><th>Target</th><th>Template</th></tr></thead><tbody><tr><td><input type="checkbox" checked></td><td>Default approval request</td><td>Tech Lead</td><td>Hi, mohon approval untuk deployment...</td></tr><tr><td><input type="checkbox" checked></td><td>UAT follow-up</td><td>Group UAT</td><td>Reminder evidence UAT...</td></tr><tr><td><input type="checkbox"></td><td>SOP broadcast</td><td>Release Channel</td><td>SOP has been prepared...</td></tr></tbody></table></div><div class="toolbar" style="justify-content:flex-end; margin-top:8px"><button class="btn-primary" data-toast="Teams automation opened">Open Automation</button></div></div><div class="panel-card accent" style="flex:3"><div class="panel-title-row"><span class="panel-title-icon">📶</span><span class="panel-title">Teams Status</span></div><div class="metric-card"><div class="metric-icon">3</div><div><div class="metric-label">Saved Automation</div><div class="metric-helper">Configured flows</div></div></div><div class="metric-card"><div class="metric-icon">2</div><div><div class="metric-label">Active Automation</div><div class="metric-helper">Ready to run</div></div></div></div></div></div>
+        <div class="page-stack" id="automation-reminder"><div class="metric-row"><div class="metric-card"><div class="metric-icon">⌛</div><div><div class="metric-value">0</div><div class="metric-label">Due Soon</div><div class="metric-helper">Next 10 days</div></div></div><div class="metric-card"><div class="metric-icon">!</div><div><div class="metric-value">0</div><div class="metric-label">Overdue</div><div class="metric-helper">Needs attention</div></div></div><div class="metric-card"><div class="metric-icon">Ⅱ</div><div><div class="metric-value">0</div><div class="metric-label">Postponed</div><div class="metric-helper">Deferred items</div></div></div><div class="metric-card"><div class="metric-icon">🔔</div><div><div class="metric-value">0</div><div class="metric-label">Reminder Rules</div><div class="metric-helper">No rules yet</div></div></div></div><div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">🔔</span><span class="panel-title">Reminder Rules</span><span class="panel-subtitle">T-10 and local notification rules</span></div><table class="mini-table"><thead><tr><th>Rule</th><th>Condition</th><th>Action</th></tr></thead><tbody><tr><td>T-10 Approval</td><td>Pending approval &gt; 10 days</td><td>Notify</td></tr><tr><td>Postponed Review</td><td>Folder POSTPONED</td><td>Notify weekly</td></tr></tbody></table><div class="toolbar" style="justify-content:flex-end; margin-top:8px"><button class="btn-secondary" data-toast="Import Rule">Import Rule</button><button class="btn-primary" data-toast="Add Reminder">＋ Add Reminder</button></div></div></div>
+      </section>
+
+      <section class="screen" id="screen-settings">
+        <div class="splitter"><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">⚙</span><span class="panel-title">Settings</span><span class="panel-subtitle">application configuration</span></div><div class="panel-card accent" style="box-shadow:none"><div class="panel-title-row"><span class="panel-title-icon">☷</span><span class="panel-title">General</span><span class="panel-subtitle">application identity</span></div><div class="form-grid"><div class="field"><label class="field-label">Display Name</label><input class="input" value="sayyid" /></div><div class="field"><label class="field-label">Language</label><select class="combo"><option>en</option><option>id</option></select></div><div class="field"><label class="field-label">Datetime Format</label><input class="input" value="ddd, dd MMM yyyy HH:mm" /></div><div class="field"><label class="field-label">Theme</label><select class="combo"><option>locked-dashboard-v13</option><option>dark</option><option>light</option></select></div></div></div><div class="panel-card accent" style="box-shadow:none"><div class="panel-title-row"><span class="panel-title-icon">⚡</span><span class="panel-title">Behavior</span><span class="panel-subtitle">operational preferences</span></div><div class="form-grid"><div class="field"><label class="field-label">T-10 Threshold Days</label><input class="input" type="number" value="10"></div><div class="field"><label class="field-label">Auto Refresh</label><select class="combo"><option>off</option><option>15 seconds</option><option>30 seconds</option><option>1 minute</option></select></div><div class="field full"><label class="field-label">Startup Behavior</label><select class="combo"><option>current_year_dashboard</option><option>last_opened_project</option></select></div></div></div><div class="panel-card accent" style="box-shadow:none"><div class="panel-title-row"><span class="panel-title-icon">📁</span><span class="panel-title">Paths</span><span class="panel-subtitle">second brain and templates</span></div><div class="field"><label class="field-label">Root Folder</label><div class="toolbar"><input class="input" value="D:\\WORK\\CR" style="flex:1"><button class="btn-secondary" data-toast="Browse root folder">Browse</button></div></div><div class="field"><label class="field-label">Second Brain Folder</label><div class="toolbar"><input class="input" value="%APPDATA%\\ProjectTrackerDBS\\SecondBrain" style="flex:1"><button class="btn-secondary" data-toast="Browse second brain folder">Browse</button></div></div><div class="field"><label class="field-label">File Template Folder</label><div class="toolbar"><input class="input" value="" style="flex:1"><button class="btn-secondary" data-toast="Browse template folder">Browse</button></div></div></div><div class="toolbar" style="justify-content:flex-end"><button class="btn-primary" data-toast="Settings saved">💾 Save Settings</button></div></div><div class="handle"></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">?</span><span class="panel-title">Help Center</span><span class="panel-subtitle">application guide</span></div><div class="search-shell"><span class="search-icon">⌕</span><input id="helpSearch" class="input" placeholder="Search help topics..." style="width:100%"></div><div class="panel-card" style="margin-top:10px; flex:1; overflow:auto; box-shadow:none;"><h2 style="margin:0 0 8px; color:var(--text-strong);">Project Tracker DBS — Help Guide</h2><p class="muted">Use this application to track local-first DBS CR delivery work. Project folders are the source of truth for project existence and state.</p><h3>Dashboard</h3><p class="muted">Use status tabs to filter projects. Drone Ticket and CR Number fields auto-commit when focus leaves the field.</p><h3>Project Details</h3><p class="muted">Edit project metadata, sub projects, files, notes, and activity history from one workspace.</p><h3>Automations</h3><p class="muted">Configure Outlook send/download, Teams messages, and Reminder rules without leaving local-first constraints.</p></div></div></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="dialog-backdrop" id="automationDialog" aria-hidden="true">
+  <div class="dialog">
+    <div class="panel-card accent">
+      <div class="panel-title-row"><span class="panel-title-icon">✉</span><span class="panel-title">Outlook Automation Editor</span><span class="panel-subtitle">prototype editor popup</span><button class="btn-tiny" id="closeDialog" style="margin-left:auto">Close</button></div>
+      <div class="form-grid"><div class="field"><label class="field-label">CR State</label><select class="combo"><option>PENDING APPROVAL</option><option>APPROVED</option></select></div><div class="field"><label class="field-label">Drone State</label><select class="combo"><option>UAT</option><option>APPROVED</option></select></div><div class="field full"><label class="field-label">Project Name Pattern</label><input class="input" value="{PROJECT_NAME}" /></div><div class="field full"><label class="field-label">Body Template</label><textarea class="textarea" rows="8">Hi Team,\n\nMohon approval untuk deployment {PROJECT_NAME}.\nDrone ticket: {DRONE_TICKET}\nCR: {CR_NUMBER}\n\nThanks.</textarea></div><label style="font-weight:900"><input type="checkbox" checked> HTML body</label></div>
+      <div class="toolbar" style="justify-content:flex-end; margin-top:10px"><button class="btn-secondary" data-toast="Preview email">Preview</button><button class="btn-primary" data-toast="Template saved">Save Template</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const headerConfig = {
+    dashboard: { title: 'Dashboard.', rich: true, search: true, filter: true, add: true, placeholder: 'Search projects here...' },
+    details: { title: 'Project Details.', rich: true, search: true, filter: false, add: true, placeholder: 'Search project details...' },
+    secondbrain: { title: 'Second Brain.', rich: false },
+    report: { title: 'Report.', rich: false },
+    automations: { title: 'Automations.', rich: false },
+    settings: { title: 'Settings.', rich: false },
+  };
+
+  const toast = document.getElementById('toast');
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+  window.showToast = showToast;
+
+  function updateClock() {
+    const now = new Date();
+    const datePart = now.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    const timePart = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    document.getElementById('clock').textContent = `${datePart} ${timePart}`;
+  }
+
+  function updateHeader(page) {
+    const cfg = headerConfig[page] || headerConfig.dashboard;
+    document.getElementById('headerTitle').textContent = cfg.title;
+    const headerActions = document.getElementById('headerActions');
+    const year = document.getElementById('headerYear');
+    const searchShell = document.getElementById('headerSearchShell');
+    const search = document.getElementById('headerSearch');
+    const filter = document.getElementById('headerFilter');
+    const add = document.getElementById('headerAddProject');
+    headerActions.classList.toggle('hidden', !cfg.rich);
+    year.classList.toggle('hidden', !cfg.rich);
+    searchShell.classList.toggle('hidden', !cfg.search);
+    filter.classList.toggle('hidden', !cfg.filter);
+    add.classList.toggle('hidden', !cfg.add);
+    if (cfg.placeholder) search.placeholder = cfg.placeholder;
+  }
+
+  function switchPage(page) {
+    document.querySelectorAll('.nav-btn[data-page]').forEach(btn => btn.classList.toggle('active', btn.dataset.page === page));
+    document.querySelectorAll('.screen').forEach(screen => screen.classList.toggle('active', screen.id === `screen-${page}`));
+    updateHeader(page);
+  }
+
+  document.querySelectorAll('.nav-btn[data-page]').forEach(btn => btn.addEventListener('click', () => switchPage(btn.dataset.page)));
+  document.getElementById('collapseBtn').addEventListener('click', () => {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+    document.getElementById('collapseBtn').textContent = sidebar.classList.contains('collapsed') ? '›' : '‹';
+  });
+  document.getElementById('dismissNotifs').addEventListener('click', () => {
+    document.getElementById('notifList').innerHTML = '<div style="color:#A1A1AA;text-align:center;font-weight:800;margin-top:18px;">No notifications yet.</div>';
+    showToast('Notifications dismissed');
+  });
+
+  document.addEventListener('click', event => {
+    const toastButton = event.target.closest('[data-toast]');
+    if (toastButton) showToast(toastButton.dataset.toast);
+
+    const refresh = event.target.closest('[data-refresh]');
+    if (refresh) {
+      refresh.classList.remove('spinning');
+      void refresh.offsetWidth;
+      refresh.classList.add('spinning');
+      showToast('Refresh clicked');
+    }
+
+    const clear = event.target.closest('[data-clear]');
+    if (clear) {
+      const input = document.getElementById(clear.dataset.clear);
+      if (input) input.value = '';
+      showToast('Search cleared');
+    }
+
+    const state = event.target.closest('.state-combo');
+    if (state) {
+      const options = (state.dataset.stateOptions || 'UAT|SIT|APPROVED|FINISHED').split('|');
+      const current = state.textContent.trim();
+      const idx = Math.max(0, options.indexOf(current));
+      state.textContent = options[(idx + 1) % options.length];
+      showToast(`State changed to ${state.textContent}`);
+    }
+
+    const row = event.target.closest('[data-row]');
+    if (row && !event.target.closest('input,button,select,textarea')) {
+      document.querySelectorAll('[data-row]').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+    }
+  });
+
+  document.querySelectorAll('[data-tab-group]').forEach(group => {
+    group.addEventListener('click', event => {
+      const tab = event.target.closest('.status-tab, .sb-tab, .btn-tiny');
+      if (!tab || !group.contains(tab)) return;
+      if (tab.dataset.toast) return;
+      group.querySelectorAll('.status-tab, .sb-tab, .btn-tiny').forEach(btn => btn.classList.remove('active'));
+      tab.classList.add('active');
+      if (group.dataset.tabGroup === 'dashboard-status') {
+        const count = Number(tab.dataset.count || 0);
+        document.getElementById('projectCount').textContent = `${count} project(s)`;
+        showToast(`${tab.textContent.trim()} selected`);
+      }
+    });
+  });
+
+  document.querySelector('[data-tab-group="secondbrain-main"]').addEventListener('click', event => {
+    const tab = event.target.closest('[data-stack]');
+    if (!tab) return;
+    document.querySelectorAll('#screen-secondbrain .page-stack').forEach(stack => stack.classList.remove('active'));
+    document.getElementById(`secondbrain-${tab.dataset.stack}`).classList.add('active');
+  });
+
+  document.querySelector('[data-tab-group="automation-main"]').addEventListener('click', event => {
+    const tab = event.target.closest('[data-stack]');
+    if (!tab) return;
+    document.querySelectorAll('#screen-automations .page-stack').forEach(stack => stack.classList.remove('active'));
+    document.getElementById(`automation-${tab.dataset.stack}`).classList.add('active');
+  });
+
+  document.querySelectorAll('[data-editor-mode]').forEach(btn => btn.addEventListener('click', () => {
+    const editor = document.getElementById('notesEditor');
+    const state = document.getElementById('docState');
+    const preview = btn.dataset.editorMode === 'preview';
+    editor.readOnly = preview;
+    state.textContent = preview ? 'Preview mode' : 'Editable text';
+    showToast(preview ? 'Preview mode enabled' : 'Edit mode enabled');
+  }));
+
+  document.querySelectorAll('[data-open-dialog]').forEach(row => row.addEventListener('dblclick', () => {
+    const dialog = document.getElementById('automationDialog');
+    dialog.classList.add('open');
+    dialog.setAttribute('aria-hidden', 'false');
+  }));
+  document.getElementById('closeDialog').addEventListener('click', () => {
+    const dialog = document.getElementById('automationDialog');
+    dialog.classList.remove('open');
+    dialog.setAttribute('aria-hidden', 'true');
+  });
+  document.getElementById('automationDialog').addEventListener('click', event => {
+    if (event.target.id === 'automationDialog') document.getElementById('closeDialog').click();
+  });
+
+  document.addEventListener('mousedown', event => {
+    const active = document.activeElement;
+    if (!active || !active.matches('input, textarea, select')) return;
+    if (!event.target.closest('input, textarea, select')) active.blur();
+  });
+
+
+
+  const defaultCategoryItems = [
+    { label: '📁 PROD · 3 links · red badge', category: 'PROD' },
+    { label: '📁 UAT · 3 links · blue badge', category: 'UAT' },
+    { label: '📁 CR & ITSM Tools · 2 links · tool badge', category: 'CR & ITSM Tools' },
+    { label: '📁 Personal · 0 links · gray badge', category: 'Personal' },
+    { label: '📁 Archived · 4 links · restore available', category: 'Archived' },
+  ];
+  let selectedLinkRow = document.querySelector('#linkListContent .link-row.selected');
+  let selectedCategory = 'PROD';
+
+  function linkRows() { return Array.from(document.querySelectorAll('#linkListContent .link-row')); }
+  function linkData(row) {
+    return {
+      title: row.dataset.title || '',
+      url: row.dataset.url || '',
+      tags: (row.dataset.tags || '').split(',').map(t => t.trim()).filter(Boolean),
+      details: row.dataset.details || '',
+      category: row.dataset.category || '',
+      path: row.dataset.path || '',
+      date: row.dataset.date || '',
+      modified: row.dataset.modified || row.dataset.date || '',
+      pinned: row.dataset.pinned === 'true',
+      favorite: row.dataset.favorite === 'true',
+    };
+  }
+  function haystackForLink(row) {
+    const d = linkData(row);
+    return [d.title, d.url, d.details, d.category, d.path, d.tags.join(' ')].join(' ').toLowerCase();
+  }
+  function setLinkFlow(message) {
+    const label = document.getElementById('linkFlowStatus');
+    if (label) label.textContent = message;
+    showToast(message);
+  }
+  function selectLink(row, messagePrefix = 'Selected link') {
+    if (!row) return;
+    selectedLinkRow = row;
+    linkRows().forEach(r => r.classList.toggle('selected', r === row));
+    const d = linkData(row);
+    document.getElementById('selectedLinkTitle').textContent = d.title;
+    document.getElementById('selectedLinkSubtitle').textContent = d.title;
+    const url = document.getElementById('selectedLinkUrl');
+    url.textContent = d.url;
+    url.dataset.url = d.url;
+    document.getElementById('selectedLinkMeta').innerHTML = `Tags: ${d.tags.join(' · ')}<br>Details: ${d.details}<br>Category: ${d.category}<br>Path: ${d.path}<br>Date: ${d.date} · status: selected for toolbar actions`;
+    document.getElementById('linkTitleEdit').value = d.title;
+    document.getElementById('linkUrlEdit').value = d.url;
+    document.getElementById('linkTagsEdit').value = d.tags.join(', ');
+    document.getElementById('linkDetailsEdit').value = d.details;
+    setLinkFlow(`${messagePrefix}: ${d.title}`);
+  }
+  function sortVisibleLinks(mode) {
+    const parent = document.getElementById('linkListContent');
+    const rows = linkRows();
+    rows.sort((a, b) => {
+      const da = linkData(a), db = linkData(b);
+      if (mode === 'Oldest') return da.date.localeCompare(db.date) || da.title.localeCompare(db.title);
+      if (mode === 'A-Z') return da.title.localeCompare(db.title);
+      if (mode === 'Favorite') return Number(db.favorite) - Number(da.favorite) || da.title.localeCompare(db.title);
+      if (mode === 'Pinned') return Number(db.pinned) - Number(da.pinned) || da.title.localeCompare(db.title);
+      return db.date.localeCompare(da.date) || da.title.localeCompare(db.title);
+    }).forEach(row => parent.appendChild(row));
+  }
+  function applyLinkCardFilter() {
+    const query = (document.getElementById('linkDetailSearch')?.value || '').trim().toLowerCase();
+    const mode = document.getElementById('linkHeaderSort')?.value || 'Newest';
+    sortVisibleLinks(mode);
+    let visible = 0;
+    linkRows().forEach(row => {
+      const d = linkData(row);
+      const categoryMatch = !selectedCategory || selectedCategory === 'Search Results' || selectedCategory === d.category || selectedCategory === 'Archived';
+      const queryMatch = !query || haystackForLink(row).includes(query);
+      const show = categoryMatch && queryMatch;
+      row.classList.toggle('hidden', !show);
+      if (show) visible += 1;
+    });
+    document.getElementById('linkCategoryTitle').textContent = selectedCategory || 'PROD';
+    document.getElementById('linkCategorySubtitle').textContent = `${visible} visible link(s)`;
+    if (selectedLinkRow?.classList.contains('hidden')) {
+      const first = linkRows().find(row => !row.classList.contains('hidden'));
+      if (first) selectLink(first, 'Selected link');
+    }
+  }
+  function renderDefaultCategories(active = selectedCategory) {
+    const list = document.getElementById('linkCategoryList');
+    list.innerHTML = '';
+    defaultCategoryItems.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'list-item';
+      row.dataset.category = item.category;
+      row.textContent = item.label;
+      row.classList.toggle('selected', item.category === active);
+      list.appendChild(row);
+    });
+  }
+  function updateLinkSearchPreview() {
+    const query = (document.getElementById('linkSearch')?.value || '').trim().toLowerCase();
+    const dateText = (document.getElementById('linkDateFilter')?.textContent || 'All dates').replace('📅', '').trim();
+    const sortMode = document.getElementById('linkSearchSort')?.value || 'Newest';
+    document.getElementById('linkHeaderSort').value = sortMode;
+    if (!query && dateText === 'All dates') {
+      renderDefaultCategories(selectedCategory);
+      applyLinkCardFilter();
+      return;
+    }
+    const matches = linkRows().filter(row => {
+      const d = linkData(row);
+      const dateMatch = dateText === 'All dates' || d.date === dateText;
+      const queryMatch = !query || haystackForLink(row).includes(query);
+      return dateMatch && queryMatch;
+    });
+    sortVisibleLinks(sortMode);
+    const list = document.getElementById('linkCategoryList');
+    list.innerHTML = `<div class="list-item selected" data-category="Search Results">🔎 Search Results · ${matches.length} match(es)</div>`;
+    matches.forEach(row => {
+      const d = linkData(row);
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.dataset.linkTitle = d.title;
+      item.textContent = `${d.path} · open detail`;
+      list.appendChild(item);
+    });
+    selectedCategory = 'Search Results';
+    linkRows().forEach(row => row.classList.toggle('hidden', !matches.includes(row)));
+    document.getElementById('linkCategoryTitle').textContent = 'Search Results';
+    document.getElementById('linkCategorySubtitle').textContent = `${matches.length} match(es)`;
+    setLinkFlow(`Link search: ${matches.length} result(s) · pattern='${query || '*'}' · date=${dateText}`);
+  }
+  function rewriteLinkRow(row) {
+    const d = linkData(row);
+    row.innerHTML = `<strong>${d.title}</strong><div class="muted">${d.url}</div><div class="badge-row">${d.tags.map(tag => `<span class="badge">${tag}</span>`).join('')}</div><div class="link-modified">Last modified: ${d.modified}</div>`;
+  }
+  function addBadgeIfMissing(row, badge) {
+    const tags = new Set((row.dataset.tags || '').split(',').map(t => t.trim()).filter(Boolean));
+    tags.add(badge);
+    row.dataset.tags = Array.from(tags).join(',');
+    rewriteLinkRow(row);
+  }
+
+  document.getElementById('linkCategoryList')?.addEventListener('click', event => {
+    const item = event.target.closest('.list-item');
+    if (!item) return;
+    document.querySelectorAll('#linkCategoryList .list-item').forEach(row => row.classList.remove('selected'));
+    item.classList.add('selected');
+    if (item.dataset.linkTitle) {
+      const row = linkRows().find(link => link.dataset.title === item.dataset.linkTitle);
+      if (row) selectLink(row, 'Link search result selected');
+      return;
+    }
+    selectedCategory = item.dataset.category || 'PROD';
+    applyLinkCardFilter();
+    setLinkFlow(`Category selected: ${item.textContent.trim()}`);
+  });
+  document.getElementById('linkListContent')?.addEventListener('click', event => {
+    const row = event.target.closest('.link-row');
+    if (row) selectLink(row);
+  });
+  document.getElementById('linkSearch')?.addEventListener('input', updateLinkSearchPreview);
+  document.getElementById('linkDetailSearch')?.addEventListener('input', applyLinkCardFilter);
+  document.getElementById('linkSearchSort')?.addEventListener('change', updateLinkSearchPreview);
+  document.getElementById('linkHeaderSort')?.addEventListener('change', event => {
+    document.getElementById('linkSearchSort').value = event.target.value;
+    applyLinkCardFilter();
+  });
+  document.getElementById('linkDateFilter')?.addEventListener('click', event => {
+    const options = event.currentTarget.dataset.cycleDates.split('|');
+    const current = event.currentTarget.textContent.replace('📅', '').trim();
+    const next = options[(Math.max(0, options.indexOf(current)) + 1) % options.length];
+    event.currentTarget.textContent = `📅 ${next}`;
+    updateLinkSearchPreview();
+  });
+  document.querySelector('[data-link-clear-search]')?.addEventListener('click', () => {
+    document.getElementById('linkDateFilter').textContent = '📅 All dates';
+    selectedCategory = 'PROD';
+    renderDefaultCategories('PROD');
+    applyLinkCardFilter();
+    setLinkFlow('Link search cleared · showing categories');
+  });
+  document.getElementById('addLinkCategory')?.addEventListener('click', () => {
+    const item = document.createElement('div');
+    item.className = 'list-item selected';
+    item.dataset.category = 'New Category';
+    item.textContent = '📁 New Category';
+    item.contentEditable = 'true';
+    document.querySelectorAll('#linkCategoryList .list-item').forEach(row => row.classList.remove('selected'));
+    document.getElementById('linkCategoryList').appendChild(item);
+    item.focus();
+    setLinkFlow('Inline category draft created');
+  });
+  document.getElementById('renameLinkCategory')?.addEventListener('click', () => {
+    const item = document.querySelector('#linkCategoryList .list-item.selected');
+    if (!item) return setLinkFlow('Select category before rename');
+    item.contentEditable = 'true';
+    item.focus();
+    setLinkFlow(`Rename category: ${item.textContent.trim()}`);
+  });
+  document.getElementById('archiveLinkCategory')?.addEventListener('click', () => {
+    const item = document.querySelector('#linkCategoryList .list-item.selected');
+    if (!item) return setLinkFlow('Select category before archive');
+    item.textContent = `📁 Archived · ${item.dataset.category || 'category'} · restore available`;
+    item.dataset.category = 'Archived';
+    selectedCategory = 'Archived';
+    applyLinkCardFilter();
+    setLinkFlow('Category archived prototype');
+  });
+  document.getElementById('linkFilterBtn')?.addEventListener('click', () => setLinkFlow('Filter links menu: Pinned, Favorites, Recent, Mostly Viewed'));
+  document.getElementById('copySelectedUrl')?.addEventListener('click', async () => {
+    const url = selectedLinkRow ? linkData(selectedLinkRow).url : '';
+    try { if (navigator.clipboard && url) await navigator.clipboard.writeText(url); } catch (_) {}
+    setLinkFlow(`Copied URL: ${url || 'no link selected'}`);
+  });
+  document.getElementById('editSelectedLink')?.addEventListener('click', () => selectedLinkRow ? selectLink(selectedLinkRow, 'Editing link') : setLinkFlow('Select link before edit'));
+  document.getElementById('removeSelectedLink')?.addEventListener('click', () => {
+    if (!selectedLinkRow) return setLinkFlow('Select link before remove');
+    selectedLinkRow.dataset.category = 'Archived';
+    addBadgeIfMissing(selectedLinkRow, 'Archived');
+    setLinkFlow(`Remove/archive selected link: ${selectedLinkRow.dataset.title}`);
+    applyLinkCardFilter();
+  });
+  document.getElementById('pinLinkBtn')?.addEventListener('click', () => {
+    if (!selectedLinkRow) return setLinkFlow('Select link before pin');
+    selectedLinkRow.dataset.pinned = selectedLinkRow.dataset.pinned === 'true' ? 'false' : 'true';
+    addBadgeIfMissing(selectedLinkRow, selectedLinkRow.dataset.pinned === 'true' ? 'Pinned' : 'Unpinned');
+    setLinkFlow(`Pinned link flow: ${document.getElementById('linkTitleEdit').value}`);
+  });
+  document.getElementById('favoriteLinkBtn')?.addEventListener('click', () => {
+    if (!selectedLinkRow) return setLinkFlow('Select link before favorite');
+    selectedLinkRow.dataset.favorite = selectedLinkRow.dataset.favorite === 'true' ? 'false' : 'true';
+    addBadgeIfMissing(selectedLinkRow, selectedLinkRow.dataset.favorite === 'true' ? 'Favorite' : 'Unfavorite');
+    setLinkFlow(`Favorite link flow: ${document.getElementById('linkTitleEdit').value}`);
+  });
+  document.getElementById('saveLinkBtn')?.addEventListener('click', () => {
+    const title = document.getElementById('linkTitleEdit').value.trim() || 'Untitled Link';
+    const url = document.getElementById('linkUrlEdit').value.trim() || 'https://example.local/';
+    const tags = document.getElementById('linkTagsEdit').value.split(',').map(t => t.trim()).filter(Boolean);
+    const details = document.getElementById('linkDetailsEdit').value.trim() || 'No details yet.';
+    if (!selectedLinkRow) return setLinkFlow(`Saved new link prototype: ${title}`);
+    Object.assign(selectedLinkRow.dataset, { title, url, tags: tags.join(','), details });
+    rewriteLinkRow(selectedLinkRow);
+    selectLink(selectedLinkRow, 'Saved edits');
+  });
+  document.getElementById('selectedLinkUrl')?.addEventListener('click', event => {
+    event.preventDefault();
+    setLinkFlow(`Prototype link clicked: ${event.currentTarget.dataset.url || event.currentTarget.textContent}`);
+  });
+  document.getElementById('linkCategoryList')?.addEventListener('blur', event => {
+    const item = event.target.closest('.list-item[contenteditable="true"]');
+    if (!item) return;
+    item.contentEditable = 'false';
+    item.dataset.category = item.textContent.replace(/^📁\s*/, '').trim() || 'New Category';
+    setLinkFlow(`Category saved: ${item.textContent.trim()}`);
+  }, true);
+
+  document.addEventListener('click', event => {
+    const btn = event.target.closest('button');
+    if (!btn) return;
+    if (btn.matches('[data-toast],[data-refresh],[data-clear],.state-combo,[data-stack],.status-tab')) return;
+    if (btn.id && ['addLinkCategory','renameLinkCategory','archiveLinkCategory','linkFilterBtn','copySelectedUrl','editSelectedLink','removeSelectedLink','pinLinkBtn','favoriteLinkBtn','saveLinkBtn','linkDateFilter','closeDialog','headerAddProject'].includes(btn.id)) return;
+    const label = btn.textContent.trim().replace(/\s+/g, ' ') || 'Button';
+    showToast(`${label} clicked`);
+  });
+
+  applyLinkCardFilter();
+
+  document.getElementById('headerAddProject').addEventListener('click', () => showToast('Add Project clicked'));
+  updateClock();
+  setInterval(updateClock, 1000);
+  updateHeader('dashboard');
+})();
+</script>
+</body>
+</html>
