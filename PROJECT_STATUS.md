@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.9 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, and navigation shell**
+**Phase D.1–D.10 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, and report page**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.9 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.10 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -855,29 +855,49 @@ Latest completed commit:
 852c764 implement phase D.9 app navigation shell
 ```
 
+### Phase D.10 — Report frontend page + read binding
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `Report.svelte` replaces placeholder with real read-only report page.
+- `report_filter_projects` JsApi bound with year, project_state, cr_state, search filters.
+- `report_export_csv` JsApi bound — CSV download via Blob without backend changes.
+- KPI summary row: Total, UAT Prepare, PROD Ready, Implemented, Postponed, Canceled.
+- Report table: 11 columns from `DashboardProject` DTO.
+- Loading, error, empty, loaded states implemented.
+- No backend changes, no mutations, no polling.
+- `App.svelte` routes "report" page to `Report` component.
+- `svelte-check` clean, `vite build` clean, Python tests clean.
+
+Latest completed commit:
+
+```text
+fc0d721 implement phase D.10 report frontend binding
+```
+
 ## Phase D Exit Audit
 
 ```text
 Branch: prd-v31-migration
-Working tree: 2 untracked files (frontend/package-lock.json, redesign_ui/*.html)
-svelte-check: 85 files, 0 errors, 0 warnings
+Working tree: clean (package-lock.json and HTML reference now tracked)
+svelte-check: 86 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
 Tests: 354 passed
-D.8 completed commit: 8ac46de implement phase D.8 app web svelte static serving
-Latest completed commit: 852c764 implement phase D.9 app navigation shell
+Latest completed commit: fc0d721 implement phase D.10 report frontend binding
 ```
 
-Phase D.1 through D.9 frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, and app navigation/page shell are complete and verified on Linux.
+Phase D.1 through D.10 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, and report frontend page are complete and verified on Linux.
 
 Remaining deferred:
 
-- Project Details real page/data binding
-- Report frontend page/data binding
+- Project Details read-only page/data binding
+- Project Details mutations/actions
 - Settings frontend page/data binding
 - Link Bank frontend page/data binding
 - Second Brain frontend page/data binding
 - Automations frontend page/data binding
-- dashboard/project mutations
 - Windows manual test
 - packaging
 
