@@ -235,6 +235,25 @@ class LinkBankDependencyProtocol(Protocol):
         """Archive link."""
 
 
+class SecondBrainServiceProtocol(Protocol):
+    """Second Brain service surface used by JsApi."""
+
+    def list_items(self) -> object:
+        """Return Second Brain items."""
+
+    def search(self, query: str) -> object:
+        """Search Second Brain items."""
+
+    def get_item(self, item_id: str) -> object:
+        """Return Second Brain item."""
+
+    def pin_item(self, item_id: str) -> object:
+        """Pin Second Brain item."""
+
+    def favorite_item(self, item_id: str) -> object:
+        """Favorite Second Brain item."""
+
+
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
 
@@ -269,6 +288,7 @@ class JsApi:
         settings_store: SettingsDependencyProtocol | None = None,
         linkbank_service: LinkBankDependencyProtocol | None = None,
         linkbank_store: LinkBankDependencyProtocol | None = None,
+        second_brain_service: SecondBrainServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -281,6 +301,7 @@ class JsApi:
         self._notes_service = notes_service
         self._settings_dependency = settings_service or settings_store
         self._linkbank_dependency = linkbank_service or linkbank_store
+        self._second_brain_service = second_brain_service
 
     def app_get_status(self) -> dict[str, object]:
         """Return static app/backend status."""
@@ -751,6 +772,51 @@ class JsApi:
             return ok(_to_frontend_safe(self._linkbank_dependency.archive_link(link_id)))
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_ARCHIVE_LINK_FAILED")
+
+    def second_brain_list(self) -> dict[str, object]:
+        """Return Second Brain items."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.list_items()))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_LIST_FAILED")
+
+    def second_brain_search(self, query: str) -> dict[str, object]:
+        """Search Second Brain items."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.search(query)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_SEARCH_FAILED")
+
+    def second_brain_get(self, item_id: str) -> dict[str, object]:
+        """Return Second Brain item."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.get_item(item_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_GET_FAILED")
+
+    def second_brain_pin(self, item_id: str) -> dict[str, object]:
+        """Pin Second Brain item."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.pin_item(item_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_PIN_FAILED")
+
+    def second_brain_favorite(self, item_id: str) -> dict[str, object]:
+        """Favorite Second Brain item."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.favorite_item(item_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_FAVORITE_FAILED")
 
     def report_filter_projects(
         self,
