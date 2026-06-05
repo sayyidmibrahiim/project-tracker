@@ -644,8 +644,8 @@ Latest completed commit:
 ```text
 Branch: prd-v31-migration
 Working tree: clean
-Tests: 330 passed
-Latest completed commit: 6b36042 implement phase C.14-C.15 automation service and js api
+Tests: 341 passed
+Latest completed commit: c58130b wire app web to js api factory
 ```
 
 Phase C backend service and JsApi facade slices (C.1 through C.15) are complete and verified on Linux.
@@ -665,6 +665,28 @@ Remaining deferred:
 - Automation action execution beyond rule evaluation
 - Persistent automation logs
 - Real Second Brain filesystem index
+
+## Phase D-pre — app_web → JsApi Factory Wiring
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `app_web.py` exposes `create_js_api()` factory.
+- Factory constructs and wires `CacheDb`, `DashboardService`, `NotificationService`, `ReportService`, `AutomationService`, `SecondBrainService` into `JsApi`.
+- `_SettingsAdapter` bridges `SettingsStore.read()` → `get_settings()` protocol.
+- `app_web` import is Linux-safe (no pywebview at import time).
+- 11 targeted tests cover import safety, factory existence, JsApi identity, and wired delegation for dashboard/notification/settings/report/automation/second_brain.
+
+Latest completed commit:
+
+```text
+c58130b wire app web to js api factory
+```
+
+Known remaining gap:
+
+- `ProjectService` not yet wired — lacks `list_projects`/`get_project`/etc. protocol methods. Deferred to later phase (service protocol adapter work).
 
 ## Phase 0 Boundary
 
