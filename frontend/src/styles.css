@@ -1,1 +1,52 @@
 @import "tailwindcss";
+
+@theme {
+  /* DBS Red — primary brand */
+  --color-dbs-red: #B91C1C;
+  --color-dbs-red-hover: #991B1B;
+  --color-dbs-red-active: #DC2626;
+
+  /* Charcoal sidebar */
+  --color-sidebar-950: #0A0A0B;
+  --color-sidebar-900: #141416;
+  --color-sidebar-800: #1F1F23;
+
+  /* Workspace */
+  --color-workspace: #F7F7F8;
+  --color-border: #E5E7EB;
+
+  /* Text */
+  --color-ink: #111111;
+  --color-muted: #6B7280;
+
+  /* Shadows — minimal only */
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+@layer base {
+  html {
+    font-family:
+      "Segoe UI",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+}
