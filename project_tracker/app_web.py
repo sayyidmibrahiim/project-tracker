@@ -31,6 +31,12 @@ from project_tracker.services.teams_service import TeamsMessage
 from project_tracker.web.js_api import JsApi
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SVELTE_STATIC_DIR = PROJECT_ROOT / "web" / "static"
+SVELTE_ENTRY_PATH = SVELTE_STATIC_DIR / "index.html"
+VITE_DEV_SERVER_URL = "http://localhost:5173"
+
+
 class AppAPI:
     """JavaScript bridge exposed as ``pywebview.api``."""
 
@@ -434,19 +440,37 @@ def create_js_api(
     )
 
 
-def run() -> None:
+def get_frontend_entry_path(*, project_root: Path = PROJECT_ROOT) -> Path:
+    """Return production Svelte frontend entry path."""
+    entry_path = project_root / "web" / "static" / "index.html"
+    if not entry_path.is_file():
+        raise FileNotFoundError(
+            f"Built Svelte frontend not found: {entry_path}. Run `npm run build` from frontend/."
+        )
+    return entry_path
+
+
+def resolve_frontend_url(*, dev: bool = False, project_root: Path = PROJECT_ROOT) -> str:
+    """Return frontend URL/path for dev or production pywebview startup."""
+    if dev:
+        return VITE_DEV_SERVER_URL
+    get_frontend_entry_path(project_root=project_root)
+    return "web/static/index.html"
+
+
+def run(*, dev: bool = False, start_webview: bool = True) -> None:
     """Create webview window and start pywebview on main thread."""
-    frontend_path = Path(__file__).resolve().parent.parent / "frontend" / "dashboard.html"
     webview.create_window(
         "Project Tracker DBS",
-        frontend_path.as_uri(),
-        js_api=AppAPI(),
+        url=resolve_frontend_url(dev=dev),
+        js_api=create_js_api(),
         width=1200,
         height=760,
         min_size=(960, 640),
     )
-    webview.start()
+    if start_webview:
+        webview.start(http_server=True)
 
 
 if __name__ == "__main__":
-    run()
+    run(dev="--dev" in sys.argv)
