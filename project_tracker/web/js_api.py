@@ -118,6 +118,15 @@ class ProjectServiceProtocol(Protocol):
     def open_folder(self, project_path: Path) -> None:
         """Open project folder in OS file manager."""
 
+    def create_project(self, data: dict[str, object]) -> object:
+        """Create project and return project DTO."""
+
+    def update_project(self, project_path: Path, data: dict[str, object]) -> object:
+        """Update project and return project DTO."""
+
+    def rename_project(self, project_path: Path, new_name: str) -> object:
+        """Rename project and return project DTO."""
+
 
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
@@ -276,6 +285,39 @@ class JsApi:
             return ok()
         except Exception as exc:
             return fail(str(exc), code="PROJECT_OPEN_FOLDER_FAILED")
+
+    def project_create(self, data: dict[str, object]) -> dict[str, object]:
+        """Create project through service layer."""
+        try:
+            return ok(_to_frontend_safe(self._project_service.create_project(data)))
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_CREATE_FAILED")
+
+    def project_update(
+        self,
+        project_path: str,
+        data: dict[str, object],
+    ) -> dict[str, object]:
+        """Update project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.update_project(Path(project_path), data)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_UPDATE_FAILED")
+
+    def project_rename(self, project_path: str, new_name: str) -> dict[str, object]:
+        """Rename project through service layer."""
+        try:
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.rename_project(Path(project_path), new_name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_RENAME_FAILED")
 
     def report_filter_projects(
         self,
