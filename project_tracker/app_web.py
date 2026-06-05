@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
@@ -13,14 +14,21 @@ import webview
 
 from project_tracker.core.enums import ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
+from project_tracker.infrastructure.cache_db import CacheDb
 from project_tracker.infrastructure.filesystem import scan_year
 from project_tracker.infrastructure.link_bank_store import LinkBankStore
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.infrastructure.settings_store import SettingsStore
+from project_tracker.services.automation_service import AutomationService
+from project_tracker.services.dashboard_service import DashboardService
 from project_tracker.services.email_service import EmailService
+from project_tracker.services.notification_service import NotificationService
 from project_tracker.services.project_service import ProjectService
+from project_tracker.services.report_service import ReportService
 from project_tracker.services.safe_delete_service import SafeDeleteService
+from project_tracker.services.second_brain_service import SecondBrainService
 from project_tracker.services.teams_service import TeamsMessage
+from project_tracker.web.js_api import JsApi
 
 
 class AppAPI:
@@ -328,6 +336,65 @@ class AppAPI:
 
     def _json_datetime(self, value: datetime | None) -> str | None:
         return value.isoformat() if value else None
+
+
+def create_js_api(
+    *,
+    db_path: Path | None = None,
+    settings_store: SettingsStore | None = None,
+) -> JsApi:
+    """Create wired JsApi with all available service dependencies.
+
+    Args:
+        db_path: Optional override for SQLite cache database path.
+            When None, a temporary database is used (test/dev default).
+        settings_store: Optional override for settings store.
+            When None, a fresh SettingsStore is created.
+
+    Returns:
+        JsApi with all available service dependencies wired.
+    """
+    _db_path = db_path or Path(tempfile.gettempdir()) / "project_tracker_cache.db"
+    cache_db = CacheDb(_db_path)
+    cache_db.initialize()
+
+    _settings_store = settings_store or SettingsStore()
+
+    # ── services ─────────────────────────────────────────────────────
+    dashboard_svc = DashboardService(cache=cache_db)
+    notification_svc = NotificationService()
+    report_svc = ReportService(dashboard_service=dashboard_svc)
+    automation_svc = AutomationService()
+    second_brain_svc = SecondBrainService()
+
+    # ── settings adapter (SettingsStore.read() → get_settings()) ──────
+    class _SettingsAdapter:
+        """Thin adapter exposing SettingsStore as JsApi protocol."""
+
+        def __init__(self, store: SettingsStore) -> None:
+            self._store = store
+
+        def get_settings(self) -> object:
+            return self._store.read().to_dict()
+
+        def update_settings(self, data: dict[str, object]) -> object:
+            current = self._store.read().to_dict()
+            current.update(data)
+            settings = AppSettings.from_dict(current)
+            self._store.write(settings)
+            return {"ok": True, "settings": settings.to_dict()}
+
+    # ── JsApi ─────────────────────────────────────────────────────────
+    return JsApi(
+        dashboard_service=dashboard_svc,
+        notification_service=notification_svc,
+        report_service=report_svc,
+        settings_store=_SettingsAdapter(_settings_store),
+        automation_service=automation_svc,
+        second_brain_service=second_brain_svc,
+        # project_service omitted — ProjectService needs protocol adapter
+        # (missing list_projects/get_project/create_project etc.)
+    )
 
 
 def run() -> None:
