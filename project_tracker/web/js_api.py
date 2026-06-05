@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
+from project_tracker.core.rules import validate_windows_folder_name
 from project_tracker.web.event_queue import drain_events
 
 
@@ -81,6 +82,9 @@ class NotificationServiceProtocol(Protocol):
     def dismiss(self, notification_id: str) -> None:
         """Dismiss notification."""
 
+    def dismiss_all(self) -> int:
+        """Dismiss all notifications and return count."""
+
 
 class ScannerServiceProtocol(Protocol):
     """Scanner service surface used by JsApi."""
@@ -104,6 +108,13 @@ class SchedulerServiceProtocol(Protocol):
 
     def run_once(self) -> None:
         """Run scheduled job once."""
+
+
+class YearServiceProtocol(Protocol):
+    """Year service surface used by JsApi."""
+
+    def list_years(self) -> object:
+        """Return available years."""
 
 
 class ProjectServiceProtocol(Protocol):
@@ -193,6 +204,7 @@ class JsApi:
         scheduler_service: SchedulerServiceProtocol | None = None,
         report_service: ReportServiceProtocol | None = None,
         project_service: ProjectServiceProtocol | None = None,
+        year_service: YearServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -200,6 +212,34 @@ class JsApi:
         self._scheduler_service = scheduler_service
         self._report_service = report_service
         self._project_service = project_service
+        self._year_service = year_service
+
+    def app_get_status(self) -> dict[str, object]:
+        """Return static app/backend status."""
+        return ok(
+            {
+                "app_name": "Project Tracker DBS",
+                "backend": "python",
+                "phase": "phase_c_js_api",
+            }
+        )
+
+    def util_validate_windows_folder_name(self, name: str) -> dict[str, object]:
+        """Validate Windows-safe folder name without filesystem mutation."""
+        try:
+            validate_windows_folder_name(name)
+            return ok({"valid": True, "error": None})
+        except Exception as exc:
+            return ok({"valid": False, "error": str(exc)})
+
+    def year_list(self) -> dict[str, object]:
+        """Return years from injected year service."""
+        try:
+            if self._year_service is None:
+                raise RuntimeError("year_service is not configured")
+            return ok(_to_frontend_safe(self._year_service.list_years()))
+        except Exception as exc:
+            return fail(str(exc), code="YEAR_LIST_FAILED")
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
@@ -263,6 +303,27 @@ class JsApi:
             return ok()
         except Exception as exc:
             return fail(str(exc), code="NOTIFICATION_DISMISS_FAILED")
+
+    def notification_dismiss_all(self) -> dict[str, object]:
+        """Dismiss all notifications."""
+        try:
+            dismiss_all = getattr(self._notification_service, "dismiss_all", None)
+            if dismiss_all is not None:
+                dismissed = dismiss_all()
+                return ok({"dismissed": dismissed})
+
+            dismissed = 0
+            for notification in self._notification_service.get_undismissed():
+                notification_id = (
+                    notification.get("id")
+                    if isinstance(notification, Mapping)
+                    else getattr(notification, "id")
+                )
+                self._notification_service.dismiss(str(notification_id))
+                dismissed += 1
+            return ok({"dismissed": dismissed})
+        except Exception as exc:
+            return fail(str(exc), code="NOTIFICATION_DISMISS_ALL_FAILED")
 
     def scanner_rebuild_year(self, year_path: str) -> dict[str, object]:
         """Rebuild scanner cache for one year path."""
