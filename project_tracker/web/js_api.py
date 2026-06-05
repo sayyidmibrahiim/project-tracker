@@ -235,6 +235,23 @@ class LinkBankDependencyProtocol(Protocol):
         """Archive link."""
 
 
+class AutomationServiceProtocol(Protocol):
+    """Automation service surface used by JsApi."""
+
+    def list_rules(self) -> object:
+        """Return all rules."""
+
+    def evaluate_rule(
+        self, rule_id: str, context: dict[str, object]
+    ) -> object:
+        """Evaluate a single rule."""
+
+    def evaluate_all(
+        self, context: dict[str, object]
+    ) -> object:
+        """Evaluate all rules."""
+
+
 class SecondBrainServiceProtocol(Protocol):
     """Second Brain service surface used by JsApi."""
 
@@ -289,6 +306,7 @@ class JsApi:
         linkbank_service: LinkBankDependencyProtocol | None = None,
         linkbank_store: LinkBankDependencyProtocol | None = None,
         second_brain_service: SecondBrainServiceProtocol | None = None,
+        automation_service: AutomationServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -297,6 +315,7 @@ class JsApi:
         self._report_service = report_service
         self._project_service = project_service
         self._year_service = year_service
+        self._automation_service = automation_service
         self._file_service = file_service
         self._notes_service = notes_service
         self._settings_dependency = settings_service or settings_store
@@ -772,6 +791,37 @@ class JsApi:
             return ok(_to_frontend_safe(self._linkbank_dependency.archive_link(link_id)))
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_ARCHIVE_LINK_FAILED")
+
+    def automation_list_rules(self) -> dict[str, object]:
+        """Return automation rules."""
+        try:
+            if self._automation_service is None:
+                return fail("automation_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._automation_service.list_rules()))
+        except Exception as exc:
+            return fail(str(exc), code="AUTOMATION_LIST_RULES_FAILED")
+
+    def automation_evaluate_rule(
+        self, rule_id: str, context: dict[str, object]
+    ) -> dict[str, object]:
+        """Evaluate a single automation rule."""
+        try:
+            if self._automation_service is None:
+                return fail("automation_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._automation_service.evaluate_rule(rule_id, context)))
+        except Exception as exc:
+            return fail(str(exc), code="AUTOMATION_EVALUATE_RULE_FAILED")
+
+    def automation_evaluate_all(
+        self, context: dict[str, object]
+    ) -> dict[str, object]:
+        """Evaluate all automation rules."""
+        try:
+            if self._automation_service is None:
+                return fail("automation_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._automation_service.evaluate_all(context)))
+        except Exception as exc:
+            return fail(str(exc), code="AUTOMATION_EVALUATE_ALL_FAILED")
 
     def second_brain_list(self) -> dict[str, object]:
         """Return Second Brain items."""
