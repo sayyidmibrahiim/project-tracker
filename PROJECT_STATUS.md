@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase C service slice planning — next slice after C.4b**
+**Phase C remaining gap planning — next slice after C.7**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.4b are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.7 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -14,7 +14,7 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.4b service slices.
+Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.7 service and JsApi slices.
 
 Current state:
 
@@ -30,10 +30,17 @@ Current state:
 - Phase C.3c2 ProjectService auto-transition cleanup is implemented and verified.
 - Phase C.4a scheduler service foundation is implemented and verified.
 - Phase C.4b auto-transition scheduler integration is implemented and verified.
+- Phase C.5a JsApi response contract foundation is implemented and verified.
+- Phase C.5b JsApi event polling is implemented and verified.
+- Phase C.5c JsApi dashboard read methods are implemented and verified.
+- Phase C.5d JsApi notification methods are implemented and verified.
+- Phase C.5e-C.5g JsApi scanner, scheduler, and integration service facades are implemented and verified.
+- Phase C.6 ReportService backend foundation is implemented and verified.
+- Phase C.7 JsApi report facade is implemented and verified.
 - Current pywebview shell exists in `project_tracker/app_web.py`, but it still loads static HTML from `frontend/` through a file URI.
 - Static HTML frontend files exist under `frontend/` and are legacy/reference, not migrated production UI.
 - Svelte + TypeScript + Vite structure is missing.
-- `web/js_api.py` bridge module is missing.
+- `web/js_api.py` bridge module is implemented but not wired into `app_web.py` production shell.
 - PyQt6 files under `redesign_ui/` are UX/function reference only and are not production code.
 
 ## Frontend Status
@@ -71,15 +78,16 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service slices complete through C.4b.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service/JsApi slices complete through C.7.
 
 Known remaining gaps against PRD v3.1:
 
-- Target `web/js_api.py` bridge module is missing.
+- `web/js_api.py` exists with response contract, event polling, dashboard, notification, scanner, scheduler, and report facades.
 - `web/event_queue.py` exists with `push_event()`, `drain_events()`, `clear_events()` API.
 - Existing bridge logic lives inside `project_tracker/app_web.py` and does not yet match the PRD bridge architecture.
 - Automation service remains deferred.
-- Report service remains deferred.
+- Project action JsApi facade remains deferred.
+- Settings/link bank JsApi facade remains deferred.
 - Second Brain service remains deferred.
 
 ## PyQt6 Status
