@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase C remaining gap planning — next slice after C.7**
+**Phase C exit audit — remaining frontend/pywebview integration planning**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.7 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -14,7 +14,7 @@ If current code, old docs, comments, folder structure, or reference prototypes c
 
 ## Current Repo Reality Summary
 
-Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.7 service and JsApi slices.
+Repository has completed Phase A core-domain migration slices, Phase B.1 through B.3 infrastructure slices, and Phase C.1 through C.15 service and JsApi slices.
 
 Current state:
 
@@ -78,17 +78,23 @@ web/static/
 
 ## Backend / Infrastructure Status
 
-Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service/JsApi slices complete through C.7.
+Current backend package exists under `project_tracker/`, with Phase A core-domain work, Phase B infrastructure slices complete through B.3, and Phase C service/JsApi slices complete through C.15.
 
 Known remaining gaps against PRD v3.1:
 
-- `web/js_api.py` exists with response contract, event polling, dashboard, notification, scanner, scheduler, and report facades.
+- `web/js_api.py` exists with response contract, event polling, dashboard, notification, scanner, scheduler, report, project read/mutation/action, subproject/file/notes, settings/linkbank, app/util/year, second brain, and automation facades.
 - `web/event_queue.py` exists with `push_event()`, `drain_events()`, `clear_events()` API.
 - Existing bridge logic lives inside `project_tracker/app_web.py` and does not yet match the PRD bridge architecture.
-- Automation service remains deferred.
-- Project action JsApi facade remains deferred.
-- Settings/link bank JsApi facade remains deferred.
-- Second Brain service remains deferred.
+- AutomationService foundation implemented (Phase C.14-C.15).
+- Project action JsApi facade implemented (Phase C.8c-C.8e).
+- Settings/link bank JsApi facade implemented (Phase C.11).
+- SecondBrainService foundation implemented (Phase C.12-C.13).
+- Frontend/pywebview production wiring remains deferred.
+- Outlook/Teams real execution remains deferred (stubs in place).
+- Automation action execution beyond rule evaluation remains deferred.
+- Persistent automation logs not yet implemented.
+- Real Second Brain filesystem index not yet implemented.
+- Actual Windows manual testing remains deferred.
 
 ## PyQt6 Status
 
@@ -350,26 +356,21 @@ py_compile completed with no output
 
 ## Next Recommended Phase
 
-**Next Phase C service slice planning**
+**Phase C exit audit complete — next: frontend/pywebview integration planning**
 
-Recommended next slice:
+Phase C backend service and JsApi facade slices (C.1 through C.15) are complete with 330 tests passing.
 
-- Select next Phase C service slice from remaining PRD gaps.
-- Keep changes surgical and phase-scoped.
-- Add targeted tests for selected service slice.
-- Run full Python test suite.
-- Update `PROJECT_STATUS.md` with next slice status.
+Remaining PRD v3.1 gaps:
 
-Deferred (not yet implemented):
+- Frontend Svelte + TypeScript + Vite + Tailwind production UI
+- pywebview bridge wiring to JsApi
+- Actual Windows manual testing
+- Outlook/Teams real execution (stubs in place)
+- Automation action execution beyond rule evaluation
+- Persistent automation logs
+- Real Second Brain filesystem index
 
-- `BridgeResponse` dataclass / `web/js_api.py`
-- frontend / Svelte / pywebview bridge
-- `automation_service.py`
-- `report_service.py` / CSV export
-- `second_brain_service.py`
-- actual Windows manual testing
-
-Do not start Svelte, pywebview bridge rewrite, automation/report/second-brain services, or frontend migration until the appropriate later phase is approved.
+Do not start frontend migration or Svelte project scaffolding until the appropriate phase is approved.
 
 ## Phase C Progress
 
@@ -552,6 +553,118 @@ Working tree: clean before PROJECT_STATUS.md update
 Tests: 266 passed
 Latest completed commit: 15fee00 implement phase C.7 js api report facade
 ```
+
+### Phase C.8a — Project read JsApi facade
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+54fae8e implement phase C.8a js api project read facade
+```
+
+### Phase C.8b — Project mutation JsApi facade
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+ee90285 implement phase C.8b js api project mutations
+```
+
+### Phase C.8c-C.8e — CR/Drone/folder transition JsApi facades
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+25e6054 implement phase C.8c-C.8e js api project actions
+```
+
+### Phase C.9 — App/util/year JsApi facades
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- App info, utility, and year JsApi facades.
+- `notification_dismiss_all` method.
+
+Latest completed commit:
+
+```text
+e9bf2d1 implement phase C.9 js api app util year facades
+```
+
+### Phase C.10 — Subproject/file/notes JsApi facades
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+5c890a7 implement phase C.10 js api subproject file notes facades
+```
+
+### Phase C.11 — Settings/linkbank JsApi facades
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+e84b91a implement phase C.11 js api settings linkbank facades
+```
+
+### Phase C.12-C.13 — SecondBrainService + JsApi facade
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+6f2c6a4 implement phase C.12-C.13 second brain service and js api
+```
+
+### Phase C.14-C.15 — AutomationService + JsApi facade
+
+Status: completed and verified on Linux.
+
+Latest completed commit:
+
+```text
+6b36042 implement phase C.14-C.15 automation service and js api
+```
+
+## Phase C Exit Audit
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+Tests: 330 passed
+Latest completed commit: 6b36042 implement phase C.14-C.15 automation service and js api
+```
+
+Phase C backend service and JsApi facade slices (C.1 through C.15) are complete and verified on Linux.
+
+All previously deferred items now implemented:
+
+- Project action JsApi facade (C.8c-C.8e)
+- Settings/linkbank JsApi facade (C.11)
+- SecondBrainService foundation (C.12-C.13)
+- AutomationService foundation (C.14-C.15)
+
+Remaining deferred:
+
+- Frontend / pywebview production wiring
+- Actual Windows manual testing
+- Outlook/Teams real execution
+- Automation action execution beyond rule evaluation
+- Persistent automation logs
+- Real Second Brain filesystem index
 
 ## Phase 0 Boundary
 
