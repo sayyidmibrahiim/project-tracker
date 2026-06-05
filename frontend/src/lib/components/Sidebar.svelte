@@ -1,5 +1,21 @@
 <script lang="ts">
-  let { currentPage, onNavigate }: { currentPage: string; onNavigate: (id: string) => void } = $props();
+  import type { NotificationItem } from "../types";
+
+  let {
+    currentPage,
+    onNavigate,
+    notifications,
+    notifLoadState,
+    onDismiss,
+    onDismissAll,
+  }: {
+    currentPage: string;
+    onNavigate: (id: string) => void;
+    notifications: NotificationItem[];
+    notifLoadState: "loading" | "error" | "loaded" | "idle";
+    onDismiss: (id: string) => void;
+    onDismissAll: () => void;
+  } = $props();
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "◔" },
@@ -10,20 +26,21 @@
     { id: "settings", label: "Settings", icon: "◌" },
   ];
 
-  const notifications = [
-    {
-      id: "1",
-      title: "T-10 reminder",
-      time: "Just now",
-      message: "Approval check visual sample. Check UAT Prepare approvals.",
-    },
-    {
-      id: "2",
-      title: "Folder scan",
-      time: "5m ago",
-      message: "2 projects found under year 2026.",
-    },
-  ];
+  function formatTime(iso: string): string {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const now = Date.now();
+      const diffMs = now - d.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return "Just now";
+      if (diffMin < 60) return `${diffMin}m ago`;
+      if (diffMin < 1440) return `${Math.floor(diffMin / 60)}h ago`;
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    } catch {
+      return iso;
+    }
+  }
 </script>
 
 <aside class="sidebar">
@@ -53,20 +70,76 @@
       <span class="notif-title">
         <span class="notif-dot">●</span>
         Notifications
+        {#if notifications.length > 0}
+          <span class="notif-count">{notifications.length}</span>
+        {/if}
       </span>
-      <button class="notif-dismiss">Dismiss</button>
+      {#if notifications.length > 0}
+        <button class="notif-dismiss" onclick={() => onDismissAll()}>Dismiss all</button>
+      {/if}
     </div>
     <div class="notif-list">
-      {#each notifications as n}
-        <article class="notif-item">
-          <p class="notif-item-title">{n.title}</p>
-          <p class="notif-item-time">{n.time}</p>
-          <p class="notif-item-msg">{n.message}</p>
-        </article>
-      {/each}
+      {#if notifLoadState === "loading"}
+        <div class="notif-placeholder">Loading notifications…</div>
+      {:else if notifLoadState === "error"}
+        <div class="notif-placeholder notif-error">Notifications unavailable</div>
+      {:else if notifications.length === 0}
+        <div class="notif-placeholder">No notifications</div>
+      {:else}
+        {#each notifications as n}
+          <article class="notif-item">
+            <div class="notif-item-row">
+              <p class="notif-item-title">{n.title}</p>
+              <button
+                class="notif-item-dismiss"
+                title="Dismiss"
+                onclick={() => onDismiss(n.id)}
+              >×</button>
+            </div>
+            <p class="notif-item-time">{formatTime(n.timestamp)}</p>
+            <p class="notif-item-msg">{n.message}</p>
+          </article>
+        {/each}
+      {/if}
     </div>
   </div>
 
   <!-- Footer -->
   <div class="sidebar-footer">v0.1.0 · Svelte + Vite</div>
 </aside>
+
+<style>
+  .notif-count {
+    background: var(--color-dbs-red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 900;
+    padding: 1px 5px;
+    border-radius: 9px;
+    margin-left: 4px;
+  }
+  .notif-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .notif-item-dismiss {
+    border: 0;
+    background: transparent;
+    color: var(--color-muted-light);
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+  }
+  .notif-item-dismiss:hover { color: var(--color-dbs-red); }
+  .notif-placeholder {
+    color: var(--color-muted-light);
+    font-size: 10px;
+    font-weight: 650;
+    text-align: center;
+    padding: 16px 4px;
+  }
+  .notif-error { color: var(--color-dbs-red); }
+</style>

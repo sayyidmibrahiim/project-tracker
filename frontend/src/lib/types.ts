@@ -80,3 +80,23 @@ export interface DashboardData {
   projects: DashboardProject[];
   summary: DashboardSummary;
 }
+
+// ── Notification / Event DTOs ──
+
+/** Mirrors notification item after _to_frontend_safe. */
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  project_path: string | null;
+  dismissed: boolean;
+}
+
+/** Mirrors event queue item after drain_events. */
+export interface EventItem {
+  type: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
