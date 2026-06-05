@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase C exit audit — remaining frontend/pywebview integration planning**
+**Phase D.1–D.7 complete — Svelte frontend scaffold, design shell, dashboard, bridge, and notifications**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.7 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -45,35 +45,23 @@ Current state:
 
 ## Frontend Status
 
-Static HTML frontend is **legacy/reference only**.
+Svelte + TypeScript + Vite + Tailwind frontend scaffold is **complete** (Phase D.1–D.7).
 
-Files such as these are not PRD v3.1 migrated screens:
+Existing static HTML files under `frontend/` remain as **legacy/reference only** — not wired into the production shell.
 
-- `frontend/index.html`
-- `frontend/dashboard.html`
-- `frontend/project_detail.html`
-- `frontend/second_brain.html`
-- `frontend/report.html`
-- `frontend/automations.html`
-- `frontend/settings.html`
-- `frontend/assets/tailwind.min.js`
+Production frontend build outputs to `web/static/` via `vite build`. The Vite build is clean and ready for pywebview serve-folder wiring. `svelte-check` passes with zero errors.
 
-Production frontend target remains:
-
-- Svelte
-- TypeScript
-- Vite
-- Tailwind CSS bundled locally through the frontend build
-- Vite output served by pywebview through `web/static/` / serve-folder mode
-
-Current missing frontend structure:
+Production frontend structure present:
 
 ```text
-frontend/package.json
-frontend/tsconfig.json
-frontend/vite.config.ts
-frontend/src/
-web/static/
+frontend/package.json          ✓ Svelte 5 + Vite 6 + Tailwind 4
+frontend/tsconfig.json          ✓ TypeScript 5.8
+frontend/vite.config.ts         ✓ outDir: ../web/static
+frontend/src/App.svelte         ✓ Shell + notifications + polling
+frontend/src/lib/bridge.ts      ✓ Typed pywebview bridge wrapper
+frontend/src/lib/types.ts       ✓ TS interfaces mirror Python DTOs
+frontend/src/lib/components/    ✓ Sidebar, Header, Dashboard
+web/static/                     ✓ Vite build output (production ready)
 ```
 
 ## Backend / Infrastructure Status
@@ -687,6 +675,174 @@ c58130b wire app web to js api factory
 Known remaining gap:
 
 - `ProjectService` not yet wired — lacks `list_projects`/`get_project`/etc. protocol methods. Deferred to later phase (service protocol adapter work).
+
+## Phase D Progress
+
+### Phase D.1 — Svelte frontend scaffold
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `frontend/package.json` with Svelte 5, Vite 6, TypeScript 5.8, Tailwind 4.
+- `frontend/tsconfig.json` with strict mode and Svelte integration.
+- `frontend/vite.config.ts` with `@sveltejs/vite-plugin-svelte` and `@tailwindcss/vite`.
+- `frontend/src/app.html` pywebview HTML shell.
+- `frontend/src/main.ts` Vite entry point with `App.svelte` mount.
+- `npm run check` (svelte-check) passes: 0 errors, 0 warnings.
+- `npm run build` (vite build) outputs to `web/static/` cleanly.
+
+Latest completed commit:
+
+```text
+c4b4974 implement phase D.1 svelte frontend scaffold
+```
+
+### Phase D.2 — Frontend design shell
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- Global CSS with enterprise banking color palette, typography (Inter), and component standards from PRD §6.
+- `App.svelte` shell layout: sidebar + header + page content area.
+- `Sidebar.svelte` with 6 nav items (Dashboard, Project Details, Second Brain, Report, Automations, Settings) + notification panel + footer.
+- `Header.svelte` with page title + divider, datetime badge, year dropdown, search input, filter dropdown, Add Project button, refresh button.
+- Tailwind bundled locally via Vite — no CDN.
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+fd76c0b implement phase D.2 frontend design shell
+```
+
+### Phase D.3 — Static dashboard layout
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `Dashboard.svelte` with KPI status filter bar (All, UAT Prepare, Prod Ready, Implemented, Postponed).
+- Table card with header "CR - Project Summary Table" and 10 columns (No, Main Project, Sub Project, Start Datetime, End Datetime, Drone Ticket, Drone State, CR Number, CR State, Actions).
+- Static placeholder rows rendered with alternating row colors.
+- Filter tabs toggle active state (UI-only, no data binding yet).
+- Loading, error, idle state banners.
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+80c9342 implement phase D.3 static dashboard layout
+```
+
+### Phase D.4 — Frontend bridge wrapper
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `bridge.ts` with `isPywebviewReady()`, `callBridge<T>()` typed wrapper.
+- `BridgeResponse<T>`, `BridgeErrorCode`, `PywebviewApi` types.
+- Graceful fallback when `window.pywebview.api` missing (dev/browser mode).
+- Three error codes: `BRIDGE_UNAVAILABLE`, `BRIDGE_METHOD_MISSING`, `BRIDGE_CALL_FAILED`.
+- Passes through `{ ok, data, error }` BridgeResponse-shaped dicts.
+- Wraps non-BridgeResponse returns as `{ ok: true, data }`.
+- `DashboardProject`, `DashboardSummary`, `DashboardData`, `NotificationItem`, `EventItem` TypeScript interfaces.
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+f78080f implement phase D.4 frontend bridge wrapper
+```
+
+### Phase D.5 — Dashboard read binding
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `Dashboard.svelte` calls `dashboard_list_projects` via bridge on mount/year change/refresh.
+- Bridge-unavailable state: clear error with code `BRIDGE_UNAVAILABLE`.
+- Bridge-available state: loading → loaded with real projects from backend.
+- Status filter tabs show live counts from `DashboardSummary` via `by_project_state`.
+- Table renders real `DashboardProject` rows with date formatting, project name, CR number, CR state.
+- Search filters visible rows in-memory (debounce handled by parent).
+- `$effect()` re-fetches on `selectedYear` or `fetchKey` change.
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+3e8ce99 implement phase D.5 dashboard read binding
+```
+
+### Phase D.6 — Dashboard controls behavior
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- Year dropdown in Header triggers `onYearChange` → re-fetches dashboard for selected year.
+- Search input triggers `onSearchChange` → filters visible rows by project name, CR number, CR state, project state, year, project_path.
+- Refresh button triggers `onRefresh` → increments `fetchKey` → re-fetches dashboard.
+- "Add Project" button present in header (UI-only, no navigation wired yet — deferred to project details phase).
+- Filter dropdown present in header (UI-only, no backend filter yet).
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+8ccbcef implement phase D.6 dashboard controls behavior
+```
+
+### Phase D.7 — Notification event binding
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `App.svelte` loads notifications on mount via `notification_list` bridge call.
+- Dismiss single notification via `notification_dismiss` bridge call with optimistic UI removal.
+- Dismiss all notifications via `notification_dismiss_all` bridge call.
+- Event polling at 5-second interval via `poll_events` bridge call.
+- On `NOTIFICATION` event received → re-fetches notification list.
+- `Sidebar.svelte` renders notifications from parent with loading/error/empty states.
+- Notification items show title, relative time (Just now / Xm ago / Xh ago / date), message, dismiss button.
+- Bridge-unavailable state handled gracefully (no polling started, notifications show unavailable).
+- `svelte-check` clean, `vite build` clean.
+
+Latest completed commit:
+
+```text
+44e5182 implement phase D.7 notification event binding
+```
+
+## Phase D Exit Audit
+
+```text
+Branch: prd-v31-migration
+Working tree: 2 untracked files (frontend/package-lock.json, redesign_ui/*.html)
+svelte-check: 84 files, 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests: 348 passed
+Latest completed commit: 44e5182 implement phase D.7 notification event binding
+```
+
+Phase D.1 through D.7 frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, and notification event binding are complete and verified on Linux.
+
+Remaining deferred:
+
+- app/pywebview production wiring to built Svelte output (`serve_folder="web/static"`)
+- dashboard mutations / project actions (inline state changes, CR/Drone link paste, row action menu)
+- project details page
+- report page frontend
+- settings/link bank frontend
+- second brain frontend
+- automations frontend
+- Windows manual test
+- packaging
 
 ## Phase 0 Boundary
 
