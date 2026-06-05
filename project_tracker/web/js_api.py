@@ -106,6 +106,19 @@ class SchedulerServiceProtocol(Protocol):
         """Run scheduled job once."""
 
 
+class ProjectServiceProtocol(Protocol):
+    """Project service surface used by JsApi (read-only slice)."""
+
+    def get_project(self, project_path: Path) -> object:
+        """Return full project detail DTO."""
+
+    def list_projects(self, year: str | None = None) -> object:
+        """Return project list DTOs."""
+
+    def open_folder(self, project_path: Path) -> None:
+        """Open project folder in OS file manager."""
+
+
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
 
@@ -132,12 +145,14 @@ class JsApi:
         scanner_service: ScannerServiceProtocol | None = None,
         scheduler_service: SchedulerServiceProtocol | None = None,
         report_service: ReportServiceProtocol | None = None,
+        project_service: ProjectServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
         self._scanner_service = scanner_service
         self._scheduler_service = scheduler_service
         self._report_service = report_service
+        self._project_service = project_service
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
@@ -239,6 +254,28 @@ class JsApi:
             return ok(_scheduler_status_payload(self._scheduler_service))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_STATUS_FAILED")
+
+    def project_get(self, project_path: str) -> dict[str, object]:
+        """Return full project detail."""
+        try:
+            return ok(_to_frontend_safe(self._project_service.get_project(Path(project_path))))
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_GET_FAILED")
+
+    def project_list(self, year: str | None = None) -> dict[str, object]:
+        """Return project list."""
+        try:
+            return ok(_to_frontend_safe(self._project_service.list_projects(year)))
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_LIST_FAILED")
+
+    def project_open_folder(self, project_path: str) -> dict[str, object]:
+        """Open project folder in OS file manager."""
+        try:
+            self._project_service.open_folder(Path(project_path))
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_OPEN_FOLDER_FAILED")
 
     def report_filter_projects(
         self,
