@@ -106,6 +106,22 @@ class SchedulerServiceProtocol(Protocol):
         """Run scheduled job once."""
 
 
+class ReportServiceProtocol(Protocol):
+    """Report service surface used by JsApi."""
+
+    def filter_projects(
+        self,
+        year: str | None = None,
+        project_state: object | None = None,
+        cr_state: object | None = None,
+        search: str | None = None,
+    ) -> object:
+        """Return filtered report project DTOs."""
+
+    def export_csv(self, projects: object) -> str:
+        """Return CSV export text."""
+
+
 class JsApi:
     """pywebview-safe API facade without importing pywebview."""
 
@@ -115,11 +131,13 @@ class JsApi:
         notification_service: NotificationServiceProtocol | None = None,
         scanner_service: ScannerServiceProtocol | None = None,
         scheduler_service: SchedulerServiceProtocol | None = None,
+        report_service: ReportServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
         self._scanner_service = scanner_service
         self._scheduler_service = scheduler_service
+        self._report_service = report_service
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
@@ -221,6 +239,44 @@ class JsApi:
             return ok(_scheduler_status_payload(self._scheduler_service))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_STATUS_FAILED")
+
+    def report_filter_projects(
+        self,
+        year: str | None = None,
+        project_state: object | None = None,
+        cr_state: object | None = None,
+        search: str | None = None,
+    ) -> dict[str, object]:
+        """Return filtered report projects."""
+        try:
+            projects = self._report_service.filter_projects(
+                year=year,
+                project_state=project_state,
+                cr_state=cr_state,
+                search=search,
+            )
+            return ok(_to_frontend_safe(projects))
+        except Exception as exc:
+            return fail(str(exc), code="REPORT_FILTER_PROJECTS_FAILED")
+
+    def report_export_csv(
+        self,
+        year: str | None = None,
+        project_state: object | None = None,
+        cr_state: object | None = None,
+        search: str | None = None,
+    ) -> dict[str, object]:
+        """Return CSV text for filtered report projects."""
+        try:
+            projects = self._report_service.filter_projects(
+                year=year,
+                project_state=project_state,
+                cr_state=cr_state,
+                search=search,
+            )
+            return ok(self._report_service.export_csv(projects))
+        except Exception as exc:
+            return fail(str(exc), code="REPORT_EXPORT_CSV_FAILED")
 
 
 def _scheduler_status_payload(scheduler_service: SchedulerServiceProtocol) -> dict[str, object]:
