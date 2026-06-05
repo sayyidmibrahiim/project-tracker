@@ -342,6 +342,7 @@ def create_js_api(
     *,
     db_path: Path | None = None,
     settings_store: SettingsStore | None = None,
+    _dashboard_service: object = None,
 ) -> JsApi:
     """Create wired JsApi with all available service dependencies.
 
@@ -350,6 +351,7 @@ def create_js_api(
             When None, a temporary database is used (test/dev default).
         settings_store: Optional override for settings store.
             When None, a fresh SettingsStore is created.
+        _dashboard_service: Optional override for dashboard service (test only).
 
     Returns:
         JsApi with all available service dependencies wired.
@@ -361,7 +363,7 @@ def create_js_api(
     _settings_store = settings_store or SettingsStore()
 
     # ── services ─────────────────────────────────────────────────────
-    dashboard_svc = DashboardService(cache=cache_db)
+    dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
     notification_svc = NotificationService()
     report_svc = ReportService(dashboard_service=dashboard_svc)
     automation_svc = AutomationService()
@@ -384,16 +386,51 @@ def create_js_api(
             self._store.write(settings)
             return {"ok": True, "settings": settings.to_dict()}
 
+    # ── project service adapter (dashboard → project protocol) ────────
+    class _ProjectServiceAdapter:
+        """Thin adapter: delegates list to DashboardService.
+
+        JsApi.project_list() calls list_projects(year); DashboardService
+        already has that.  Mutations (create/update/delete/rename/folder-*)
+        are not yet wired and return controlled errors.
+        """
+
+        def __init__(self, dashboard: object) -> None:
+            self._dashboard = dashboard
+
+        def list_projects(self, year: str | None = None) -> object:
+            return self._dashboard.list_projects(year)
+
+        # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
+        get_project = None  # type: ignore[assignment]
+        open_folder = None  # type: ignore[assignment]
+        create_project = None  # type: ignore[assignment]
+        update_project = None  # type: ignore[assignment]
+        rename_project = None  # type: ignore[assignment]
+        update_cr_link = None  # type: ignore[assignment]
+        update_cr_state = None  # type: ignore[assignment]
+        add_drone = None  # type: ignore[assignment]
+        update_drone = None  # type: ignore[assignment]
+        delete_drone = None  # type: ignore[assignment]
+        move_to_prod_ready = None  # type: ignore[assignment]
+        move_to_implemented = None  # type: ignore[assignment]
+        postpone_project = None  # type: ignore[assignment]
+        resume_project = None  # type: ignore[assignment]
+        cancel_project = None  # type: ignore[assignment]
+        reopen_project = None  # type: ignore[assignment]
+        list_subprojects = None  # type: ignore[assignment]
+        create_subproject = None  # type: ignore[assignment]
+        delete_subproject = None  # type: ignore[assignment]
+
     # ── JsApi ─────────────────────────────────────────────────────────
     return JsApi(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
         report_service=report_svc,
+        project_service=_ProjectServiceAdapter(dashboard_svc),
         settings_store=_SettingsAdapter(_settings_store),
         automation_service=automation_svc,
         second_brain_service=second_brain_svc,
-        # project_service omitted — ProjectService needs protocol adapter
-        # (missing list_projects/get_project/create_project etc.)
     )
 
 

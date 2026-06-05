@@ -78,18 +78,13 @@ def test_create_js_api_wires_settings_service():
 # ── RED 6: factory wires project service ──────────────────────────────────
 
 def test_create_js_api_wires_project_service():
-    """JsApi from factory returns SERVICE_UNAVAILABLE for project_list.
-
-    ProjectService does not yet implement the full ProjectServiceProtocol
-    (list_projects/get_project/etc.). This is a known gap for a later phase.
-    """
+    """JsApi from factory delegates project_list to adapter (wired via D-pre.2)."""
     from project_tracker import app_web
 
     api = app_web.create_js_api()
     result = api.project_list()
     assert isinstance(result, dict)
-    assert result.get("ok") is False
-    assert result.get("error", {}).get("code") == "PROJECT_LIST_FAILED"
+    assert result.get("ok") is True
 
 
 # ── RED 7: factory wires automation service ───────────────────────────────
