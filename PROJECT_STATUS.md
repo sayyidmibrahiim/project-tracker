@@ -544,6 +544,15 @@ Tests: 222 passed
 Latest completed commit: 39f2370 implement phase C.4b auto-transition scheduler integration
 ```
 
+Phase C.7 audit evidence:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean before PROJECT_STATUS.md update
+Tests: 266 passed
+Latest completed commit: 15fee00 implement phase C.7 js api report facade
+```
+
 ## Phase 0 Boundary
 
 Phase 0 documentation alignment is complete. `PROJECT_STATUS_old.md` remains historical reference unless deletion is explicitly approved.
