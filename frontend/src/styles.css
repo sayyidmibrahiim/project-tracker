@@ -50,6 +50,19 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(45, 61, 52, 0.35); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(45, 61, 52, 0.55); }
+
+  /* ── Global focus-visible ring (accessibility) ── */
+  *:focus-visible {
+    outline: 2px solid var(--color-dbs-red-active);
+    outline-offset: 2px;
+  }
+  /* Suppress focus ring on mouse-click for <button>, <select>, <input> — still visible on keyboard nav */
+  button:focus:not(:focus-visible),
+  select:focus:not(:focus-visible),
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 /* ============================================================
@@ -194,13 +207,12 @@
   cursor: pointer;
 }
 .notif-dismiss:hover { color: #fff; text-decoration: underline; }
-.notif-list { overflow-y: auto; padding-right: 2px; flex: 1; }
+.notif-list { overflow-y: auto; padding-right: 2px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
 .notif-item {
   background: rgba(255, 255, 255, 0.62);
   border: 1px solid rgba(45, 61, 52, 0.10);
   border-radius: 6px;
   padding: 8px;
-  margin-bottom: 8px;
 }
 .notif-item-title { font-size: 11px; font-weight: 900; color: var(--color-ink); margin-bottom: 3px; }
 .notif-item-time { color: rgba(45, 61, 52, 0.75); font-weight: 800; margin-bottom: 3px; font-size: 10px; }
@@ -687,6 +699,61 @@
 /* ============================================================
    Page Placeholder Shells
    ============================================================ */
+
+/* ── Shared page screen pattern — used by all real pages ── */
+.page-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* ── Shared toolbar panel (year/search/actions bar) ── */
+.toolbar-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+  background: var(--color-workspace-panel);
+  border: 1px solid #D7DCE2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.30);
+}
+.toolbar-panel-left { display: flex; align-items: center; gap: 7px; }
+
+/* ── Shared deferred hint badge ── */
+.deferred-hint {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-muted-light);
+  font-style: italic;
+}
+
+/* ── Shared deferred info bar (pink warning) ── */
+.deferred-bar {
+  background: var(--color-soft-pink-surface);
+  border: 1px solid var(--color-soft-pink-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 750;
+  color: var(--color-dbs-red);
+  flex: 0 0 auto;
+}
+
+/* ── Shared disabled control ── */
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .page-placeholder-shell {
   flex: 1;
   min-height: 0;
