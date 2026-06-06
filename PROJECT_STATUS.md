@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase D.1–D.12 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, and link bank read binding**
+**Phase D.1–D.13 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, and second brain notes read-only list/search/detail**
 
 Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.12 are completed and verified on Linux.
 
@@ -925,27 +925,67 @@ Latest completed commit:
 ab195b0 implement phase D.12 link bank read binding
 ```
 
+### Phase D.13 — Read-only frontend pages (Project Details, Automations, Second Brain Notes)
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `ProjectDetails.svelte` replaces placeholder with read-only project list + detail panel.
+  - `project_list` JsApi bound with year filter (dynamic year options from `year_list`).
+  - `project_get` JsApi bound on row select — shows CR info, subprojects, files, notes.
+  - `subproject_list`, `file_list`, `notes_get` JsApi bound in parallel with detail load.
+  - Detail panel: CR number, CR state, start/end datetime, T-10 status, drone ticket count.
+  - Subprojects, files, and notes sections with deferred hints.
+  - Loading, error, empty, loaded states implemented.
+  - All mutations deferred (add/edit/delete, CR/Drone state change, folder move, rename).
+- `Automations.svelte` replaces placeholder with read-only rules tab + evaluate preview.
+  - `automation_list_rules` JsApi bound — renders rules with name, enabled badge, conditions.
+  - `automation_evaluate_rule` JsApi bound per rule — shows Passed/Failed/Skipped result badge.
+  - Tab bar: Rules (live), Outlook (deferred), Teams (deferred), Scheduler (deferred).
+  - No Outlook/Teams/COM/pyautogui execution.
+  - No rule create/edit/delete.
+- `SecondBrain.svelte` Notes tab added alongside preserved Link Bank.
+  - `second_brain_list` JsApi bound on Notes tab mount.
+  - `second_brain_search` JsApi bound via search input (live search, falls back to list on empty).
+  - `second_brain_get` JsApi bound on note row click — detail panel with type, state, flags.
+  - Pin/Favorite/Edit deferred (read-only preview only).
+  - Link Bank D.12 binding preserved unchanged.
+- `App.svelte` routes `project-detail` → `<ProjectDetails />`, `automations` → `<Automations />`.
+  - No more placeholder shells for these two pages.
+- No backend, js_api, package, or dependency changes.
+- `svelte-check` clean (90 files, 0 errors, 0 warnings), `vite build` clean, Python tests 355 passed.
+
+Latest completed commit:
+
+```text
+6eec35b implement phase D.13 read-only frontend pages
+```
+
 ## Phase D Exit Audit
 
 ```text
 Branch: prd-v31-migration
 Working tree: clean
-svelte-check: 88 files, 0 errors, 0 warnings
+svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
 Tests: 355 passed
-Latest completed commit: ab195b0 implement phase D.12 link bank read binding
+Latest completed commit: 6eec35b implement phase D.13 read-only frontend pages
 ```
 
-Phase D.1 through D.12 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, and link bank read binding are complete and verified on Linux.
+Phase D.1 through D.13 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, and second brain notes read-only list/search/detail are complete and verified on Linux.
 
 Remaining deferred:
 
-- Project Details read-only page/data binding
 - Project Details mutations/actions
-- Link Bank add/edit/archive (until stable link identity/backend support exists)
-- Link Bank tags/pin/favorite (until DTO/backend support exists)
-- full Second Brain notes tree/editor/search index
-- Automations frontend page/data binding
+- CR/Drone state changes
+- Folder move/rename/delete
+- File write/delete/open execution
+- Automation rule create/edit/delete
+- Outlook/Teams/COM/pyautogui execution
+- Scheduler real frontend controls
+- Second Brain note write/edit/delete/pin/favorite
+- Link Bank add/edit/archive/tags/pin/favorite
 - Windows manual test
 - packaging
 
