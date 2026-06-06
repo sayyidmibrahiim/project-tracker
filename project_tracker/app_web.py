@@ -14,8 +14,9 @@ import webview
 
 from project_tracker.core.enums import ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
+from project_tracker.core.rules import extract_cr_number
 from project_tracker.infrastructure.cache_db import CacheDb
-from project_tracker.infrastructure.filesystem import scan_year
+from project_tracker.infrastructure.filesystem import discover_subproject_paths, scan_year
 from project_tracker.infrastructure.link_bank_store import LinkBankStore
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.infrastructure.settings_store import SettingsStore
@@ -420,18 +421,48 @@ def create_js_api(
         """Thin adapter: delegates list to DashboardService.
 
         JsApi.project_list() calls list_projects(year); DashboardService
-        already has that.  Mutations (create/update/delete/rename/folder-*)
-        are not yet wired and return controlled errors.
+        already has that.  Read methods get_project/list_subprojects are
+        now wired through MetadataStore.  Mutations (create/update/delete/
+        rename/folder-*) are not yet wired and return controlled errors.
         """
 
-        def __init__(self, dashboard: object) -> None:
+        def __init__(self, dashboard: object, metadata_store: MetadataStore) -> None:
             self._dashboard = dashboard
+            self._metadata_store = metadata_store
 
         def list_projects(self, year: str | None = None) -> object:
             return self._dashboard.list_projects(year)
 
+        # ── wired read methods ──
+
+        def get_project(self, project_path: Path) -> object:
+            """Return project detail from MetadataStore + filesystem."""
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+
+            project_state = ProjectState(path.parent.name)
+            drone_tickets = getattr(metadata, "drone_tickets", None) or []
+            cr_number = extract_cr_number(metadata.cr_link)
+
+            return {
+                "project_name": metadata.project_name or path.name,
+                "project_path": str(path),
+                "project_state": project_state.value,
+                "cr_number": cr_number or "",
+                "cr_state": metadata.cr_state.value,
+                "start_datetime": metadata.start_datetime,
+                "end_datetime": metadata.end_datetime,
+                "t10_status": "N/A",
+                "drone_ticket_count": len(drone_tickets),
+            }
+
+        def list_subprojects(self, project_path: Path) -> object:
+            """Return subproject paths under project_path."""
+            return [str(p) for p in discover_subproject_paths(Path(project_path))]
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
-        get_project = None  # type: ignore[assignment]
         open_folder = None  # type: ignore[assignment]
         create_project = None  # type: ignore[assignment]
         update_project = None  # type: ignore[assignment]
@@ -447,20 +478,75 @@ def create_js_api(
         resume_project = None  # type: ignore[assignment]
         cancel_project = None  # type: ignore[assignment]
         reopen_project = None  # type: ignore[assignment]
-        list_subprojects = None  # type: ignore[assignment]
         create_subproject = None  # type: ignore[assignment]
         delete_subproject = None  # type: ignore[assignment]
 
+    # ── year service adapter (SettingsStore → year list) ──────────────
+    class _YearServiceAdapter:
+        """Read-only year discovery from SettingsStore root_folder."""
+
+        def __init__(self, settings_store: SettingsStore) -> None:
+            self._settings_store = settings_store
+
+        def list_years(self) -> object:
+            settings = self._settings_store.read()
+            root_folder = settings.root_folder
+            if root_folder is None or not root_folder.exists():
+                return []
+            return sorted(
+                child.name
+                for child in root_folder.iterdir()
+                if child.is_dir() and child.name.isdigit()
+            )
+
+    # ── file service adapter (read-only file listing) ─────────────────
+    class _FileServiceAdapter:
+        """Read-only file listing adapter. No open/write/delete."""
+
+        def list_files(self, path: Path) -> object:
+            p = Path(path)
+            if not p.is_dir():
+                return []
+            entries = [
+                {"name": child.name, "path": str(child)}
+                for child in p.iterdir()
+                if child.is_file()
+            ]
+            entries.sort(key=lambda e: e["name"])
+            return entries
+
+        open_file = None  # type: ignore[assignment]
+        open_folder = None  # type: ignore[assignment]
+
+    # ── notes service adapter (MetadataStore → notes) ─────────────────
+    class _NotesServiceAdapter:
+        """Read-only notes adapter. No write."""
+
+        def __init__(self, metadata_store: MetadataStore) -> None:
+            self._metadata_store = metadata_store
+
+        def get_notes(self, project_path: Path) -> object:
+            metadata = self._metadata_store.read(Path(project_path))
+            if metadata is None:
+                return ""
+            return metadata.notes or ""
+
+        update_notes = None  # type: ignore[assignment]
+
     # ── JsApi ─────────────────────────────────────────────────────────
+    _metadata_store = MetadataStore()
     return JsApi(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
         report_service=report_svc,
-        project_service=_ProjectServiceAdapter(dashboard_svc),
+        project_service=_ProjectServiceAdapter(dashboard_svc, _metadata_store),
         settings_store=_SettingsAdapter(_settings_store),
         linkbank_store=_LinkBankAdapter(_linkbank_store),
         automation_service=automation_svc,
         second_brain_service=second_brain_svc,
+        year_service=_YearServiceAdapter(_settings_store),
+        file_service=_FileServiceAdapter(),
+        notes_service=_NotesServiceAdapter(_metadata_store),
     )
 
 
