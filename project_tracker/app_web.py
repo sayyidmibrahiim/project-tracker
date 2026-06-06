@@ -514,7 +514,13 @@ def create_js_api(
             return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
 
         def update_drone(self, project_path: Path, drone_index: int, data: dict[str, object]) -> object:
-            """Update drone ticket fields at index (NOT drone_state)."""
+            """Update drone ticket fields at index.
+
+            Field edits (drone_link/owner/subfolder_name) are metadata-only.
+            ``drone_state``, when present, is routed through the state-machine
+            guard ``validate_drone_state_change_allowed`` which raises
+            InvalidTransitionError on disallowed transitions or empty link.
+            """
             path = Path(project_path)
             metadata = self._metadata_store.read(path)
             if metadata is None:
@@ -528,6 +534,14 @@ def create_js_api(
                 ticket.owner = str(data["owner"])
             if "subfolder_name" in data:
                 ticket.subfolder_name = str(data["subfolder_name"]) or None
+            if "drone_state" in data:
+                from project_tracker.core.enums import DroneState
+                from project_tracker.core.state_machine import validate_drone_state_change_allowed
+
+                target = DroneState(str(data["drone_state"]))
+                validate_drone_state_change_allowed(ticket.drone_link, ticket.drone_state, target)
+                ticket.drone_state = target
+                ticket.drone_state_updated_at = local_now()
             metadata.updated_at = local_now()
             self._metadata_store.write(path, metadata)
             return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}

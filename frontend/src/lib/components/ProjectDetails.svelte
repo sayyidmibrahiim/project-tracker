@@ -49,6 +49,11 @@
   let droneEditLink: string = $state("");
   let droneEditSubfolder: string = $state("");
   let droneEditOwner: string = $state("");
+  // ── Drone state edit state ──
+  const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "CANCELED"];
+  let droneStateEdits: Record<number, string> = $state({});
+  let droneStateBusy: number = $state(-1);
+  let droneStateError: Record<number, string> = $state({});
 
   let yearFilter: string = $state("all");
   let searchText: string = $state("");
@@ -95,6 +100,7 @@
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
     notesEdit = ""; notesSaveState = "idle"; notesSaveError = "";
     droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
+    droneStateEdits = {}; droneStateBusy = -1; droneStateError = {};
     errorCode = ""; errorMessage = "";
 
     if (!isPywebviewReady()) {
@@ -118,6 +124,7 @@
 
     if (detail) crLinkEdit = detail.cr_link || "";
     if (detail) crStateEdit = detail.cr_state || "";
+    if (detail) syncDroneStateEdits();
     notesEdit = notes;
 
     if (!dResp.ok) {
@@ -237,14 +244,37 @@
     await refreshDetail();
   }
 
+  async function saveDroneState(index: number) {
+    if (!selectedPath || !isPywebviewReady() || !detail) return;
+    const newState = droneStateEdits[index];
+    if (!newState || newState === detail.drone_tickets[index]?.drone_state) return;
+    droneStateBusy = index;
+    droneStateError = { ...droneStateError, [index]: "" };
+    const resp = await callBridge("drone_update", selectedPath, index, { drone_state: newState });
+    droneStateBusy = -1;
+    if (!resp.ok) {
+      droneStateError = { ...droneStateError, [index]: resp.error.message };
+      return;
+    }
+    droneStateError = { ...droneStateError, [index]: "" };
+    await refreshDetail();
+  }
+
   async function refreshDetail() {
     if (!selectedPath) return;
     const [dResp, ntResp] = await Promise.all([
       callBridge<ProjectDetail>("project_get", selectedPath),
       callBridge<string>("notes_get", selectedPath),
     ]);
-    if (dResp.ok && dResp.data) { detail = dResp.data; }
+    if (dResp.ok && dResp.data) { detail = dResp.data; syncDroneStateEdits(); }
     if (ntResp.ok) { notes = ntResp.data ?? ""; notesEdit = notes; }
+  }
+
+  function syncDroneStateEdits() {
+    if (!detail) return;
+    const edits: Record<number, string> = {};
+    detail.drone_tickets.forEach((t, i) => { edits[i] = t.drone_state; });
+    droneStateEdits = edits;
   }
 
   async function init() {
@@ -392,11 +422,21 @@
                   {:else}
                     <div class="pd-drone-row">
                       <span class="pd-drone-link">{t.drone_link || "—"}</span>
-                      <span class="pd-drone-state">{t.drone_state}</span>
                       <span class="pd-drone-owner">{t.owner || "—"}</span>
+                      <select class="pd-drone-state-select" value={droneStateEdits[i] ?? t.drone_state} onchange={(e) => { droneStateEdits = { ...droneStateEdits, [i]: (e.target as HTMLSelectElement).value }; }} disabled={droneStateBusy === i}>
+                        {#each DRONE_STATE_OPTIONS as opt}
+                          <option value={opt}>{opt}</option>
+                        {/each}
+                      </select>
+                      <button class="pd-drone-action-btn pd-drone-state-btn" onclick={() => saveDroneState(i)} disabled={droneStateBusy === i || (droneStateEdits[i] ?? t.drone_state) === t.drone_state}>
+                        {#if droneStateBusy === i}…{:else}Save State{/if}
+                      </button>
                       <button class="pd-drone-action-btn" onclick={() => startEditDrone(i, t)} disabled={droneBusy}>Edit</button>
                       <button class="pd-drone-action-btn pd-drone-del" onclick={() => deleteDrone(i)} disabled={droneBusy}>Del</button>
                     </div>
+                    {#if droneStateError[i]}
+                      <p class="cr-link-feedback cr-link-err pd-drone-state-err">✗ {droneStateError[i]}</p>
+                    {/if}
                   {/if}
                 {/each}
               </div>
@@ -508,8 +548,12 @@
   .pd-drone-row, .pd-drone-edit-row, .pd-drone-add-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .pd-drone-add-row { border-top:1px dashed #E5E7EB; padding-top:8px; }
   .pd-drone-link { flex:1; min-width:120px; font-size:10px; font-weight:800; color:var(--color-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pd-drone-state { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border:1px solid var(--color-soft-pink-border); font-size:9px; font-weight:800; white-space:nowrap; }
   .pd-drone-owner { font-size:10px; font-weight:700; color:var(--color-muted); min-width:50px; }
+  .pd-drone-state-select { padding:3px 6px; font-size:9px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; cursor:pointer; flex:0 0 auto; }
+  .pd-drone-state-select:focus { border-color:var(--color-dbs-red); }
+  .pd-drone-state-select:disabled { background:var(--color-workspace-panel); color:var(--color-muted); cursor:not-allowed; }
+  .pd-drone-state-btn { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .pd-drone-state-err { width:100%; margin-top:0; }
   .pd-drone-input { padding:4px 7px; font-size:10px; font-weight:700; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; flex:1; min-width:90px; }
   .pd-drone-input.pd-drone-sm { flex:0 0 90px; min-width:70px; }
   .pd-drone-input:focus { border-color:var(--color-dbs-red); }
