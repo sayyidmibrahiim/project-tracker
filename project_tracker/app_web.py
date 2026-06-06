@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import webview
 
-from project_tracker.core.enums import ProjectState
+from project_tracker.core.enums import CRState, ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
 from project_tracker.core.rules import extract_cr_number
 from project_tracker.infrastructure.cache_db import CacheDb
@@ -545,12 +545,35 @@ def create_js_api(
             self._metadata_store.write(path, metadata)
             return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
 
+        # ── wired mutation: guarded CR state (metadata-only, no folder move) ──
+
+        def update_cr_state(self, project_path: Path, cr_state: str) -> object:
+            """Update CR state through state-machine guard. No folder move."""
+            from project_tracker.core.state_machine import validate_cr_transition
+
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            target = CRState(cr_state)
+            validate_cr_transition(metadata.cr_state, target)
+            now = local_now()
+            metadata.cr_state = target
+            metadata.cr_state_updated_at = now
+            metadata.updated_at = now
+            self._metadata_store.write(path, metadata)
+            project_state = ProjectState(path.parent.name)
+            return {
+                "project_path": str(path),
+                "project_state": project_state.value,
+                "cr_state": target.value,
+            }
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
         open_folder = None  # type: ignore[assignment]
         create_project = None  # type: ignore[assignment]
         update_project = None  # type: ignore[assignment]
         rename_project = None  # type: ignore[assignment]
-        update_cr_state = None  # type: ignore[assignment]
         move_to_prod_ready = None  # type: ignore[assignment]
         move_to_implemented = None  # type: ignore[assignment]
         postpone_project = None  # type: ignore[assignment]

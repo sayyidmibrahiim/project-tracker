@@ -23,6 +23,14 @@
   let crLinkSaveState: CrLinkSave = $state("idle");
   let crLinkSaveError: string = $state("");
 
+  // ── CR State edit state ──
+  // Real CRState enum values (REOPEN excluded — action/event, not a persist target).
+  const CR_STATE_OPTIONS = ["PENDING SUBMISSION", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "POSTPONED", "CANCELED"];
+  let crStateEdit: string = $state("");
+  type CrStateSave = "idle" | "saving" | "success" | "error";
+  let crStateSaveState: CrStateSave = $state("idle");
+  let crStateSaveError: string = $state("");
+
   // ── Notes edit state ──
   let notesEdit: string = $state("");
   type NotesSave = "idle" | "saving" | "success" | "error";
@@ -84,6 +92,7 @@
     detailState = "loading";
     detail = null; subprojects = []; files = []; notes = "";
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
+    crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
     notesEdit = ""; notesSaveState = "idle"; notesSaveError = "";
     droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
     errorCode = ""; errorMessage = "";
@@ -108,6 +117,7 @@
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
 
     if (detail) crLinkEdit = detail.cr_link || "";
+    if (detail) crStateEdit = detail.cr_state || "";
     notesEdit = notes;
 
     if (!dResp.ok) {
@@ -141,6 +151,25 @@
     if (detail) detail.cr_link = crLinkEdit;
     crLinkSaveState = "success";
     setTimeout(() => { if (crLinkSaveState === "success") crLinkSaveState = "idle"; }, 2500);
+  }
+
+  async function saveCrState() {
+    if (!selectedPath || !isPywebviewReady()) {
+      crStateSaveError = "pywebview bridge unavailable.";
+      crStateSaveState = "error";
+      return;
+    }
+    crStateSaveState = "saving";
+    crStateSaveError = "";
+    const resp = await callBridge("cr_update_state", selectedPath, crStateEdit);
+    if (!resp.ok) {
+      crStateSaveError = resp.error.message;
+      crStateSaveState = "error";
+      return;
+    }
+    if (detail) detail.cr_state = crStateEdit;
+    crStateSaveState = "success";
+    setTimeout(() => { if (crStateSaveState === "success") crStateSaveState = "idle"; }, 2500);
   }
 
   async function saveNotes() {
@@ -300,7 +329,26 @@
           </div>
           <dl class="pd-detail-grid">
             <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
-            <div class="pd-dl-item"><dt>CR State</dt><dd>{detail.cr_state || "—"}</dd></div>
+            <div class="pd-dl-item">
+              <dt>CR State</dt>
+              <dd>
+                <div class="cr-state-row">
+                  <select class="cr-state-select" bind:value={crStateEdit} disabled={crStateSaveState === "saving"}>
+                    {#each CR_STATE_OPTIONS as opt}
+                      <option value={opt}>{opt}</option>
+                    {/each}
+                  </select>
+                  <button class="cr-link-save-btn" onclick={saveCrState} disabled={crStateSaveState === "saving" || crStateEdit === detail.cr_state}>
+                    {#if crStateSaveState === "saving"}⏳{:else}Save{/if}
+                  </button>
+                </div>
+                {#if crStateSaveState === "success"}
+                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                {:else if crStateSaveState === "error"}
+                  <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
+                {/if}
+              </dd>
+            </div>
             <div class="pd-dl-item pd-dl-wide">
               <dt>CR Link</dt>
               <dd>
@@ -482,4 +530,8 @@
   .cr-link-feedback { display:inline-block; margin-top:4px; font-size:10px; font-weight:800; }
   .cr-link-ok { color:var(--color-dbs-red); }
   .cr-link-err { color:#DC2626; }
+  .cr-state-row { display:flex; gap:6px; align-items:center; }
+  .cr-state-select { padding:4px 8px; font-size:11px; font-weight:750; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; cursor:pointer; }
+  .cr-state-select:focus { border-color:var(--color-dbs-red); }
+  .cr-state-select:disabled { background:var(--color-workspace-panel); color:var(--color-muted); cursor:not-allowed; }
 </style>
