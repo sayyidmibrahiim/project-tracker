@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.13 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, and second brain notes read-only list/search/detail**
+**Phase D.1–D.14 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, and frontend polish pass**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.12 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.14 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -962,6 +962,29 @@ Latest completed commit:
 6eec35b implement phase D.13 read-only frontend pages
 ```
 
+### Phase D.14 — Frontend polish pass
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `frontend-polish.md` added as supplemental UI polish guidance.
+- CSS-only polish pass — no component logic, API, bridge, or backend changes.
+- `focus-visible` accessibility baseline added via global styles.
+- Notification spacing normalized in Sidebar.
+- Shared polish utilities added (`styles.css` polish utilities section).
+- Global disabled control styling added.
+- No functionality changed.
+- No API/bridge changed.
+- No backend/package changes.
+- `svelte-check` clean (90 files, 0 errors, 0 warnings), `vite build` clean, Python tests 355 passed.
+
+Latest completed commit:
+
+```text
+11f43d2 implement phase D.14 frontend polish pass
+```
+
 ## Phase D Exit Audit
 
 ```text
@@ -970,10 +993,10 @@ Working tree: clean
 svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
 Tests: 355 passed
-Latest completed commit: 6eec35b implement phase D.13 read-only frontend pages
+Latest completed commit: 11f43d2 implement phase D.14 frontend polish pass
 ```
 
-Phase D.1 through D.13 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, and second brain notes read-only list/search/detail are complete and verified on Linux.
+Phase D.1 through D.14 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, and frontend polish pass are complete and verified on Linux.
 
 Remaining deferred:
 
