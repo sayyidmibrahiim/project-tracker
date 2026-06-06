@@ -108,7 +108,17 @@
                 <div class="am-rule-conditions">
                   <span class="am-cond-label">Conditions:</span>
                   {#each rule.conditions as cond}
-                    <code class="am-cond-code">{JSON.stringify(cond)}</code>
+                    {#if cond && typeof cond === "object" && "field" in cond}
+                      <span class="am-cond-pill">
+                        <span class="am-cond-field">{String((cond as Record<string, unknown>).field)}</span>
+                        <span class="am-cond-op">{String((cond as Record<string, unknown>).operator ?? "?")}</span>
+                        {#if (cond as Record<string, unknown>).operator !== "exists" && "value" in cond}
+                          <span class="am-cond-val">{String((cond as Record<string, unknown>).value)}</span>
+                        {/if}
+                      </span>
+                    {:else}
+                      <code class="am-cond-code">{JSON.stringify(cond)}</code>
+                    {/if}
                   {/each}
                 </div>
               {:else}
@@ -176,6 +186,11 @@
   .am-rule-conditions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .am-cond-label { font-size:10px; font-weight:800; color:var(--color-muted); }
   .am-cond-code { font-size:9px; background:var(--color-workspace-panel); padding:2px 6px; border-radius:3px; font-family:monospace; color:var(--color-ink); }
+  .am-cond-pill { display:inline-flex; align-items:stretch; border-radius:4px; overflow:hidden; border:1px solid #D7DCE2; font-size:9px; font-weight:750; }
+  .am-cond-pill > span { padding:2px 6px; display:inline-flex; align-items:center; }
+  .am-cond-field { background:var(--color-workspace-panel); color:var(--color-ink); font-family:monospace; font-weight:800; }
+  .am-cond-op { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); font-weight:800; border-left:1px solid #D7DCE2; }
+  .am-cond-val { background:#fff; color:var(--color-ink); font-family:monospace; border-left:1px solid #D7DCE2; }
   .am-rule-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px; }
   .am-eval-btn { height:24px; border-radius:5px; padding:0 10px; background:var(--color-dbs-red); color:#fff; border:1px solid var(--color-dbs-red-hover); font-weight:800; font-size:10px; cursor:pointer; white-space:nowrap; transition:background 0.15s; }
   .am-eval-btn:hover:not(:disabled) { background:var(--color-dbs-red-hover); }
