@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.16 + Phase E.1–E.3 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, automation rules evaluate-all preview, notes persistence (notes.md), drone metadata CRUD, and guarded CR state update**
+**Phase D.1–D.16 + Phase E.1–E.3 + Phase F.1–F.4 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, automation rules evaluate-all preview, notes persistence (notes.md), drone metadata CRUD, guarded CR state update, guarded drone state update, link bank stable ID CRUD, and automation condition pills**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux. Phase E metadata-contract slices E.1 through E.3 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux. Phase E metadata-contract slices E.1 through E.3 are completed and verified on Linux. Phase F metadata/UI completion slices F.1, F.3, and F.4 are completed and verified on Linux (F.2 blocked — Second Brain has no persistence).
 
 ## Source of Truth
 
@@ -1164,6 +1164,92 @@ vite build: clean, outputs to web/static/
 Tests: 407 passed
 Latest completed commit: f667344 implement phase E.3 guarded cr state update
 ```
+
+## Phase F Progress
+
+### Phase F.1 — Guarded drone state update
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `_ProjectServiceAdapter.update_drone()` now routes `drone_state` through `validate_drone_state_change_allowed()` state-machine guard.
+- Invalid transitions and empty `drone_link` rejected with controlled error.
+- IN-PROGRESS rejected as manual target (automatic-only).
+- `drone_state_updated_at` set on success.
+- Drone field edit (link/owner/subfolder) from E.2 preserved.
+- ProjectDetails per-row state dropdown + Save State button.
+- Metadata-only, no folder moves, no `js_api.py` signature change.
+- `svelte-check` clean, `vite build` clean, Python tests 413 passed.
+
+Latest completed commit:
+
+```text
+d8e2115 implement phase F.1 guarded drone state update
+```
+
+### Phase F.2 — Second Brain pin/favorite
+
+Status: BLOCKED — deferred.
+
+Reason: production `SecondBrainService()` uses default `items_provider=list` → empty items, in-memory only, no persistence layer. PRD lists "Real Second Brain filesystem index" as deferred. Wiring would produce fake success (empty list, lost state on restart). Deferred until real filesystem index exists.
+
+### Phase F.3 — Link Bank stable ID actions
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- Link model gains stable `id` (uuid4 hex) + `archived` flag.
+- Backward-compatible: legacy links without `id` get one generated on read; `archived` defaults to "false".
+- `_LinkBankAdapter` wires `add_link` (http/https validation), `update_linkbank` (by id), `archive_link` (soft archive by id).
+- Frontend Link Bank: Add Link form, inline Edit/Save, Archive button, show-archived toggle, local search/category filter preserved.
+- No destructive delete. No `js_api.py` signature change.
+- `svelte-check` clean, `vite build` clean, Python tests 431 passed.
+
+Latest completed commit:
+
+```text
+7fed61b implement phase F.3 link bank stable id actions
+```
+
+### Phase F.4 — Automation preview UI polish
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- Rule conditions render as readable field/operator/value pills instead of raw JSON.
+- `exists` operator omits value segment. Raw JSON fallback when `field` missing.
+- Frontend-only, read-only. No bridge/backend change.
+- `svelte-check` clean, `vite build` clean, Python tests 431 passed.
+
+Latest completed commit:
+
+```text
+4966704 improve phase F.4 automation preview ui
+```
+
+## Phase F Exit Audit
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+svelte-check: 90 files, 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests: 431 passed
+Latest completed commit: 4966704 improve phase F.4 automation preview ui
+```
+
+Remaining deferred after Phase F:
+
+- Project create/update/rename
+- Folder move/rename/delete/transitions
+- File write/delete/open external app
+- Second Brain real filesystem index + pin/favorite/note write (blocks F.2)
+- Automation rule create/edit/delete + Outlook/Teams/COM/pyautogui execution
+- Scheduler real frontend controls
+- Windows manual test + packaging
 
 ## Phase 0 Boundary
 
