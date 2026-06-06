@@ -5,13 +5,14 @@
   import Dashboard from "./lib/components/Dashboard.svelte";
   import Report from "./lib/components/Report.svelte";
   import Settings from "./lib/components/Settings.svelte";
+  import SecondBrain from "./lib/components/SecondBrain.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
 
-  const pageShells: Record<Exclude<PageId, "dashboard" | "report" | "settings">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
+  const pageShells: Record<Exclude<PageId, "dashboard" | "report" | "settings" | "second-brain">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
     "project-detail": {
       title: "Project Details",
       subtitle: "Operational workspace shell for NEW_PROJECT and SHOW_EDIT flows. Data binding lands in Phase E.",
@@ -19,15 +20,6 @@
         { title: "Project Command Center", detail: "Year, project, sub project selectors plus open/delete actions." },
         { title: "Metadata Forms", detail: "CR link, Drone tickets, schedule, implementation plan, and state controls." },
         { title: "Files, Notes, History", detail: "File list, markdown notes, autosave indicators, and read-only activity history." },
-      ],
-    },
-    "second-brain": {
-      title: "Second Brain",
-      subtitle: "Local knowledge shell for Notes and Link Bank. No search/index calls yet.",
-      sections: [
-        { title: "Notes Tree", detail: "Pinned, Favorites, Second Brain Notes, and Project Documents." },
-        { title: "Editor / Preview", detail: "Markdown editor, image preview, external file affordance." },
-        { title: "Link Bank", detail: "Categories, link cards, tags, pin/favorite, import/export." },
       ],
     },
     automations: {
@@ -56,7 +48,7 @@
   const POLL_INTERVAL_MS = 5000;
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings"];
+    const validPages = ["dashboard", "report", "settings", "second-brain"];
     if (id in pageShells || validPages.includes(id)) {
       currentPage = id as PageId;
     }
@@ -168,6 +160,8 @@
       <Report {selectedYear} {searchQuery} key={refreshKey} />
     {:else if currentPage === "settings"}
       <Settings />
+    {:else if currentPage === "second-brain"}
+      <SecondBrain />
     {:else}
       {@const shell = pageShells[currentPage]}
       <PagePlaceholder title={shell.title} subtitle={shell.subtitle} sections={shell.sections} />

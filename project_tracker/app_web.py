@@ -348,6 +348,7 @@ def create_js_api(
     *,
     db_path: Path | None = None,
     settings_store: SettingsStore | None = None,
+    linkbank_store: LinkBankStore | None = None,
     _dashboard_service: object = None,
 ) -> JsApi:
     """Create wired JsApi with all available service dependencies.
@@ -357,6 +358,8 @@ def create_js_api(
             When None, a temporary database is used (test/dev default).
         settings_store: Optional override for settings store.
             When None, a fresh SettingsStore is created.
+        linkbank_store: Optional override for link bank store.
+            When None, a fresh LinkBankStore is created.
         _dashboard_service: Optional override for dashboard service (test only).
 
     Returns:
@@ -367,6 +370,7 @@ def create_js_api(
     cache_db.initialize()
 
     _settings_store = settings_store or SettingsStore()
+    _linkbank_store = linkbank_store or LinkBankStore()
 
     # ── services ─────────────────────────────────────────────────────
     dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
@@ -391,6 +395,25 @@ def create_js_api(
             settings = AppSettings.from_dict(current)
             self._store.write(settings)
             return {"ok": True, "settings": settings.to_dict()}
+
+    # ── link bank adapter (LinkBankStore.read() → get_linkbank()) ────
+    class _LinkBankAdapter:
+        """Thin adapter exposing LinkBankStore as read-only JsApi protocol."""
+
+        def __init__(self, store: LinkBankStore) -> None:
+            self._store = store
+
+        def get_linkbank(self) -> object:
+            return self._store.read().to_dict()
+
+        def update_linkbank(self, data: dict[str, object]) -> object:
+            raise RuntimeError("Link Bank update is deferred until stable link IDs exist")
+
+        def add_link(self, data: dict[str, object]) -> object:
+            raise RuntimeError("Link Bank add is deferred until stable link IDs exist")
+
+        def archive_link(self, link_id: str) -> object:
+            raise RuntimeError("Link Bank archive is deferred until stable link IDs exist")
 
     # ── project service adapter (dashboard → project protocol) ────────
     class _ProjectServiceAdapter:
@@ -435,6 +458,7 @@ def create_js_api(
         report_service=report_svc,
         project_service=_ProjectServiceAdapter(dashboard_svc),
         settings_store=_SettingsAdapter(_settings_store),
+        linkbank_store=_LinkBankAdapter(_linkbank_store),
         automation_service=automation_svc,
         second_brain_service=second_brain_svc,
     )
