@@ -223,11 +223,10 @@ def test_file_open_still_deferred(js_api):
     assert result["error"] is not None
 
 
-def test_notes_update_still_deferred(js_api):
-    """notes_update still returns SERVICE_UNAVAILABLE."""
+def test_notes_update_wired_phase_e(js_api):
+    """notes_update is wired in Phase E.1 (writes notes.md). No longer deferred."""
     result = js_api.notes_update("/tmp/x", "new notes")
-    assert result["ok"] is False
-    assert result["error"] is not None
+    assert result["ok"] is True
 
 
 # ── RED 7: import safety ───────────────────────────────────────────────

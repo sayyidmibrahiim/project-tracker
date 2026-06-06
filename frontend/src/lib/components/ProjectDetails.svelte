@@ -23,6 +23,12 @@
   let crLinkSaveState: CrLinkSave = $state("idle");
   let crLinkSaveError: string = $state("");
 
+  // ── Notes edit state ──
+  let notesEdit: string = $state("");
+  type NotesSave = "idle" | "saving" | "success" | "error";
+  let notesSaveState: NotesSave = $state("idle");
+  let notesSaveError: string = $state("");
+
   let yearFilter: string = $state("all");
   let searchText: string = $state("");
   let yearOptions: string[] = $state(["2026", "2025", "2024"]);
@@ -65,6 +71,7 @@
     detailState = "loading";
     detail = null; subprojects = []; files = []; notes = "";
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
+    notesEdit = ""; notesSaveState = "idle"; notesSaveError = "";
     errorCode = ""; errorMessage = "";
 
     if (!isPywebviewReady()) {
@@ -87,6 +94,7 @@
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
 
     if (detail) crLinkEdit = detail.cr_link || "";
+    notesEdit = notes;
 
     if (!dResp.ok) {
       errorCode = dResp.error.code;
@@ -119,6 +127,29 @@
     if (detail) detail.cr_link = crLinkEdit;
     crLinkSaveState = "success";
     setTimeout(() => { if (crLinkSaveState === "success") crLinkSaveState = "idle"; }, 2500);
+  }
+
+  async function saveNotes() {
+    if (!selectedPath) return;
+    notesSaveState = "saving";
+    notesSaveError = "";
+
+    if (!isPywebviewReady()) {
+      notesSaveError = "pywebview bridge unavailable.";
+      notesSaveState = "error";
+      return;
+    }
+
+    const resp = await callBridge("notes_update", selectedPath, notesEdit);
+    if (!resp.ok) {
+      notesSaveError = resp.error.message;
+      notesSaveState = "error";
+      return;
+    }
+
+    notes = notesEdit;
+    notesSaveState = "success";
+    setTimeout(() => { if (notesSaveState === "success") notesSaveState = "idle"; }, 2500);
   }
 
   async function init() {
@@ -253,12 +284,26 @@
           </div>
 
           <div class="pd-section">
-            <h4 class="pd-section-title">Notes <span class="pd-deferred-hint">(edit deferred)</span></h4>
-            {#if notes}
-              <pre class="pd-notes-pre">{notes}</pre>
-            {:else}
-              <p class="muted-text">No notes.</p>
-            {/if}
+            <h4 class="pd-section-title">Notes</h4>
+            <div class="pd-notes-edit">
+              <textarea
+                class="pd-notes-textarea"
+                placeholder="Write project notes (saved to notes.md)…"
+                bind:value={notesEdit}
+                disabled={notesSaveState === "saving"}
+                rows="6"
+              ></textarea>
+              <div class="pd-notes-actions">
+                <button class="cr-link-save-btn" onclick={saveNotes} disabled={notesSaveState === "saving" || notesEdit === notes}>
+                  {#if notesSaveState === "saving"}⏳ Saving…{:else}Save Notes{/if}
+                </button>
+                {#if notesSaveState === "success"}
+                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                {:else if notesSaveState === "error"}
+                  <span class="cr-link-feedback cr-link-err">✗ {notesSaveError}</span>
+                {/if}
+              </div>
+            </div>
           </div>
         </div>
       {/if}
@@ -302,7 +347,11 @@
   .pd-simple-list { margin:0; padding:0 0 0 16px; font-size:11px; font-weight:750; color:var(--color-ink); line-height:1.55; }
   .pd-file-name { font-weight:800; }
   .pd-file-path { color:var(--color-muted); font-size:9px; margin-left:4px; }
-  .pd-notes-pre { margin:0; padding:10px; background:var(--color-workspace-panel); border:1px solid #E5E7EB; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto; }
+  .pd-notes-edit { display:flex; flex-direction:column; gap:6px; }
+  .pd-notes-textarea { width:100%; min-height:100px; max-height:240px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; color:var(--color-ink); resize:vertical; outline:none; }
+  .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }
+  .pd-notes-textarea:disabled { background:#f3f4f6; color:var(--color-muted); }
+  .pd-notes-actions { display:flex; align-items:center; gap:8px; }
   .pd-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
   .pd-dl-wide { grid-column: 1 / -1; }
   .cr-link-row { display:flex; gap:6px; align-items:center; }

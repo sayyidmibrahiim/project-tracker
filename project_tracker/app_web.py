@@ -541,18 +541,18 @@ def create_js_api(
 
     # ── notes service adapter (MetadataStore → notes) ─────────────────
     class _NotesServiceAdapter:
-        """Read-only notes adapter. No write."""
-
-        def __init__(self, metadata_store: MetadataStore) -> None:
-            self._metadata_store = metadata_store
+        """Notes adapter: read/write notes.md file (PRD-correct)."""
 
         def get_notes(self, project_path: Path) -> object:
-            metadata = self._metadata_store.read(Path(project_path))
-            if metadata is None:
+            notes_file = Path(project_path) / "notes.md"
+            if not notes_file.is_file():
                 return ""
-            return metadata.notes or ""
+            return notes_file.read_text(encoding="utf-8")
 
-        update_notes = None  # type: ignore[assignment]
+        def update_notes(self, project_path: Path, notes: str) -> object:
+            notes_file = Path(project_path) / "notes.md"
+            notes_file.write_text(notes, encoding="utf-8")
+            return notes
 
     # ── JsApi ─────────────────────────────────────────────────────────
     _metadata_store = MetadataStore()
@@ -567,7 +567,7 @@ def create_js_api(
         second_brain_service=second_brain_svc,
         year_service=_YearServiceAdapter(_settings_store),
         file_service=_FileServiceAdapter(),
-        notes_service=_NotesServiceAdapter(_metadata_store),
+        notes_service=_NotesServiceAdapter(),
     )
 
 
