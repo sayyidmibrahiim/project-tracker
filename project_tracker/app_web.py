@@ -451,6 +451,7 @@ def create_js_api(
                 "project_path": str(path),
                 "project_state": project_state.value,
                 "cr_number": cr_number or "",
+                "cr_link": metadata.cr_link or "",
                 "cr_state": metadata.cr_state.value,
                 "start_datetime": metadata.start_datetime,
                 "end_datetime": metadata.end_datetime,
@@ -462,12 +463,32 @@ def create_js_api(
             """Return subproject paths under project_path."""
             return [str(p) for p in discover_subproject_paths(Path(project_path))]
 
+        # ── wired mutation: update_cr_link (metadata-only) ──
+
+        def update_cr_link(self, project_path: Path, cr_link: str) -> object:
+            """Update CR link in metadata and persist."""
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            metadata.cr_link = cr_link
+            metadata.updated_at = local_now()
+            self._metadata_store.write(path, metadata)
+            project_state = ProjectState(path.parent.name)
+            cr_number = extract_cr_number(cr_link)
+            return {
+                "project_path": str(path),
+                "project_state": project_state.value,
+                "cr_state": metadata.cr_state.value,
+                "cr_number": cr_number or "",
+                "cr_link": cr_link,
+            }
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
         open_folder = None  # type: ignore[assignment]
         create_project = None  # type: ignore[assignment]
         update_project = None  # type: ignore[assignment]
         rename_project = None  # type: ignore[assignment]
-        update_cr_link = None  # type: ignore[assignment]
         update_cr_state = None  # type: ignore[assignment]
         add_drone = None  # type: ignore[assignment]
         update_drone = None  # type: ignore[assignment]

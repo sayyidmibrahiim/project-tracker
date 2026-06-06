@@ -109,6 +109,7 @@ export interface ProjectDetail {
   project_path: string;
   project_state: string;
   cr_number: string;
+  cr_link: string;
   cr_state: string;
   start_datetime: string | null;
   end_datetime: string | null;

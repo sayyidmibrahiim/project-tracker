@@ -17,6 +17,12 @@
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
 
+  // ── CR Link edit state ──
+  let crLinkEdit: string = $state("");
+  type CrLinkSave = "idle" | "saving" | "success" | "error";
+  let crLinkSaveState: CrLinkSave = $state("idle");
+  let crLinkSaveError: string = $state("");
+
   let yearFilter: string = $state("all");
   let searchText: string = $state("");
   let yearOptions: string[] = $state(["2026", "2025", "2024"]);
@@ -58,6 +64,7 @@
     selectedPath = path;
     detailState = "loading";
     detail = null; subprojects = []; files = []; notes = "";
+    crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     errorCode = ""; errorMessage = "";
 
     if (!isPywebviewReady()) {
@@ -79,6 +86,8 @@
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
 
+    if (detail) crLinkEdit = detail.cr_link || "";
+
     if (!dResp.ok) {
       errorCode = dResp.error.code;
       errorMessage = dResp.error.message;
@@ -86,6 +95,30 @@
     } else {
       detailState = "loaded";
     }
+  }
+
+  async function saveCrLink() {
+    if (!selectedPath) return;
+    crLinkSaveState = "saving";
+    crLinkSaveError = "";
+
+    if (!isPywebviewReady()) {
+      crLinkSaveError = "pywebview bridge unavailable.";
+      crLinkSaveState = "error";
+      return;
+    }
+
+    const resp = await callBridge("cr_update_link", selectedPath, crLinkEdit);
+    if (!resp.ok) {
+      crLinkSaveError = resp.error.message;
+      crLinkSaveState = "error";
+      return;
+    }
+
+    // Refresh detail to show updated state
+    if (detail) detail.cr_link = crLinkEdit;
+    crLinkSaveState = "success";
+    setTimeout(() => { if (crLinkSaveState === "success") crLinkSaveState = "idle"; }, 2500);
   }
 
   async function init() {
@@ -171,6 +204,22 @@
           <dl class="pd-detail-grid">
             <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
             <div class="pd-dl-item"><dt>CR State</dt><dd>{detail.cr_state || "—"}</dd></div>
+            <div class="pd-dl-item pd-dl-wide">
+              <dt>CR Link</dt>
+              <dd>
+                <div class="cr-link-row">
+                  <input class="cr-link-input" type="url" placeholder="https://cr.example.com/CR..." bind:value={crLinkEdit} disabled={crLinkSaveState === "saving"} />
+                  <button class="cr-link-save-btn" onclick={saveCrLink} disabled={crLinkSaveState === "saving" || crLinkEdit === detail.cr_link}>
+                    {#if crLinkSaveState === "saving"}⏳{:else}Save{/if}
+                  </button>
+                </div>
+                {#if crLinkSaveState === "success"}
+                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                {:else if crLinkSaveState === "error"}
+                  <span class="cr-link-feedback cr-link-err">✗ {crLinkSaveError}</span>
+                {/if}
+              </dd>
+            </div>
             <div class="pd-dl-item"><dt>Start</dt><dd>{detail.start_datetime ? new Date(detail.start_datetime).toLocaleString("en-GB") : "—"}</dd></div>
             <div class="pd-dl-item"><dt>End</dt><dd>{detail.end_datetime ? new Date(detail.end_datetime).toLocaleString("en-GB") : "—"}</dd></div>
             <div class="pd-dl-item"><dt>T-10</dt><dd>{detail.t10_status}</dd></div>
@@ -255,4 +304,15 @@
   .pd-file-path { color:var(--color-muted); font-size:9px; margin-left:4px; }
   .pd-notes-pre { margin:0; padding:10px; background:var(--color-workspace-panel); border:1px solid #E5E7EB; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto; }
   .pd-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
+  .pd-dl-wide { grid-column: 1 / -1; }
+  .cr-link-row { display:flex; gap:6px; align-items:center; }
+  .cr-link-input { flex:1; min-width:0; padding:5px 8px; font-size:11px; font-weight:700; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; }
+  .cr-link-input:focus { border-color:var(--color-dbs-red); }
+  .cr-link-input:disabled { background:var(--color-workspace-panel); color:var(--color-muted); }
+  .cr-link-save-btn { padding:5px 12px; font-size:10px; font-weight:800; border:1px solid var(--color-dbs-red); border-radius:5px; background:var(--color-dbs-red); color:#fff; cursor:pointer; white-space:nowrap; transition:opacity 0.12s; }
+  .cr-link-save-btn:hover:not(:disabled) { background:var(--color-dbs-red-hover, #991B1B); }
+  .cr-link-save-btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .cr-link-feedback { display:inline-block; margin-top:4px; font-size:10px; font-weight:800; }
+  .cr-link-ok { color:var(--color-dbs-red); }
+  .cr-link-err { color:#DC2626; }
 </style>
