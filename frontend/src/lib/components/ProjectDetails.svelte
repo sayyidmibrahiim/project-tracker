@@ -37,6 +37,13 @@
   let notesSaveState: NotesSave = $state("idle");
   let notesSaveError: string = $state("");
 
+  // ── Metadata edit state ──
+  let metaNameEdit: string = $state("");
+  let metaPlanEdit: string = $state("");
+  type MetaSave = "idle" | "saving" | "success" | "error";
+  let metaSaveState: MetaSave = $state("idle");
+  let metaSaveError: string = $state("");
+
   // ── Drone edit state ──
   let droneBusy: boolean = $state(false);
   let droneError: string = $state("");
@@ -125,6 +132,7 @@
     if (detail) crLinkEdit = detail.cr_link || "";
     if (detail) crStateEdit = detail.cr_state || "";
     if (detail) syncDroneStateEdits();
+    if (detail) { metaNameEdit = detail.project_name || ""; metaPlanEdit = (detail as any).implementation_plan || ""; }
     notesEdit = notes;
 
     if (!dResp.ok) {
@@ -200,6 +208,28 @@
     notes = notesEdit;
     notesSaveState = "success";
     setTimeout(() => { if (notesSaveState === "success") notesSaveState = "idle"; }, 2500);
+  }
+
+  async function saveMetadata() {
+    if (!selectedPath || !isPywebviewReady()) {
+      metaSaveError = "pywebview bridge unavailable.";
+      metaSaveState = "error";
+      return;
+    }
+    metaSaveState = "saving";
+    metaSaveError = "";
+    const resp = await callBridge("project_update", selectedPath, {
+      project_name: metaNameEdit,
+      implementation_plan: metaPlanEdit,
+    });
+    if (!resp.ok) {
+      metaSaveError = resp.error.message;
+      metaSaveState = "error";
+      return;
+    }
+    metaSaveState = "success";
+    setTimeout(() => { if (metaSaveState === "success") metaSaveState = "idle"; }, 2500);
+    await refreshDetail();
   }
 
   async function addDrone() {
@@ -402,6 +432,26 @@
           </dl>
 
           <div class="pd-section">
+            <h4 class="pd-section-title">Edit Metadata</h4>
+            <div class="pd-meta-edit">
+              <label class="pd-meta-label" for="meta-name">Project Name</label>
+              <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} disabled={metaSaveState === "saving"} />
+              <label class="pd-meta-label" for="meta-plan">Implementation Plan</label>
+              <textarea id="meta-plan" class="pd-notes-textarea" rows="4" bind:value={metaPlanEdit} disabled={metaSaveState === "saving"}></textarea>
+              <div class="pd-notes-actions">
+                <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || (metaNameEdit === detail.project_name && metaPlanEdit === ((detail as any).implementation_plan || ""))}>
+                  {#if metaSaveState === "saving"}⏳ Saving…{:else}Save Metadata{/if}
+                </button>
+                {#if metaSaveState === "success"}
+                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                {:else if metaSaveState === "error"}
+                  <span class="cr-link-feedback cr-link-err">✗ {metaSaveError}</span>
+                {/if}
+              </div>
+            </div>
+          </div>
+
+          <div class="pd-section">
             <h4 class="pd-section-title">Drone Tickets</h4>
             {#if droneError}
               <p class="cr-link-feedback cr-link-err">✗ {droneError}</p>
@@ -564,6 +614,8 @@
   .pd-drone-cancel-btn { padding:5px 10px; font-size:10px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-muted); cursor:pointer; }
   .pd-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
   .pd-dl-wide { grid-column: 1 / -1; }
+  .pd-meta-edit { display:flex; flex-direction:column; gap:6px; }
+  .pd-meta-label { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
   .cr-link-row { display:flex; gap:6px; align-items:center; }
   .cr-link-input { flex:1; min-width:0; padding:5px 8px; font-size:11px; font-weight:700; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; }
   .cr-link-input:focus { border-color:var(--color-dbs-red); }

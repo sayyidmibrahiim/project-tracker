@@ -39,6 +39,21 @@ SVELTE_ENTRY_PATH = SVELTE_STATIC_DIR / "index.html"
 VITE_DEV_SERVER_URL = "http://localhost:5173"
 
 
+def _parse_optional_datetime(value: object) -> datetime | None:
+    """Parse an optional ISO-8601 datetime string into a tz-aware datetime."""
+    if value is None or value == "":
+        return None
+    candidate = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        candidate = candidate.replace(" ", "T", 1)
+        parsed = datetime.fromisoformat(candidate)
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        parsed = parsed.replace(tzinfo=local_now().tzinfo)
+    return parsed
+
+
 class AppAPI:
     """JavaScript bridge exposed as ``pywebview.api``."""
 
@@ -631,10 +646,73 @@ def create_js_api(
                 "cr_state": target.value,
             }
 
+        # ── wired mutation: update_project (metadata-only) ──
+
+        def update_project(self, project_path: Path, data: dict[str, object]) -> object:
+            """Update allowed metadata fields and persist. No folder move."""
+            path = Path(project_path)
+            if not path.is_dir():
+                raise FileNotFoundError(f"Project folder not found: {path}")
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            if "project_name" in data:
+                metadata.project_name = str(data["project_name"])
+            if "implementation_plan" in data:
+                metadata.implementation_plan = str(data["implementation_plan"])
+            if "cr_link" in data:
+                metadata.cr_link = str(data["cr_link"])
+            if "start_datetime" in data:
+                metadata.start_datetime = _parse_optional_datetime(data["start_datetime"])
+            if "end_datetime" in data:
+                metadata.end_datetime = _parse_optional_datetime(data["end_datetime"])
+            metadata.updated_at = local_now()
+            self._metadata_store.write(path, metadata)
+            project_state = ProjectState(path.parent.name)
+            return {
+                "project_path": str(path),
+                "project_name": metadata.project_name or path.name,
+                "project_state": project_state.value,
+                "cr_state": metadata.cr_state.value,
+            }
+
+        # ── wired mutation: create_project (folder + initial metadata) ──
+
+        def create_project(self, data: dict[str, object]) -> object:
+            """Create a project folder under {root}/{year}/UAT_PREPARE/{name}."""
+            from project_tracker.core.rules import validate_windows_folder_name
+
+            name = str(data.get("project_name", "")).strip()
+            if not name:
+                raise ValueError("Project name is required")
+            validate_windows_folder_name(name)
+
+            year = str(data.get("year", "")).strip() or str(local_now().year)
+            settings = _settings_store.read()
+            if settings.root_folder is None:
+                raise ValueError("Root folder is not configured")
+
+            project_dir = settings.root_folder / year / "UAT_PREPARE" / name
+            if project_dir.exists():
+                raise ValueError(f"Project folder already exists: {project_dir}")
+
+            project_dir.mkdir(parents=True)
+            now = local_now()
+            metadata = ProjectMetadata(
+                project_name=name,
+                created_at=now,
+                updated_at=now,
+            )
+            self._metadata_store.write(project_dir, metadata)
+            return {
+                "project_path": str(project_dir),
+                "project_name": name,
+                "project_state": "UAT_PREPARE",
+                "cr_state": metadata.cr_state.value,
+            }
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
         open_folder = None  # type: ignore[assignment]
-        create_project = None  # type: ignore[assignment]
-        update_project = None  # type: ignore[assignment]
         rename_project = None  # type: ignore[assignment]
         move_to_prod_ready = None  # type: ignore[assignment]
         move_to_implemented = None  # type: ignore[assignment]
