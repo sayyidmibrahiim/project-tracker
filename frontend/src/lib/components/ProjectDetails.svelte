@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow } from "../types";
+  import type { ProjectRow, ProjectDetail, FileRow, DroneTicket } from "../types";
   import { BridgeErrorCode } from "../types";
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
@@ -28,6 +28,19 @@
   type NotesSave = "idle" | "saving" | "success" | "error";
   let notesSaveState: NotesSave = $state("idle");
   let notesSaveError: string = $state("");
+
+  // ── Drone edit state ──
+  let droneBusy: boolean = $state(false);
+  let droneError: string = $state("");
+  // Add-drone form
+  let newDroneLink: string = $state("");
+  let newDroneSubfolder: string = $state("");
+  let newDroneOwner: string = $state("");
+  // Per-index edit drafts
+  let droneEditIndex: number = $state(-1);
+  let droneEditLink: string = $state("");
+  let droneEditSubfolder: string = $state("");
+  let droneEditOwner: string = $state("");
 
   let yearFilter: string = $state("all");
   let searchText: string = $state("");
@@ -72,6 +85,7 @@
     detail = null; subprojects = []; files = []; notes = "";
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     notesEdit = ""; notesSaveState = "idle"; notesSaveError = "";
+    droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
     errorCode = ""; errorMessage = "";
 
     if (!isPywebviewReady()) {
@@ -150,6 +164,58 @@
     notes = notesEdit;
     notesSaveState = "success";
     setTimeout(() => { if (notesSaveState === "success") notesSaveState = "idle"; }, 2500);
+  }
+
+  async function addDrone() {
+    if (!selectedPath || !isPywebviewReady()) return;
+    droneBusy = true; droneError = "";
+    const resp = await callBridge("drone_add", selectedPath, {
+      drone_link: newDroneLink, subfolder_name: newDroneSubfolder, owner: newDroneOwner,
+    });
+    droneBusy = false;
+    if (!resp.ok) { droneError = resp.error.message; return; }
+    newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
+    await refreshDetail();
+  }
+
+  function startEditDrone(index: number, t: DroneTicket) {
+    droneEditIndex = index;
+    droneEditLink = t.drone_link;
+    droneEditSubfolder = t.subfolder_name || "";
+    droneEditOwner = t.owner;
+  }
+
+  function cancelEditDrone() { droneEditIndex = -1; }
+
+  async function saveDrone() {
+    if (!selectedPath || droneEditIndex < 0 || !isPywebviewReady()) return;
+    droneBusy = true; droneError = "";
+    const resp = await callBridge("drone_update", selectedPath, droneEditIndex, {
+      drone_link: droneEditLink, subfolder_name: droneEditSubfolder, owner: droneEditOwner,
+    });
+    droneBusy = false;
+    if (!resp.ok) { droneError = resp.error.message; return; }
+    droneEditIndex = -1;
+    await refreshDetail();
+  }
+
+  async function deleteDrone(index: number) {
+    if (!selectedPath || !isPywebviewReady()) return;
+    droneBusy = true; droneError = "";
+    const resp = await callBridge("drone_delete", selectedPath, index);
+    droneBusy = false;
+    if (!resp.ok) { droneError = resp.error.message; return; }
+    await refreshDetail();
+  }
+
+  async function refreshDetail() {
+    if (!selectedPath) return;
+    const [dResp, ntResp] = await Promise.all([
+      callBridge<ProjectDetail>("project_get", selectedPath),
+      callBridge<string>("notes_get", selectedPath),
+    ]);
+    if (dResp.ok && dResp.data) { detail = dResp.data; }
+    if (ntResp.ok) { notes = ntResp.data ?? ""; notesEdit = notes; }
   }
 
   async function init() {
@@ -258,6 +324,44 @@
           </dl>
 
           <div class="pd-section">
+            <h4 class="pd-section-title">Drone Tickets</h4>
+            {#if droneError}
+              <p class="cr-link-feedback cr-link-err">✗ {droneError}</p>
+            {/if}
+            {#if detail.drone_tickets.length === 0}
+              <p class="muted-text">No drone tickets.</p>
+            {:else}
+              <div class="pd-drone-list">
+                {#each detail.drone_tickets as t, i}
+                  {#if droneEditIndex === i}
+                    <div class="pd-drone-edit-row">
+                      <input class="pd-drone-input" placeholder="Drone link" bind:value={droneEditLink} />
+                      <input class="pd-drone-input pd-drone-sm" placeholder="Subfolder" bind:value={droneEditSubfolder} />
+                      <input class="pd-drone-input pd-drone-sm" placeholder="Owner" bind:value={droneEditOwner} />
+                      <button class="cr-link-save-btn" onclick={saveDrone} disabled={droneBusy}>Save</button>
+                      <button class="pd-drone-cancel-btn" onclick={cancelEditDrone}>Cancel</button>
+                    </div>
+                  {:else}
+                    <div class="pd-drone-row">
+                      <span class="pd-drone-link">{t.drone_link || "—"}</span>
+                      <span class="pd-drone-state">{t.drone_state}</span>
+                      <span class="pd-drone-owner">{t.owner || "—"}</span>
+                      <button class="pd-drone-action-btn" onclick={() => startEditDrone(i, t)} disabled={droneBusy}>Edit</button>
+                      <button class="pd-drone-action-btn pd-drone-del" onclick={() => deleteDrone(i)} disabled={droneBusy}>Del</button>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+            <div class="pd-drone-add-row">
+              <input class="pd-drone-input" placeholder="Drone link" bind:value={newDroneLink} />
+              <input class="pd-drone-input pd-drone-sm" placeholder="Subfolder" bind:value={newDroneSubfolder} />
+              <input class="pd-drone-input pd-drone-sm" placeholder="Owner" bind:value={newDroneOwner} />
+              <button class="cr-link-save-btn" onclick={addDrone} disabled={droneBusy || !newDroneLink.trim()}>Add</button>
+            </div>
+          </div>
+
+          <div class="pd-section">
             <h4 class="pd-section-title">Subprojects <span class="pd-deferred-hint">(add/delete deferred)</span></h4>
             {#if subprojects.length === 0}
               <p class="muted-text">No subprojects.</p>
@@ -352,6 +456,20 @@
   .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }
   .pd-notes-textarea:disabled { background:#f3f4f6; color:var(--color-muted); }
   .pd-notes-actions { display:flex; align-items:center; gap:8px; }
+  .pd-drone-list { display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
+  .pd-drone-row, .pd-drone-edit-row, .pd-drone-add-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .pd-drone-add-row { border-top:1px dashed #E5E7EB; padding-top:8px; }
+  .pd-drone-link { flex:1; min-width:120px; font-size:10px; font-weight:800; color:var(--color-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pd-drone-state { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border:1px solid var(--color-soft-pink-border); font-size:9px; font-weight:800; white-space:nowrap; }
+  .pd-drone-owner { font-size:10px; font-weight:700; color:var(--color-muted); min-width:50px; }
+  .pd-drone-input { padding:4px 7px; font-size:10px; font-weight:700; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); outline:none; flex:1; min-width:90px; }
+  .pd-drone-input.pd-drone-sm { flex:0 0 90px; min-width:70px; }
+  .pd-drone-input:focus { border-color:var(--color-dbs-red); }
+  .pd-drone-action-btn { padding:3px 9px; font-size:9px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); cursor:pointer; white-space:nowrap; }
+  .pd-drone-action-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .pd-drone-action-btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .pd-drone-del:hover:not(:disabled) { border-color:#DC2626; color:#DC2626; }
+  .pd-drone-cancel-btn { padding:5px 10px; font-size:10px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-muted); cursor:pointer; }
   .pd-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
   .pd-dl-wide { grid-column: 1 / -1; }
   .cr-link-row { display:flex; gap:6px; align-items:center; }

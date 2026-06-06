@@ -195,11 +195,11 @@ def test_cr_update_link_still_deferred(js_api):
     assert result["error"] is not None
 
 
-def test_drone_add_still_deferred(js_api):
-    """drone_add still returns SERVICE_UNAVAILABLE."""
-    result = js_api.drone_add("/tmp/x", {"drone_link": "D-1"})
-    assert result["ok"] is False
-    assert result["error"] is not None
+def test_drone_add_wired_phase_e(js_api, temp_project):
+    """drone_add is wired in Phase E.2 (metadata-only). No longer deferred."""
+    path = str(temp_project["project_path"])
+    result = js_api.drone_add(path, {"drone_link": "https://drone.test/D-1"})
+    assert result["ok"] is True
 
 
 def test_folder_move_still_deferred(js_api):

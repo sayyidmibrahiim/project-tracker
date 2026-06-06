@@ -115,6 +115,15 @@ export interface ProjectDetail {
   end_datetime: string | null;
   t10_status: string;
   drone_ticket_count: number;
+  drone_tickets: DroneTicket[];
+}
+
+/** Mirrors DroneTicket metadata fields. */
+export interface DroneTicket {
+  subfolder_name: string | null;
+  drone_link: string;
+  drone_state: string;
+  owner: string;
 }
 
 /** Mirrors project row returned by project_list. */

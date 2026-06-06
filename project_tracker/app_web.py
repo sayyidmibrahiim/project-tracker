@@ -457,6 +457,15 @@ def create_js_api(
                 "end_datetime": metadata.end_datetime,
                 "t10_status": "N/A",
                 "drone_ticket_count": len(drone_tickets),
+                "drone_tickets": [
+                    {
+                        "subfolder_name": t.subfolder_name,
+                        "drone_link": t.drone_link,
+                        "drone_state": t.drone_state.value,
+                        "owner": t.owner,
+                    }
+                    for t in drone_tickets
+                ],
             }
 
         def list_subprojects(self, project_path: Path) -> object:
@@ -484,15 +493,64 @@ def create_js_api(
                 "cr_link": cr_link,
             }
 
+        # ── wired mutation: drone CRUD (metadata-only) ──
+
+        def add_drone(self, project_path: Path, data: dict[str, object]) -> object:
+            """Append a new drone ticket to metadata."""
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            from project_tracker.core.models import DroneTicket
+
+            ticket = DroneTicket(
+                subfolder_name=str(data.get("subfolder_name", "")) or None,
+                drone_link=str(data.get("drone_link", "")),
+                owner=str(data.get("owner", "")),
+            )
+            metadata.drone_tickets.append(ticket)
+            metadata.updated_at = local_now()
+            self._metadata_store.write(path, metadata)
+            return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
+
+        def update_drone(self, project_path: Path, drone_index: int, data: dict[str, object]) -> object:
+            """Update drone ticket fields at index (NOT drone_state)."""
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            if drone_index < 0 or drone_index >= len(metadata.drone_tickets):
+                raise IndexError(f"Drone index {drone_index} out of range")
+            ticket = metadata.drone_tickets[drone_index]
+            if "drone_link" in data:
+                ticket.drone_link = str(data["drone_link"])
+            if "owner" in data:
+                ticket.owner = str(data["owner"])
+            if "subfolder_name" in data:
+                ticket.subfolder_name = str(data["subfolder_name"]) or None
+            metadata.updated_at = local_now()
+            self._metadata_store.write(path, metadata)
+            return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
+
+        def delete_drone(self, project_path: Path, drone_index: int) -> object:
+            """Remove drone ticket at index."""
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            if drone_index < 0 or drone_index >= len(metadata.drone_tickets):
+                raise IndexError(f"Drone index {drone_index} out of range")
+            metadata.drone_tickets.pop(drone_index)
+            metadata.updated_at = local_now()
+            self._metadata_store.write(path, metadata)
+            return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
         open_folder = None  # type: ignore[assignment]
         create_project = None  # type: ignore[assignment]
         update_project = None  # type: ignore[assignment]
         rename_project = None  # type: ignore[assignment]
         update_cr_state = None  # type: ignore[assignment]
-        add_drone = None  # type: ignore[assignment]
-        update_drone = None  # type: ignore[assignment]
-        delete_drone = None  # type: ignore[assignment]
         move_to_prod_ready = None  # type: ignore[assignment]
         move_to_implemented = None  # type: ignore[assignment]
         postpone_project = None  # type: ignore[assignment]
