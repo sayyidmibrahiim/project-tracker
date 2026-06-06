@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.14 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, and frontend polish pass**
+**Phase D.1–D.15a complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, and Project Details read-path production wiring**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.14 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.15a are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -985,6 +985,33 @@ Latest completed commit:
 11f43d2 implement phase D.14 frontend polish pass
 ```
 
+### Phase D.15a — Project Details read-path production wiring
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `create_js_api()` runtime gap fixed for Project Details read methods.
+- `year_list` wired through `_YearServiceAdapter` — discovers digit-named dirs from SettingsStore.root_folder.
+- `project_get` wired through `_ProjectServiceAdapter.get_project()` — reads MetadataStore, extracts cr_number via `extract_cr_number()`.
+- `subproject_list` wired through `_ProjectServiceAdapter.list_subprojects()` — delegates to `discover_subproject_paths()`.
+- `file_list` wired through `_FileServiceAdapter.list_files()` — read-only, no open/write/delete.
+- `notes_get` wired through `_NotesServiceAdapter.get_notes()` — reads from MetadataStore.
+- `_ProjectServiceAdapter` now accepts `MetadataStore` alongside `DashboardService`.
+- All mutations remain deferred (8 tests prove `SERVICE_UNAVAILABLE`).
+- No frontend source changed.
+- No `js_api.py` signature changes.
+- No backend DTO changes.
+- `tests/test_phase_d_app_web_project_details_read_wiring.py` added (17 tests).
+- Project Details frontend from D.13 now has real runtime read support.
+- `svelte-check` clean (90 files, 0 errors, 0 warnings), `vite build` clean, Python tests 372 passed.
+
+Latest completed commit:
+
+```text
+080d684 implement phase D.15a project details read wiring
+```
+
 ## Phase D Exit Audit
 
 ```text
@@ -992,11 +1019,11 @@ Branch: prd-v31-migration
 Working tree: clean
 svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
-Tests: 355 passed
-Latest completed commit: 11f43d2 implement phase D.14 frontend polish pass
+Tests: 372 passed
+Latest completed commit: 080d684 implement phase D.15a project details read wiring
 ```
 
-Phase D.1 through D.14 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, and frontend polish pass are complete and verified on Linux.
+Phase D.1 through D.15a Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, and Project Details read-path production wiring are complete and verified on Linux.
 
 Remaining deferred:
 
