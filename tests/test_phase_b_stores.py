@@ -178,10 +178,12 @@ def test_link_bank_store_write_read_round_trip_current_schema(tmp_path: Path) ->
         categories=["CR & ITSM Tools"],
         links=[
             {
+                "id": "deadbeef1234567890abcdef12345678",
                 "name": "CR Portal",
                 "url": "https://example.local/",
                 "notes": "Daily CR work portal.",
                 "category": "CR & ITSM Tools",
+                "archived": "false",
             }
         ],
     )

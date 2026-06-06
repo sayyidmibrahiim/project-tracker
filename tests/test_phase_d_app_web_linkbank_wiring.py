@@ -37,11 +37,11 @@ def test_create_js_api_wires_linkbank_get_with_temp_store(tmp_path: Path) -> Non
     data = result.get("data")
     assert isinstance(data, dict)
     assert data["categories"] == ["Ops"]
-    assert data["links"] == [
-        {
-            "name": "Runbook",
-            "url": "https://example.test/runbook",
-            "notes": "Deployment checklist",
-            "category": "Ops",
-        }
-    ]
+    assert len(data["links"]) == 1
+    link = data["links"][0]
+    assert link["name"] == "Runbook"
+    assert link["url"] == "https://example.test/runbook"
+    assert link["notes"] == "Deployment checklist"
+    assert link["category"] == "Ops"
+    assert link["archived"] == "false"
+    assert link["id"]  # stable uuid generated on normalize

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass, field
 from json import JSONDecodeError
 from pathlib import Path
@@ -40,10 +41,12 @@ class LinkBank:
 
 def _normalize_link(link: dict[Any, Any]) -> dict[str, str]:
     return {
+        "id": str(link.get("id", "")) or uuid.uuid4().hex,
         "name": str(link.get("name", "")),
         "url": str(link.get("url", "")),
         "notes": str(link.get("notes", "")),
         "category": str(link.get("category", "")),
+        "archived": str(link.get("archived", "false")),
     }
 
 

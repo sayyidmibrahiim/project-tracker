@@ -8,12 +8,14 @@
   type TabId = "notes" | "linkbank";
   let activeTab: TabId = $state("linkbank");
 
-  // ── Link Bank data (read-only; mutations deferred — backend not wired) ──
+  // ── Link Bank data ──
   interface LinkItem {
+    id: string;
     name: string;
     url: string;
     notes: string;
     category: string;
+    archived: string;
   }
 
   interface LinkBankData {
@@ -31,11 +33,37 @@
   // ── Local filters ──
   let searchQuery: string = $state("");
   let categoryFilter: string = $state("all");
+  let showArchived: boolean = $state(false);
+
+  // ── Add link form ──
+  let addFormOpen: boolean = $state(false);
+  let addName: string = $state("");
+  let addUrl: string = $state("");
+  let addCategory: string = $state("");
+  let addNotes: string = $state("");
+  let addError: string = $state("");
+
+  // ── Edit state ──
+  let editingId: string | null = $state(null);
+  let editName: string = $state("");
+  let editUrl: string = $state("");
+  let editCategory: string = $state("");
+  let editNotes: string = $state("");
+  let editError: string = $state("");
+
+  // ── Inline action error ──
+  let actionError: string = $state("");
 
   let filteredLinks: LinkItem[] = $derived.by(() => {
-    let result = categoryFilter === "all"
-      ? bank.links
-      : bank.links.filter((l) => l.category === categoryFilter);
+    let result = bank.links;
+    // Filter archived
+    if (!showArchived) {
+      result = result.filter((l) => l.archived !== "true");
+    }
+    // Filter category
+    if (categoryFilter !== "all") {
+      result = result.filter((l) => l.category === categoryFilter);
+    }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       result = result.filter(
@@ -54,6 +82,7 @@
     loadState = "loading";
     errorCode = "";
     errorMessage = "";
+    actionError = "";
 
     if (!isPywebviewReady()) {
       errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
@@ -72,6 +101,74 @@
 
     bank = response.data ?? { categories: [], links: [] };
     loadState = "loaded";
+  }
+
+  // ── Add link ──
+  async function handleAddLink() {
+    addError = "";
+    if (!isPywebviewReady()) return;
+    const response = await callBridge<LinkItem>("linkbank_add_link", {
+      name: addName.trim(),
+      url: addUrl.trim(),
+      category: addCategory.trim(),
+      notes: addNotes.trim(),
+    });
+    if (!response.ok) {
+      addError = response.error.message;
+      return;
+    }
+    // Reset form and reload
+    addName = "";
+    addUrl = "";
+    addCategory = "";
+    addNotes = "";
+    addFormOpen = false;
+    await loadLinkBank();
+  }
+
+  // ── Edit link ──
+  function startEdit(link: LinkItem) {
+    editingId = link.id;
+    editName = link.name;
+    editUrl = link.url;
+    editCategory = link.category;
+    editNotes = link.notes;
+    editError = "";
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editError = "";
+  }
+
+  async function handleSaveEdit() {
+    editError = "";
+    if (!isPywebviewReady() || !editingId) return;
+    const response = await callBridge<LinkItem>("linkbank_update", {
+      id: editingId,
+      name: editName.trim(),
+      url: editUrl.trim(),
+      category: editCategory.trim(),
+      notes: editNotes.trim(),
+    });
+    if (!response.ok) {
+      editError = response.error.message;
+      return;
+    }
+    editingId = null;
+    await loadLinkBank();
+  }
+
+  // ── Archive link ──
+  async function handleArchive(linkId: string) {
+    actionError = "";
+    if (!isPywebviewReady()) return;
+    const response = await callBridge<LinkItem>("linkbank_archive_link", linkId);
+    if (!response.ok) {
+      actionError = response.error.message;
+      return;
+    }
+    await loadLinkBank();
   }
 
   // ── Notes tab (Second Brain read-only) ──
@@ -240,7 +337,7 @@
       {/if}
     </div>
 
-  <!-- ── Link Bank tab (read-only; add/edit/archive deferred) ── -->
+  <!-- ── Link Bank tab ── -->
   {:else}
     {#if loadState === "loading"}
       <div class="dashboard-banner banner-loading">
@@ -273,12 +370,37 @@
               bind:value={searchQuery}
             />
           </div>
+          <label class="lb-archived-toggle">
+            <input type="checkbox" bind:checked={showArchived} />
+            <span>Show archived</span>
+          </label>
         </div>
         <div class="lb-toolbar-right">
           <span class="project-count">{filteredLinks.length} link(s)</span>
-          <span class="lb-deferred-hint">✎ Add/Edit deferred</span>
+          <button class="lb-add-btn" onclick={() => { addFormOpen = !addFormOpen; addError = ""; }}>
+            {addFormOpen ? "Cancel" : "+ Add Link"}
+          </button>
         </div>
       </div>
+
+      <!-- Action error -->
+      {#if actionError}
+        <div class="lb-inline-error">{actionError}</div>
+      {/if}
+
+      <!-- Add link form -->
+      {#if addFormOpen}
+        <div class="lb-add-form">
+          <input class="lb-form-input" placeholder="Name *" bind:value={addName} />
+          <input class="lb-form-input" placeholder="URL (https://...) *" bind:value={addUrl} />
+          <input class="lb-form-input" placeholder="Category" bind:value={addCategory} />
+          <input class="lb-form-input" placeholder="Notes" bind:value={addNotes} />
+          <button class="lb-form-submit" onclick={handleAddLink}>Add</button>
+          {#if addError}
+            <span class="lb-form-error">{addError}</span>
+          {/if}
+        </div>
+      {/if}
 
       <!-- Link list -->
       <div class="lb-list">
@@ -286,27 +408,54 @@
           <div class="table-empty">
             <p class="empty-title">No links found</p>
             <p class="empty-sub">
-              {bank.links.length === 0 ? "No links in link bank. Add/edit support landing in a future phase." : "Adjust filters to see results."}
+              {bank.links.length === 0 ? "No links in link bank yet. Use '+ Add Link' to create one." : "Adjust filters to see results."}
             </p>
           </div>
         {:else}
-          {#each filteredLinks as link}
-            <article class="lb-card">
+          {#each filteredLinks as link (link.id)}
+            <article class="lb-card" class:lb-card-archived={link.archived === "true"}>
               <span class="lb-card-accent"></span>
               <div class="lb-card-body">
-                <div class="lb-card-top">
-                  <h4 class="lb-card-title">
-                    <a href={link.url} target="_blank" rel="noopener" class="lb-link">{link.name}</a>
-                  </h4>
-                  {#if link.category}
-                    <span class="lb-category-badge">{link.category}</span>
+                {#if editingId === link.id}
+                  <!-- Edit mode -->
+                  <div class="lb-edit-form">
+                    <input class="lb-form-input" placeholder="Name" bind:value={editName} />
+                    <input class="lb-form-input" placeholder="URL" bind:value={editUrl} />
+                    <input class="lb-form-input" placeholder="Category" bind:value={editCategory} />
+                    <input class="lb-form-input" placeholder="Notes" bind:value={editNotes} />
+                    <div class="lb-edit-actions">
+                      <button class="lb-form-submit" onclick={handleSaveEdit}>Save</button>
+                      <button class="lb-form-cancel" onclick={cancelEdit}>Cancel</button>
+                    </div>
+                    {#if editError}
+                      <span class="lb-form-error">{editError}</span>
+                    {/if}
+                  </div>
+                {:else}
+                  <!-- Display mode -->
+                  <div class="lb-card-top">
+                    <h4 class="lb-card-title">
+                      <a href={link.url} target="_blank" rel="noopener" class="lb-link">{link.name}</a>
+                    </h4>
+                    {#if link.category}
+                      <span class="lb-category-badge">{link.category}</span>
+                    {/if}
+                    {#if link.archived === "true"}
+                      <span class="lb-archived-badge">Archived</span>
+                    {/if}
+                  </div>
+                  {#if link.url}
+                    <p class="lb-card-url">{link.url}</p>
                   {/if}
-                </div>
-                {#if link.url}
-                  <p class="lb-card-url">{link.url}</p>
-                {/if}
-                {#if link.notes}
-                  <p class="lb-card-notes">{link.notes}</p>
+                  {#if link.notes}
+                    <p class="lb-card-notes">{link.notes}</p>
+                  {/if}
+                  <div class="lb-card-actions">
+                    <button class="lb-action-btn" onclick={() => startEdit(link)}>Edit</button>
+                    {#if link.archived !== "true"}
+                      <button class="lb-action-btn lb-action-archive" onclick={() => handleArchive(link.id)}>Archive</button>
+                    {/if}
+                  </div>
                 {/if}
               </div>
             </article>
@@ -561,5 +710,152 @@
     font-weight: 700;
     color: var(--color-muted-light);
     line-height: 1.35;
+  }
+
+  /* ── Add link button + form ── */
+  .lb-add-btn {
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 5px;
+    background: var(--color-dbs-red);
+    color: #fff;
+    border: 0;
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  .lb-add-btn:hover { opacity: 0.88; }
+
+  .lb-add-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    background: #fff;
+    border: 1px solid #D7DCE2;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: var(--shadow-subtle);
+  }
+  .lb-edit-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .lb-form-input {
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid #D7DCE2;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-ink);
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .lb-form-input:focus {
+    outline: none;
+    border-color: var(--color-dbs-red);
+  }
+  .lb-form-submit {
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 5px;
+    background: var(--color-dbs-red);
+    color: #fff;
+    border: 0;
+    font-size: 11px;
+    font-weight: 850;
+    cursor: pointer;
+  }
+  .lb-form-submit:hover { opacity: 0.88; }
+  .lb-form-cancel {
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--color-muted);
+    border: 1px solid #D7DCE2;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .lb-form-cancel:hover { background: var(--color-workspace-panel); }
+  .lb-form-error {
+    flex: 1 1 100%;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--color-dbs-red);
+  }
+
+  /* ── Archived toggle / badge ── */
+  .lb-archived-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--color-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .lb-archived-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #F1F3F5;
+    border: 1px solid #D7DCE2;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--color-muted-light);
+  }
+  .lb-card-archived { opacity: 0.6; }
+
+  /* ── Card actions ── */
+  .lb-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .lb-edit-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .lb-action-btn {
+    height: 22px;
+    padding: 0 10px;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--color-muted);
+    border: 1px solid #D7DCE2;
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .lb-action-btn:hover {
+    background: var(--color-soft-pink-surface);
+    color: var(--color-dbs-red);
+    border-color: var(--color-dbs-red);
+  }
+  .lb-action-archive:hover {
+    background: var(--color-soft-pink-surface);
+  }
+
+  /* ── Inline error banner ── */
+  .lb-inline-error {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--color-soft-pink-surface);
+    border: 1px solid var(--color-dbs-red);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--color-dbs-red);
   }
 </style>

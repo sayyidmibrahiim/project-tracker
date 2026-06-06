@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
@@ -408,13 +409,60 @@ def create_js_api(
             return self._store.read().to_dict()
 
         def update_linkbank(self, data: dict[str, object]) -> object:
-            raise RuntimeError("Link Bank update is deferred until stable link IDs exist")
+            """Update a single link's fields by id."""
+            link_id = str(data.get("id", ""))
+            if not link_id:
+                raise ValueError("Link id is required")
+            bank = self._store.read()
+            target = next((link for link in bank.links if link.get("id") == link_id), None)
+            if target is None:
+                raise ValueError(f"Link not found: {link_id}")
+            for key in ("name", "url", "notes", "category"):
+                if key in data:
+                    target[key] = str(data[key])
+            old_category = target.get("category", "")
+            if old_category and old_category not in bank.categories:
+                bank.categories.append(old_category)
+            self._store.write(bank)
+            return dict(target)
 
         def add_link(self, data: dict[str, object]) -> object:
-            raise RuntimeError("Link Bank add is deferred until stable link IDs exist")
+            """Create a new link with a stable uuid id and persist it."""
+            name = str(data.get("name", "")).strip()
+            url = str(data.get("url", "")).strip()
+            if not name or not url:
+                raise ValueError("Link name and url are required")
+            parsed_url = urlparse(url)
+            if parsed_url.scheme not in {"http", "https"}:
+                raise ValueError("Link url must use http or https")
+            bank = self._store.read()
+            link = {
+                "id": uuid.uuid4().hex,
+                "name": name,
+                "url": url,
+                "notes": str(data.get("notes", "")),
+                "category": str(data.get("category", "")),
+                "archived": "false",
+            }
+            bank.links.append(link)
+            category = link["category"]
+            if category and category not in bank.categories:
+                bank.categories.append(category)
+            self._store.write(bank)
+            return dict(link)
 
         def archive_link(self, link_id: str) -> object:
-            raise RuntimeError("Link Bank archive is deferred until stable link IDs exist")
+            """Soft-archive a link by id."""
+            link_id = str(link_id)
+            if not link_id:
+                raise ValueError("Link id is required")
+            bank = self._store.read()
+            target = next((link for link in bank.links if link.get("id") == link_id), None)
+            if target is None:
+                raise ValueError(f"Link not found: {link_id}")
+            target["archived"] = "true"
+            self._store.write(bank)
+            return dict(target)
 
     # ── project service adapter (dashboard → project protocol) ────────
     class _ProjectServiceAdapter:
