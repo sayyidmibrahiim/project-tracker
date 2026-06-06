@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
+  import type { SecondBrainItem } from "../types";
   import { BridgeErrorCode } from "../types";
 
   // ── Tab state ──
@@ -73,18 +74,86 @@
     loadState = "loaded";
   }
 
+  // ── Notes tab (Second Brain read-only) ──
+  type NotesLoadState = "idle" | "loading" | "error" | "loaded";
+  let notesLoadState: NotesLoadState = $state("idle");
+  let notesErrorCode: string = $state("");
+  let notesErrorMessage: string = $state("");
+  let notesItems: SecondBrainItem[] = $state([]);
+  let notesSearch: string = $state("");
+  let selectedItem: SecondBrainItem | null = $state(null);
+
+  let filteredNotes: SecondBrainItem[] = $derived.by(() => {
+    const q = notesSearch.trim().toLowerCase();
+    if (!q) return notesItems;
+    return notesItems.filter((n) =>
+      n.title.toLowerCase().includes(q) ||
+      n.path.toLowerCase().includes(q) ||
+      n.item_type.toLowerCase().includes(q),
+    );
+  });
+
+  async function loadNotes() {
+    notesLoadState = "loading";
+    notesErrorCode = "";
+    notesErrorMessage = "";
+    selectedItem = null;
+
+    if (!isPywebviewReady()) {
+      notesErrorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
+      notesErrorMessage = "pywebview bridge unavailable.";
+      notesLoadState = "error";
+      return;
+    }
+    const resp = await callBridge<SecondBrainItem[]>("second_brain_list");
+    if (!resp.ok) {
+      notesErrorCode = resp.error.code;
+      notesErrorMessage = resp.error.message;
+      notesLoadState = "error";
+      return;
+    }
+    notesItems = resp.data ?? [];
+    notesLoadState = "loaded";
+  }
+
+  async function searchNotes(query: string) {
+    notesSearch = query;
+    if (!query.trim()) { loadNotes(); return; }
+    if (!isPywebviewReady()) return;
+    notesLoadState = "loading";
+    selectedItem = null;
+    const resp = await callBridge<SecondBrainItem[]>("second_brain_search", query);
+    if (!resp.ok) {
+      notesErrorCode = resp.error.code;
+      notesErrorMessage = resp.error.message;
+      notesLoadState = "error";
+      return;
+    }
+    notesItems = resp.data ?? [];
+    notesLoadState = "loaded";
+  }
+
+  async function selectNoteItem(itemId: string) {
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<SecondBrainItem>("second_brain_get", itemId);
+    selectedItem = resp.ok ? (resp.data ?? null) : null;
+  }
+
   onMount(() => {
     if (activeTab === "linkbank") loadLinkBank();
+    else if (activeTab === "notes") loadNotes();
   });
 
   function onTabSwitch(tab: TabId) {
     activeTab = tab;
     if (tab === "linkbank" && loadState === "idle") loadLinkBank();
+    if (tab === "notes" && notesLoadState === "idle") loadNotes();
   }
 
   // Expose refresh for parent
   export function refresh() {
     if (activeTab === "linkbank") loadLinkBank();
+    else if (activeTab === "notes") loadNotes();
   }
 </script>
 
@@ -103,14 +172,72 @@
     >Link Bank</button>
   </div>
 
-  <!-- ── Notes tab (deferred placeholder) ── -->
+  <!-- ── Notes tab (Second Brain read-only with search) ── -->
   {#if activeTab === "notes"}
-    <div class="sb-notes-placeholder">
-      <div class="placeholder-hero">
-        <span class="placeholder-kicker">Coming next</span>
-        <h2>Notes & Second Brain</h2>
-        <p>Markdown notes editor, searchable knowledge base, and project documents browser. Landing in Phase E.</p>
+    <div class="sb-notes-panel">
+      <!-- Search bar -->
+      <div class="sb-notes-toolbar">
+        <div class="header-search">
+          <span class="search-icon">⌕</span>
+          <input
+            class="header-input"
+            placeholder="Search notes… (type to search)"
+            value={notesSearch}
+            oninput={(e) => searchNotes((e.target as HTMLInputElement).value)}
+          />
+        </div>
+        <span class="project-count">{filteredNotes.length} item(s)</span>
+        <span class="lb-deferred-hint">✎ Pin/Favorite/Edit deferred</span>
       </div>
+
+      {#if notesLoadState === "loading"}
+        <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading notes…</span></div>
+      {:else if notesLoadState === "error"}
+        <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Notes unavailable</p><p class="banner-detail">{notesErrorCode}: {notesErrorMessage}</p></div></div>
+      {:else}
+        <div class="sb-notes-body">
+          <!-- Left: note list -->
+          <div class="sb-notes-list">
+            {#if filteredNotes.length === 0}
+              <div class="table-empty"><p class="empty-title">No notes found</p><p class="empty-sub">{notesItems.length === 0 ? "No Second Brain items indexed yet. Landing in Phase E." : "No items match your search."}</p></div>
+            {:else}
+              {#each filteredNotes as item}
+                <button class="sb-note-row" class:selected={selectedItem?.id === item.id} onclick={() => selectNoteItem(item.id)}>
+                  <span class="sb-note-icon">{item.pinned ? "◆" : item.favorite ? "★" : "▸"}</span>
+                  <div class="sb-note-info">
+                    <span class="sb-note-title">{item.title}</span>
+                    <span class="sb-note-meta">{item.item_type} · {item.state} · {item.path}</span>
+                  </div>
+                </button>
+              {/each}
+            {/if}
+          </div>
+
+          <!-- Right: detail panel -->
+          <div class="sb-note-detail">
+            {#if !selectedItem}
+              <div class="table-empty"><p class="empty-title">Select a note</p><p class="empty-sub">Click a note from the list to view details.</p></div>
+            {:else}
+              <div class="sb-note-card">
+                <div class="sb-note-card-head">
+                  <span class="sb-note-card-accent"></span>
+                  <div style="flex:1;min-width:0;">
+                    <h4 class="sb-note-card-title">{selectedItem.title}</h4>
+                    <p class="sb-note-card-path">{selectedItem.path}</p>
+                  </div>
+                </div>
+                <dl class="sb-note-grid">
+                  <div class="pd-dl-item"><dt>Type</dt><dd>{selectedItem.item_type}</dd></div>
+                  <div class="pd-dl-item"><dt>State</dt><dd>{selectedItem.state}</dd></div>
+                  <div class="pd-dl-item"><dt>Updated</dt><dd>{new Date(selectedItem.updated_at).toLocaleString("en-GB")}</dd></div>
+                  <div class="pd-dl-item"><dt>Flags</dt><dd>{selectedItem.pinned ? "📌 Pinned " : ""}{selectedItem.favorite ? "★ Favorite" : ""}{!selectedItem.pinned && !selectedItem.favorite ? "—" : ""}</dd></div>
+                </dl>
+                <span class="lb-deferred-hint" style="display:block;margin-top:10px;">✎ Pin/Favorite/Edit deferred — read-only preview only.</span>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
 
   <!-- ── Link Bank tab (read-only; add/edit/archive deferred) ── -->
@@ -235,16 +362,89 @@
     font-weight: 900;
   }
 
-  /* ── Notes placeholder ── */
-  .sb-notes-placeholder {
+  /* ── Notes panel ── */
+  .sb-notes-panel {
     flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+  }
+  .sb-notes-toolbar {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    background: var(--color-workspace-panel);
+    border: 1px solid #D7DCE2;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.30);
   }
-  .sb-notes-placeholder .placeholder-hero {
-    max-width: 520px;
+  .sb-notes-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 8px;
   }
+  @media (max-width: 900px) {
+    .sb-notes-body { grid-template-columns: 1fr; }
+  }
+  .sb-notes-list {
+    background: #fff;
+    border: 1px solid #D7DCE2;
+    border-radius: 8px;
+    box-shadow: var(--shadow-card);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+  }
+  .sb-note-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 750;
+    color: var(--color-ink);
+    transition: background 0.12s;
+    width: 100%;
+  }
+  .sb-note-row:hover { background: var(--color-workspace-panel); }
+  .sb-note-row.selected { background: var(--color-soft-pink-surface); border-left-color: var(--color-dbs-red); font-weight: 900; }
+  .sb-note-icon { font-size: 12px; flex: 0 0 auto; width: 16px; text-align: center; }
+  .sb-note-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .sb-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+  .sb-note-meta { font-size: 9px; color: var(--color-muted); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sb-note-detail { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .sb-note-card {
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    box-shadow: var(--shadow-subtle);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+  .sb-note-card-head { display: flex; align-items: center; gap: 10px; }
+  .sb-note-card-accent { width: 4px; min-width: 4px; height: 28px; border-radius: 2px; background: var(--color-dbs-red); }
+  .sb-note-card-title { margin: 0; font-size: 14px; font-weight: 900; color: var(--color-ink); }
+  .sb-note-card-path { margin: 2px 0 0; font-size: 10px; color: var(--color-muted); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+  @media (max-width: 700px) { .sb-note-grid { grid-template-columns: 1fr; } }
 
   /* ── Link Bank Toolbar ── */
   .lb-toolbar {

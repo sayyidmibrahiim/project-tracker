@@ -100,3 +100,66 @@ export interface EventItem {
   payload: Record<string, unknown>;
   timestamp: string;
 }
+
+// ── Project Details DTOs — match Python project_get / project_list shapes ──
+
+/** Mirrors project detail returned by project_get (FakeProjectDetail shape from tests). */
+export interface ProjectDetail {
+  project_name: string;
+  project_path: string;
+  project_state: string;
+  cr_number: string;
+  cr_state: string;
+  start_datetime: string | null;
+  end_datetime: string | null;
+  t10_status: string;
+  drone_ticket_count: number;
+}
+
+/** Mirrors project row returned by project_list. */
+export interface ProjectRow {
+  project_name: string;
+  project_path: string;
+  project_state: string;
+  cr_number: string;
+  cr_state: string;
+}
+
+/** Mirrors file row returned by file_list. */
+export interface FileRow {
+  name: string;
+  path: string;
+}
+
+// ── Automation DTOs — match Python automation_list_rules / evaluate shapes ──
+
+/** Mirrors automation rule returned by automation_list_rules. */
+export interface AutomationRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  conditions: Record<string, unknown>[];
+}
+
+/** Mirrors automation evaluation result. */
+export interface AutomationResult {
+  rule_id: string;
+  rule_name: string;
+  passed: boolean;
+  skipped: boolean;
+  matched_conditions: Record<string, unknown>[];
+}
+
+// ── Second Brain DTOs — match Python second_brain_list/search/get shapes ──
+
+/** Mirrors SecondBrainItem from second_brain_list/search/get. */
+export interface SecondBrainItem {
+  id: string;
+  title: string;
+  path: string;
+  item_type: string;
+  updated_at: string;
+  pinned: boolean;
+  favorite: boolean;
+  state: string;
+}

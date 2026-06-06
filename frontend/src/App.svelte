@@ -6,32 +6,17 @@
   import Report from "./lib/components/Report.svelte";
   import Settings from "./lib/components/Settings.svelte";
   import SecondBrain from "./lib/components/SecondBrain.svelte";
+  import ProjectDetails from "./lib/components/ProjectDetails.svelte";
+  import Automations from "./lib/components/Automations.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
 
-  const pageShells: Record<Exclude<PageId, "dashboard" | "report" | "settings" | "second-brain">, { title: string; subtitle: string; sections: { title: string; detail: string }[] }> = {
-    "project-detail": {
-      title: "Project Details",
-      subtitle: "Operational workspace shell for NEW_PROJECT and SHOW_EDIT flows. Data binding lands in Phase E.",
-      sections: [
-        { title: "Project Command Center", detail: "Year, project, sub project selectors plus open/delete actions." },
-        { title: "Metadata Forms", detail: "CR link, Drone tickets, schedule, implementation plan, and state controls." },
-        { title: "Files, Notes, History", detail: "File list, markdown notes, autosave indicators, and read-only activity history." },
-      ],
-    },
-    automations: {
-      title: "Automations",
-      subtitle: "Automation command deck shell. Outlook, Teams, Scheduler, and Rules Engine stay deferred.",
-      sections: [
-        { title: "Outlook", detail: "Email categories, templates, conditions, and send/download logs." },
-        { title: "Teams", detail: "Preview-first message automations with guarded Windows execution." },
-        { title: "Scheduler & Rules", detail: "APScheduler entries plus trigger-condition-action rules." },
-      ],
-    },
-  };
+  // No remaining placeholder pages — all pages have real components.
+  // pageShells kept for type safety if new placeholder pages are added later.
+  const pageShells: Partial<Record<PageId, { title: string; subtitle: string; sections: { title: string; detail: string }[] }>> = {};
 
   let currentPage: PageId = $state("dashboard");
   let selectedYear = $state("all");
@@ -48,7 +33,7 @@
   const POLL_INTERVAL_MS = 5000;
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings", "second-brain"];
+    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations"];
     if (id in pageShells || validPages.includes(id)) {
       currentPage = id as PageId;
     }
@@ -162,9 +147,12 @@
       <Settings />
     {:else if currentPage === "second-brain"}
       <SecondBrain />
+    {:else if currentPage === "project-detail"}
+      <ProjectDetails />
+    {:else if currentPage === "automations"}
+      <Automations />
     {:else}
-      {@const shell = pageShells[currentPage]}
-      <PagePlaceholder title={shell.title} subtitle={shell.subtitle} sections={shell.sections} />
+      <PagePlaceholder title="Unknown Page" subtitle="Page not found." sections={[]} />
     {/if}
   </main>
 </div>
