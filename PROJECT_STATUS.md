@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.15b complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, and CR Link update end-to-end**
+**Phase D.1–D.16 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, and automation rules evaluate-all preview**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.15b are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -1035,6 +1035,29 @@ Latest completed commit:
 7d5c811 implement phase D.15b cr link update
 ```
 
+### Phase D.16 — Automation rules evaluate-all preview
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- "Evaluate All (preview)" button added to Automations rules tab.
+- `automation_evaluate_all` JsApi bound — calls with empty context, read-only, no side effects.
+- Results populate per-rule evaluation badges (Passed/Failed/Skipped) in the existing rules list.
+- Disabled state while pending.
+- Hint text explains empty context / no side effects.
+- No Outlook/Teams/COM/pyautogui execution.
+- No scheduler start/stop.
+- No rule create/edit/delete.
+- No backend, js_api, or package changes.
+- `svelte-check` clean (90 files, 0 errors, 0 warnings), `vite build` clean, Python tests 377 passed.
+
+Latest completed commit:
+
+```text
+ed0f74c improve automation rules preview
+```
+
 ## Phase D Exit Audit
 
 ```text
@@ -1043,10 +1066,10 @@ Working tree: clean
 svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
 Tests: 377 passed
-Latest completed commit: 7d5c811 implement phase D.15b cr link update
+Latest completed commit: ed0f74c improve automation rules preview
 ```
 
-Phase D.1 through D.15a Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, and Project Details read-path production wiring are complete and verified on Linux.
+Phase D.1 through D.16 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, and automation rules evaluate-all preview are complete and verified on Linux.
 
 Remaining deferred:
 
