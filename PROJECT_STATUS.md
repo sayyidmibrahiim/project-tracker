@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.15a complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, and Project Details read-path production wiring**
+**Phase D.1–D.15b complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, and CR Link update end-to-end**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.15a are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.15b are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -1012,6 +1012,29 @@ Latest completed commit:
 080d684 implement phase D.15a project details read wiring
 ```
 
+### Phase D.15b — CR Link update end-to-end
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `cr_update_link` production runtime wiring through `create_js_api()`.
+- `_ProjectServiceAdapter.update_cr_link()` performs metadata-only mutation — reads `MetadataStore`, sets `cr_link`, updates `updated_at`, persists, returns refreshed DTO with `cr_number` extracted via `extract_cr_number()`.
+- ProjectDetails CR Link explicit Save UI — `cr-link-input` + Save button, no autosave, disabled while saving or unchanged.
+- Save success/error feedback with 2.5s auto-dismiss on success.
+- No CR state mutation.
+- No Drone mutation.
+- No folder/file/project mutation.
+- No `js_api.py` signature changes.
+- No backend DTO changes.
+- `svelte-check` clean (90 files, 0 errors, 0 warnings), `vite build` clean, Python tests 377 passed.
+
+Latest completed commit:
+
+```text
+7d5c811 implement phase D.15b cr link update
+```
+
 ## Phase D Exit Audit
 
 ```text
@@ -1019,8 +1042,8 @@ Branch: prd-v31-migration
 Working tree: clean
 svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
-Tests: 372 passed
-Latest completed commit: 080d684 implement phase D.15a project details read wiring
+Tests: 377 passed
+Latest completed commit: 7d5c811 implement phase D.15b cr link update
 ```
 
 Phase D.1 through D.15a Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, and Project Details read-path production wiring are complete and verified on Linux.
