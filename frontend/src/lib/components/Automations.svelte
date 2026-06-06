@@ -15,6 +15,7 @@
   let rules: AutomationRule[] = $state([]);
   let evalResults: Record<string, AutomationResult | null> = $state({});
   let evalPending: Record<string, boolean> = $state({});
+  let evalAllPending: boolean = $state(false);
 
   async function loadRules() {
     loadState = "loading";
@@ -44,6 +45,18 @@
     const resp = await callBridge<AutomationResult>("automation_evaluate_rule", ruleId, {});
     evalPending = { ...evalPending, [ruleId]: false };
     evalResults = { ...evalResults, [ruleId]: resp.ok ? (resp.data ?? null) : null };
+  }
+
+  async function evaluateAll() {
+    if (!isPywebviewReady()) return;
+    evalAllPending = true;
+    const resp = await callBridge<AutomationResult[]>("automation_evaluate_all", {});
+    evalAllPending = false;
+    if (resp.ok && resp.data) {
+      const next: Record<string, AutomationResult | null> = {};
+      for (const r of resp.data) next[r.rule_id] = r;
+      evalResults = next;
+    }
   }
 
   function onTabSwitch(tab: TabId) {
@@ -120,6 +133,12 @@
           </div>
         {/each}
       </div>
+      <div class="am-eval-all-bar">
+        <button class="am-eval-all-btn" disabled={evalAllPending} onclick={evaluateAll}>
+          {#if evalAllPending}◌ Evaluating all…{:else}Evaluate All (preview){/if}
+        </button>
+        <span class="am-eval-all-hint">Runs all rules with empty context — no real project data, no side effects.</span>
+      </div>
       <div class="am-deferred-bar">
         <span>⚠ Rule create/edit/delete deferred. Evaluation uses empty context (no real project data). Outlook/Teams/Scheduler actions not executed. Landing in Phase E.</span>
       </div>
@@ -166,6 +185,11 @@
   .am-eval-result.failed { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }
   .am-eval-result.skipped { background:var(--color-workspace-panel); color:var(--color-muted); }
   .am-eval-error { font-size:10px; color:var(--color-dbs-red); font-weight:750; }
+  .am-eval-all-bar { display:flex; align-items:center; gap:10px; flex:0 0 auto; flex-wrap:wrap; }
+  .am-eval-all-btn { height:28px; border-radius:5px; padding:0 14px; background:var(--color-dbs-red); color:#fff; border:1px solid var(--color-dbs-red-hover); font-weight:850; font-size:11px; cursor:pointer; white-space:nowrap; transition:background 0.15s; }
+  .am-eval-all-btn:hover:not(:disabled) { background:var(--color-dbs-red-hover); }
+  .am-eval-all-btn:disabled { opacity:0.55; cursor:not-allowed; }
+  .am-eval-all-hint { font-size:10px; color:var(--color-muted); font-weight:700; }
   .am-deferred-tab { flex:1; display:flex; align-items:center; justify-content:center; }
   .am-deferred-tab .placeholder-hero { max-width:520px; }
   .am-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
