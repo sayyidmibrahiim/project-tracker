@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.10 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, and report page**
+**Phase D.1–D.12 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, and link bank read binding**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.10 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.12 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -877,26 +877,74 @@ Latest completed commit:
 fc0d721 implement phase D.10 report frontend binding
 ```
 
+### Phase D.11 — Settings frontend page + read/write binding
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `Settings.svelte` replaces placeholder with real Settings page.
+- `settings_get` JsApi bound — loads settings on mount via bridge.
+- `settings_update` JsApi bound — local edit before explicit Save.
+- No autosave, no polling.
+- Help Center sidebar with 10 searchable help topics.
+- Form fields organized in General, Behavior, and Paths cards.
+- Pass-through of unrecognized DTO keys on save.
+- Bridge-unavailable and error states handled.
+- Save success toast with 2.5s auto-dismiss.
+- `App.svelte` routes "settings" page to `Settings` component.
+- `svelte-check` clean, `vite build` clean, Python tests clean.
+
+Latest completed commit:
+
+```text
+eae30f7 implement phase D.11 settings frontend binding
+```
+
+### Phase D.12 — Link Bank read binding
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `SecondBrain.svelte` routes to read-only Link Bank section (default tab).
+- `linkbank_get` JsApi bound — loads link bank data on mount via bridge.
+- `app_web.py` `create_js_api()` wires `_LinkBankAdapter` from `LinkBankStore`.
+- Link cards rendered with name, URL, category badge, notes.
+- Category dropdown filter (local-only) and free-text search (name/URL/notes/category).
+- Notes tab remains deferred placeholder ("Coming next — Landing in Phase E").
+- Link count badge and "Add/Edit deferred" hint in toolbar.
+- Bridge-unavailable, loading, error, and empty states handled.
+- Add/edit/archive deferred — `_LinkBankAdapter` raises `RuntimeError` for mutations.
+- No backend changes, no polling.
+- `svelte-check` clean, `vite build` clean, Python tests clean.
+
+Latest completed commit:
+
+```text
+ab195b0 implement phase D.12 link bank read binding
+```
+
 ## Phase D Exit Audit
 
 ```text
 Branch: prd-v31-migration
-Working tree: clean (package-lock.json and HTML reference now tracked)
-svelte-check: 86 files, 0 errors, 0 warnings
+Working tree: clean
+svelte-check: 88 files, 0 errors, 0 warnings
 vite build: clean, outputs to web/static/
-Tests: 354 passed
-Latest completed commit: fc0d721 implement phase D.10 report frontend binding
+Tests: 355 passed
+Latest completed commit: ab195b0 implement phase D.12 link bank read binding
 ```
 
-Phase D.1 through D.10 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, and report frontend page are complete and verified on Linux.
+Phase D.1 through D.12 Svelte frontend scaffold, design shell, dashboard, bridge wrapper, read binding, controls behavior, notification event binding, Svelte static serving, app navigation/page shell, report frontend page, settings frontend page, and link bank read binding are complete and verified on Linux.
 
 Remaining deferred:
 
 - Project Details read-only page/data binding
 - Project Details mutations/actions
-- Settings frontend page/data binding
-- Link Bank frontend page/data binding
-- Second Brain frontend page/data binding
+- Link Bank add/edit/archive (until stable link identity/backend support exists)
+- Link Bank tags/pin/favorite (until DTO/backend support exists)
+- full Second Brain notes tree/editor/search index
 - Automations frontend page/data binding
 - Windows manual test
 - packaging
