@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.16 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, and automation rules evaluate-all preview**
+**Phase D.1–D.16 + Phase E.1–E.3 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, automation rules evaluate-all preview, notes persistence (notes.md), drone metadata CRUD, and guarded CR state update**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux.
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux. Phase E metadata-contract slices E.1 through E.3 are completed and verified on Linux.
 
 ## Source of Truth
 
@@ -1073,8 +1073,8 @@ Phase D.1 through D.16 Svelte frontend scaffold, design shell, dashboard, bridge
 
 Remaining deferred:
 
-- Project Details mutations/actions
-- CR/Drone state changes
+- Project Details mutations (create/update/rename)
+- Drone state transitions (guarded, separate from metadata edit)
 - Folder move/rename/delete
 - File write/delete/open execution
 - Automation rule create/edit/delete
@@ -1084,6 +1084,86 @@ Remaining deferred:
 - Link Bank add/edit/archive/tags/pin/favorite
 - Windows manual test
 - packaging
+
+## Phase E Progress
+
+### Phase E.1 — Notes persistence (notes.md)
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- Notes stored in `notes.md` per PRD (JSON notes field is legacy/unused).
+- `_NotesServiceAdapter.get_notes()` reads `{project_path}/notes.md`.
+- `_NotesServiceAdapter.update_notes()` writes `{project_path}/notes.md`.
+- Missing `notes.md` returns empty string (backward compatible).
+- `update_notes` creates `notes.md` if absent.
+- No `ProjectMetadata` serialization change (Phase A.1 tests preserved).
+- ProjectDetails Notes editable textarea with explicit Save Notes button.
+- No autosave. Local edit state before save. Success/error feedback.
+- `svelte-check` clean, `vite build` clean, Python tests 385 passed.
+
+Latest completed commit:
+
+```text
+e87da33 implement phase E.1 notes persistence
+```
+
+### Phase E.2 — Drone metadata CRUD
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `project_get` response now includes `drone_tickets` array (not just count).
+- `drone_add` appends new ticket to metadata (default state: UAT).
+- `drone_update` edits `drone_link`, `owner`, `subfolder_name` at index. Does NOT change `drone_state` (state guards respected).
+- `drone_delete` removes ticket at index.
+- All operations metadata-only, persist via MetadataStore.
+- Index-based targeting (existing JsApi contract).
+- ProjectDetails frontend: drone list, Add/Edit/Delete buttons.
+- No folder/file/project mutations.
+- No `js_api.py` signature changes.
+- `svelte-check` clean, `vite build` clean, Python tests 396 passed.
+
+Latest completed commit:
+
+```text
+e6352f9 implement phase E.2 drone metadata actions
+```
+
+### Phase E.3 — Guarded CR state update
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `cr_update_state` wired through `validate_cr_transition()` state-machine guard.
+- Allowed manual transitions succeed and persist `cr_state` + `cr_state_updated_at`.
+- REOPEN rejected as persistent target.
+- IN-PROGRESS rejected as manual target (automatic-only).
+- Invalid transitions fail with controlled error.
+- No folder moves triggered on CR state change.
+- Frontend dropdown uses real CRState enum values (REOPEN excluded).
+- Explicit Save button, disabled when unchanged.
+- `svelte-check` clean, `vite build` clean, Python tests 407 passed.
+
+Latest completed commit:
+
+```text
+f667344 implement phase E.3 guarded cr state update
+```
+
+## Phase E Exit Audit
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+svelte-check: 90 files, 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests: 407 passed
+Latest completed commit: f667344 implement phase E.3 guarded cr state update
+```
 
 ## Phase 0 Boundary
 
