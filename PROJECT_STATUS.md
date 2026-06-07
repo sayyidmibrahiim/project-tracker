@@ -1301,13 +1301,38 @@ Tests: 453 passed
 Latest completed commit: 027c2b7 implement phase G.3 second brain filesystem index
 ```
 
-Remaining deferred after RC safe slices:
+## RC Hardening (2026-06-08)
+
+Four hardening slices completed:
+
+| Slice | Commit | Subject |
+|-------|--------|---------|
+| RC.1 | `1b9183a` | fix release candidate bridge availability — `poll_events` wired as JsApi instance method |
+| RC.2 | `1122206` | harden release candidate frontend states — SecondBrainItem type fix, null-guard updated_at, drop `(detail as any)` casts, stale deferred bar updated |
+| RC.3 | `ff38fa1` | polish release candidate ui — disable non-functional Add Project and CR filter in header |
+| RC.4 | `b549e90` | update release candidate manual test plan — add RC hardening baseline notes |
+
+Post-hardening checks:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+svelte-check: 90 files, 0 errors, 0 warnings
+vite build: clean
+Tests: 453 passed
+py_compile: pass (app_web.py, js_api.py — Linux)
+Latest commit: b549e90 update release candidate manual test plan
+```
+
+RC readiness: **ready for manual Windows test**. All Linux-automatable checks pass. All high-risk actions deferred. Bridge fully wired. Frontend states hardened across all 6 pages.
+
+Remaining deferred after RC hardening:
 
 - Folder move/rename/delete/transitions
 - File write/delete/open external app
 - Outlook/Teams/COM/pyautogui execution
-- Scheduler real frontend controls
-- Automation rule create/edit/delete persistence/execution
+- Scheduler real frontend controls/status
+- Automation rule CRUD persistence/execution
 - Second Brain persistent pin/favorite/note write
 - Windows manual test
 - Windows packaging
