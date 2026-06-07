@@ -69,9 +69,9 @@
   export function refresh() { if (activeTab === "rules") loadRules(); }
 
   const deferredTabs: Record<Exclude<TabId, "rules">, { title: string; body: string }> = {
-    outlook: { title: "Outlook Automation", body: "Email templates, categories, send/download logs. Requires Windows Outlook COM. Landing in Phase E." },
-    teams: { title: "Teams Automation", body: "Preview-first message automations with guarded Windows execution. Requires pyautogui + Teams desktop. Landing in Phase E." },
-    scheduler: { title: "Scheduler & Rules Engine", body: "APScheduler job management and trigger-condition-action rule creation. Landing in Phase E." },
+    outlook: { title: "Outlook Automation", body: "Email templates, categories, send/download logs. Requires Windows Outlook COM. Deferred pending Windows integration and manual testing." },
+    teams: { title: "Teams Automation", body: "Preview-first message automations with guarded Windows execution. Requires pyautogui + Teams desktop. Deferred pending Windows integration and manual testing." },
+    scheduler: { title: "Scheduler & Rules Engine", body: "APScheduler job management and trigger-condition-action rule creation. Real controls deferred pending implementation and Windows testing." },
   };
 </script>
 
@@ -90,7 +90,7 @@
     {:else if loadState === "error"}
       <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Rules unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
     {:else if rules.length === 0}
-      <div class="table-empty"><p class="empty-title">No rules defined</p><p class="empty-sub">Automation rules will appear here. Rule creation landing in Phase E.</p></div>
+      <div class="table-empty"><p class="empty-title">No rules defined</p><p class="empty-sub">Automation rules will appear here. Rule creation is deferred.</p></div>
     {:else}
       <div class="am-rules-list">
         {#each rules as rule}
@@ -150,7 +150,7 @@
         <span class="am-eval-all-hint">Runs all rules with empty context — no real project data, no side effects.</span>
       </div>
       <div class="am-deferred-bar">
-        <span>⚠ Rule create/edit/delete deferred. Evaluation uses empty context (no real project data). Outlook/Teams/Scheduler actions not executed. Landing in Phase E.</span>
+        <span>⚠ Rule create/edit/delete deferred. Evaluation uses empty context (no real project data). Outlook/Teams/Scheduler actions not executed. Deferred pending Windows integration.</span>
       </div>
     {/if}
   {:else}

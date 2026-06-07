@@ -296,7 +296,7 @@
           <!-- Left: note list -->
           <div class="sb-notes-list">
             {#if filteredNotes.length === 0}
-              <div class="table-empty"><p class="empty-title">No notes found</p><p class="empty-sub">{notesItems.length === 0 ? "No Second Brain items indexed yet. Landing in Phase E." : "No items match your search."}</p></div>
+              <div class="table-empty"><p class="empty-title">No notes found</p><p class="empty-sub">{notesItems.length === 0 ? "No Second Brain items indexed yet. Configure a Second Brain folder in Settings and add files." : "No items match your search."}</p></div>
             {:else}
               {#each filteredNotes as item}
                 <button class="sb-note-row" class:selected={selectedItem?.id === item.id} onclick={() => selectNoteItem(item.id)}>
