@@ -116,6 +116,7 @@ export interface ProjectDetail {
   t10_status: string;
   drone_ticket_count: number;
   drone_tickets: DroneTicket[];
+  implementation_plan?: string | null;
 }
 
 /** Mirrors DroneTicket metadata fields. */
@@ -168,8 +169,8 @@ export interface SecondBrainItem {
   title: string;
   path: string;
   item_type: string;
-  updated_at: string;
+  updated_at: string | null;
   pinned: boolean;
   favorite: boolean;
-  state: string;
+  excerpt?: string;
 }

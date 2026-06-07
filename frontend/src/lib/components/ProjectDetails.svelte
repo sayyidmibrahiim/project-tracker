@@ -132,7 +132,7 @@
     if (detail) crLinkEdit = detail.cr_link || "";
     if (detail) crStateEdit = detail.cr_state || "";
     if (detail) syncDroneStateEdits();
-    if (detail) { metaNameEdit = detail.project_name || ""; metaPlanEdit = (detail as any).implementation_plan || ""; }
+    if (detail) { metaNameEdit = detail.project_name || ""; metaPlanEdit = detail.implementation_plan || ""; }
     notesEdit = notes;
 
     if (!dResp.ok) {
@@ -439,7 +439,7 @@
               <label class="pd-meta-label" for="meta-plan">Implementation Plan</label>
               <textarea id="meta-plan" class="pd-notes-textarea" rows="4" bind:value={metaPlanEdit} disabled={metaSaveState === "saving"}></textarea>
               <div class="pd-notes-actions">
-                <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || (metaNameEdit === detail.project_name && metaPlanEdit === ((detail as any).implementation_plan || ""))}>
+                <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || (metaNameEdit === detail.project_name && metaPlanEdit === (detail.implementation_plan || ""))}>
                   {#if metaSaveState === "saving"}⏳ Saving…{:else}Save Metadata{/if}
                 </button>
                 {#if metaSaveState === "success"}
@@ -553,7 +553,7 @@
       <!-- Deferred bar -->
       {#if selectedPath}
         <div class="pd-deferred-bar">
-          <span>⚠ Mutations deferred — add/edit/delete, CR/Drone state change, folder move, rename. Landing in Phase E.</span>
+          <span>⚠ Folder moves, rename, subproject CRUD, file open/write deferred. CR/Drone/Notes/Metadata active.</span>
         </div>
       {/if}
     </div>

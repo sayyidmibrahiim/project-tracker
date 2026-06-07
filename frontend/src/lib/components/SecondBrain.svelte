@@ -303,7 +303,7 @@
                   <span class="sb-note-icon">{item.pinned ? "◆" : item.favorite ? "★" : "▸"}</span>
                   <div class="sb-note-info">
                     <span class="sb-note-title">{item.title}</span>
-                    <span class="sb-note-meta">{item.item_type} · {item.state} · {item.path}</span>
+                    <span class="sb-note-meta">{item.item_type} · {item.path}</span>
                   </div>
                 </button>
               {/each}
@@ -325,8 +325,7 @@
                 </div>
                 <dl class="sb-note-grid">
                   <div class="pd-dl-item"><dt>Type</dt><dd>{selectedItem.item_type}</dd></div>
-                  <div class="pd-dl-item"><dt>State</dt><dd>{selectedItem.state}</dd></div>
-                  <div class="pd-dl-item"><dt>Updated</dt><dd>{new Date(selectedItem.updated_at).toLocaleString("en-GB")}</dd></div>
+                  <div class="pd-dl-item"><dt>Updated</dt><dd>{selectedItem.updated_at ? new Date(selectedItem.updated_at).toLocaleString("en-GB") : "—"}</dd></div>
                   <div class="pd-dl-item"><dt>Flags</dt><dd>{selectedItem.pinned ? "📌 Pinned " : ""}{selectedItem.favorite ? "★ Favorite" : ""}{!selectedItem.pinned && !selectedItem.favorite ? "—" : ""}</dd></div>
                 </dl>
                 <span class="lb-deferred-hint" style="display:block;margin-top:10px;">✎ Pin/Favorite/Edit deferred — read-only preview only.</span>
