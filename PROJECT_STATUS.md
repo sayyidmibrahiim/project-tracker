@@ -1337,6 +1337,38 @@ Remaining deferred after RC hardening:
 - Windows manual test
 - Windows packaging
 
+## RC Polish & Documentation (post-hardening, 2026-06-08)
+
+Slices completed after the RC Hardening section above (all docs/UI-copy only,
+no bridge contract or service signature changes):
+
+| Commit    | Subject                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------ |
+| `75780e9` | update project status after rc hardening                                                         |
+| `8cf64b6` | style: format markdown files with prettier                                                       |
+| `572eb23` | add kiro steering for project tracker dbs (`.kiro/steering/*.md`)                                 |
+| `c74d47d` | improve windows manual test documentation (`docs/windows-manual-test-checklist.md`)              |
+| `fa0b5f4` | document packaging readiness (`docs/packaging-readiness.md`)                                      |
+| `0476b94` | fix release candidate polish issues — replace stale "Landing in Phase E" copy with accurate deferred-pending-Windows-integration messaging in `Automations.svelte` and `SecondBrain.svelte` |
+
+Post-polish checks:
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+svelte-check: 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests: 453 passed
+py_compile: pass (app_web.py, js_api.py — Linux)
+Latest commit: 0476b94 fix release candidate polish issues
+```
+
+No stale "Landing in Phase E" copy remains in the Svelte frontend. Bridge
+consistency re-audited: all 32 frontend `callBridge(...)` names map to wired
+`JsApi` methods in `create_js_api()`; `window.pywebview` is referenced only
+inside `frontend/src/lib/bridge.ts`. RC readiness unchanged: **ready for manual
+Windows test**.
+
 ## Phase 0 Boundary
 
 Phase 0 documentation alignment is complete. `PROJECT_STATUS_old.md` remains historical reference unless deletion is explicitly approved.
