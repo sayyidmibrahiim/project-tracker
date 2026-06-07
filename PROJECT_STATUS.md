@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-**Phase D.1–D.16 + Phase E.1–E.3 + Phase F.1–F.4 complete — Svelte frontend scaffold, design shell, dashboard, bridge, notifications, static serving, navigation shell, report page, settings page, link bank read binding, project details read-only page, automations read-only/rules preview page, second brain notes read-only list/search/detail, frontend polish pass, Project Details read-path production wiring, CR Link update end-to-end, automation rules evaluate-all preview, notes persistence (notes.md), drone metadata CRUD, guarded CR state update, guarded drone state update, link bank stable ID CRUD, and automation condition pills**
+**Release candidate backend/frontend safe slice complete through Phase G.3 — Svelte frontend scaffold, dashboard, Project Details metadata/notes/CR/Drone actions, Link Bank stable ID CRUD, Automation preview UI, project create/update contract, and Second Brain read-only filesystem index**
 
-Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux. Phase E metadata-contract slices E.1 through E.3 are completed and verified on Linux. Phase F metadata/UI completion slices F.1, F.3, and F.4 are completed and verified on Linux (F.2 blocked — Second Brain has no persistence).
+Phase A is completed and verified on Linux. Phase B implementation slices B.1 through B.3 are completed and verified on Linux. Phase C implementation slices C.1 through C.15 are completed and verified on Linux. Phase D implementation slices D.1 through D.16 are completed and verified on Linux. Phase E metadata-contract slices E.1 through E.3 are completed and verified on Linux. Phase F metadata/UI completion slices F.1, F.3, and F.4 are completed and verified on Linux (F.2 blocked — Second Brain pin/favorite lacked persistence). Phase G safe release-candidate slices G.1 and G.3 are completed and verified on Linux; G.2 folder transitions remain deferred as high-risk folder moves.
 
 ## Source of Truth
 
@@ -1241,15 +1241,76 @@ Tests: 431 passed
 Latest completed commit: 4966704 improve phase F.4 automation preview ui
 ```
 
-Remaining deferred after Phase F:
+## Phase G Progress
 
-- Project create/update/rename
+### Phase G.1 — Project create/update contract
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `project_create` wired through `create_js_api()` and `_ProjectServiceAdapter`.
+- Creates project folder only under configured root/year/`UAT_PREPARE` using temp-dir-tested behavior.
+- Validates project name with Windows folder-name rules.
+- Writes initial `project_data.json` metadata with created/updated timestamps.
+- `project_update` metadata-only: project name, implementation plan, CR link, start/end datetimes.
+- ProjectDetails frontend adds explicit Edit Metadata + Save.
+- Rename/delete remain deferred.
+- `svelte-check` clean, `vite build` clean, Python tests 443 passed.
+
+Latest completed commit:
+
+```text
+f673e95 implement phase G.1 project create update contract
+```
+
+### Phase G.2 — Folder transitions audit
+
+Status: BLOCKED — deferred.
+
+Reason: existing ProjectService transition methods physically move folders via `shutil.move`, require full AppSettings/guard context, and need explicit confirmation UX + guard-reason display before production wiring. Deferred to a dedicated high-risk filesystem phase.
+
+### Phase G.3 — Second Brain read-only filesystem index
+
+Status: completed and verified on Linux.
+
+Verified scope:
+
+- `SecondBrainService` production wiring now receives a read-only filesystem provider backed by `AppSettings.second_brain_folder`.
+- Missing/unconfigured folder returns empty list safely.
+- Recursively scans files, skips hidden paths, derives stable IDs from relative paths, classifies `.md`/`.txt` as notes.
+- Excerpt read is limited and guarded; no note write/delete/edit operations.
+- Existing `second_brain_list`, `second_brain_search`, and `second_brain_get` now return real configured-folder data.
+- Persistent pin/favorite/note write remain deferred.
+- `svelte-check` clean, `vite build` clean, Python tests 453 passed.
+
+Latest completed commit:
+
+```text
+027c2b7 implement phase G.3 second brain filesystem index
+```
+
+## Release Candidate Exit Audit
+
+```text
+Branch: prd-v31-migration
+Working tree: clean
+svelte-check: 90 files, 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests: 453 passed
+Latest completed commit: 027c2b7 implement phase G.3 second brain filesystem index
+```
+
+Remaining deferred after RC safe slices:
+
 - Folder move/rename/delete/transitions
 - File write/delete/open external app
-- Second Brain real filesystem index + pin/favorite/note write (blocks F.2)
-- Automation rule create/edit/delete + Outlook/Teams/COM/pyautogui execution
+- Outlook/Teams/COM/pyautogui execution
 - Scheduler real frontend controls
-- Windows manual test + packaging
+- Automation rule create/edit/delete persistence/execution
+- Second Brain persistent pin/favorite/note write
+- Windows manual test
+- Windows packaging
 
 ## Phase 0 Boundary
 
