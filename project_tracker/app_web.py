@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 import tempfile
 import uuid
@@ -28,7 +29,7 @@ from project_tracker.services.notification_service import NotificationService
 from project_tracker.services.project_service import ProjectService
 from project_tracker.services.report_service import ReportService
 from project_tracker.services.safe_delete_service import SafeDeleteService
-from project_tracker.services.second_brain_service import SecondBrainService
+from project_tracker.services.second_brain_service import SecondBrainItem, SecondBrainService
 from project_tracker.services.teams_service import TeamsMessage
 from project_tracker.web.js_api import JsApi
 
@@ -389,12 +390,47 @@ def create_js_api(
     _settings_store = settings_store or SettingsStore()
     _linkbank_store = linkbank_store or LinkBankStore()
 
+    def _second_brain_items_provider() -> list[SecondBrainItem]:
+        """Read-only filesystem index from AppSettings.second_brain_folder."""
+        folder = _settings_store.read().second_brain_folder
+        if folder is None or not folder.is_dir():
+            return []
+
+        items: list[SecondBrainItem] = []
+        for path in folder.rglob("*"):
+            if not path.is_file() or any(part.startswith(".") for part in path.relative_to(folder).parts):
+                continue
+            relative = path.relative_to(folder).as_posix()
+            item_id = hashlib.sha1(relative.encode("utf-8")).hexdigest()[:16]
+            suffix = path.suffix.casefold()
+            excerpt = ""
+            if suffix in {".md", ".txt"}:
+                try:
+                    excerpt = path.read_text(encoding="utf-8", errors="replace")[:200]
+                except OSError:
+                    excerpt = ""
+            try:
+                updated_at = datetime.fromtimestamp(path.stat().st_mtime).astimezone()
+            except OSError:
+                updated_at = None
+            items.append(
+                SecondBrainItem(
+                    id=item_id,
+                    title=path.stem,
+                    path=path,
+                    item_type="note" if suffix in {".md", ".txt"} else "file",
+                    updated_at=updated_at,
+                    excerpt=excerpt,
+                )
+            )
+        return sorted(items, key=lambda item: (item.title.casefold(), str(item.path).casefold()))
+
     # ── services ─────────────────────────────────────────────────────
     dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
     notification_svc = NotificationService()
     report_svc = ReportService(dashboard_service=dashboard_svc)
     automation_svc = AutomationService()
-    second_brain_svc = SecondBrainService()
+    second_brain_svc = SecondBrainService(items_provider=_second_brain_items_provider)
 
     # ── settings adapter (SettingsStore.read() → get_settings()) ──────
     class _SettingsAdapter:
