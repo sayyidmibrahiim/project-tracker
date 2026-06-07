@@ -62,12 +62,12 @@
         <span class="search-icon">⌕</span>
         <input class="header-input" placeholder="Search projects here..." value={searchQuery} oninput={handleSearchInput} />
       </div>
-      <select class="header-combo" aria-label="Filter">
+      <select class="header-combo" aria-label="Filter" disabled title="CR filter deferred">
         <option>All CR</option>
         <option>Pending</option>
         <option>Approved</option>
       </select>
-      <button class="btn-black">＋ Add Project</button>
+      <button class="btn-black" disabled title="Project creation deferred">＋ Add Project</button>
     {/if}
     <button class="btn-refresh" title="Refresh Data" onclick={() => onRefresh()}>↻</button>
   </div>
