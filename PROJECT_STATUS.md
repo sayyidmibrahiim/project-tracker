@@ -1305,12 +1305,12 @@ Latest completed commit: 027c2b7 implement phase G.3 second brain filesystem ind
 
 Four hardening slices completed:
 
-| Slice | Commit | Subject |
-|-------|--------|---------|
-| RC.1 | `1b9183a` | fix release candidate bridge availability — `poll_events` wired as JsApi instance method |
-| RC.2 | `1122206` | harden release candidate frontend states — SecondBrainItem type fix, null-guard updated_at, drop `(detail as any)` casts, stale deferred bar updated |
-| RC.3 | `ff38fa1` | polish release candidate ui — disable non-functional Add Project and CR filter in header |
-| RC.4 | `b549e90` | update release candidate manual test plan — add RC hardening baseline notes |
+| Slice | Commit    | Subject                                                                                                                                              |
+| ----- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RC.1  | `1b9183a` | fix release candidate bridge availability — `poll_events` wired as JsApi instance method                                                             |
+| RC.2  | `1122206` | harden release candidate frontend states — SecondBrainItem type fix, null-guard updated_at, drop `(detail as any)` casts, stale deferred bar updated |
+| RC.3  | `ff38fa1` | polish release candidate ui — disable non-functional Add Project and CR filter in header                                                             |
+| RC.4  | `b549e90` | update release candidate manual test plan — add RC hardening baseline notes                                                                          |
 
 Post-hardening checks:
 

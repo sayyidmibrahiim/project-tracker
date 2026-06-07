@@ -25,6 +25,7 @@ py_compile: pass (app_web.py, js_api.py — Linux)
 ```
 
 Baseline after RC hardening (commits above `bd13d4f`):
+
 - RC.1: `poll_events` wired as JsApi instance method
 - RC.2: SecondBrainItem type fixed, null-guard updated_at, stale deferred bar updated
 - RC.3: non-functional header buttons disabled
