@@ -44,7 +44,7 @@ def fail(
 
 
 def poll_events(limit: int | None = None) -> dict[str, object]:
-    """Drain queued bridge events."""
+    """Drain queued bridge events (module-level, kept for test compatibility)."""
     try:
         return ok(drain_events(limit))
     except Exception as exc:
@@ -321,6 +321,13 @@ class JsApi:
         self._settings_dependency = settings_service or settings_store
         self._linkbank_dependency = linkbank_service or linkbank_store
         self._second_brain_service = second_brain_service
+
+    def poll_events(self, limit: int | None = None) -> dict[str, object]:
+        """Drain queued bridge events."""
+        try:
+            return ok(drain_events(limit))
+        except Exception as exc:
+            return fail(str(exc), code="EVENT_POLL_FAILED")
 
     def app_get_status(self) -> dict[str, object]:
         """Return static app/backend status."""
