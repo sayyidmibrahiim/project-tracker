@@ -21,8 +21,13 @@ Expected current result:
 svelte-check: 90 files, 0 errors, 0 warnings
 vite build: clean
 pytest: 453 passed
-py_compile: pass
+py_compile: pass (app_web.py, js_api.py — Linux)
 ```
+
+Baseline after RC hardening (commits above `bd13d4f`):
+- RC.1: `poll_events` wired as JsApi instance method
+- RC.2: SecondBrainItem type fixed, null-guard updated_at, stale deferred bar updated
+- RC.3: non-functional header buttons disabled
 
 ## Windows startup smoke test
 
