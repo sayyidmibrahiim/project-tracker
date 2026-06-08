@@ -3,6 +3,7 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import type { AutomationRule, AutomationResult } from "../types";
   import { BridgeErrorCode } from "../types";
+  import TeamsActions from "./TeamsActions.svelte";
 
   type TabId = "rules" | "outlook" | "teams" | "scheduler";
   let activeTab: TabId = $state("rules");
@@ -153,6 +154,10 @@
         <span>⚠ Rule create/edit/delete deferred. Evaluation uses empty context (no real project data). Outlook/Teams/Scheduler actions not executed. Deferred pending Windows integration.</span>
       </div>
     {/if}
+  {:else if activeTab === "teams"}
+    <div class="am-teams-pane">
+      <TeamsActions />
+    </div>
   {:else}
     {@const dt = deferredTabs[activeTab]}
     <div class="am-deferred-tab">
@@ -206,6 +211,7 @@
   .am-eval-all-btn:disabled { opacity:0.55; cursor:not-allowed; }
   .am-eval-all-hint { font-size:10px; color:var(--color-muted); font-weight:700; }
   .am-deferred-tab { flex:1; display:flex; align-items:center; justify-content:center; }
+  .am-teams-pane { flex:1; min-height:0; overflow-y:auto; padding:4px 2px; }
   .am-deferred-tab .placeholder-hero { max-width:520px; }
   .am-deferred-bar { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:6px; padding:8px 12px; font-size:10px; font-weight:750; color:var(--color-dbs-red); flex:0 0 auto; }
 </style>

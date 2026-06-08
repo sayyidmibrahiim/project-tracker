@@ -302,7 +302,7 @@ Hard rules baked into every slice:
     - Cover `teams_auto_send` default false, countdown clamp/invalid→3, FAILSAFE abort → `ok=false`,
       and off-Windows dev-skip with no `pyautogui` invocation.
     - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.6_
-  - [ ] 17.4 Add Teams actions to the frontend (preview default; auto-send gated)
+  - [x] 17.4 Add Teams actions to the frontend (preview default; auto-send gated)
     - Preview is default; auto-send routed through `ConfirmModal` and only offered when
       `teams_auto_send=true`.
     - _Requirements: 3.1, 9.1, 9.3_
