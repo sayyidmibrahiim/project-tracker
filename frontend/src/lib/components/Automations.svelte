@@ -4,6 +4,7 @@
   import type { AutomationRule, AutomationResult } from "../types";
   import { BridgeErrorCode } from "../types";
   import TeamsActions from "./TeamsActions.svelte";
+  import SchedulerActions from "./SchedulerActions.svelte";
 
   type TabId = "rules" | "outlook" | "teams" | "scheduler";
   let activeTab: TabId = $state("rules");
@@ -157,6 +158,10 @@
   {:else if activeTab === "teams"}
     <div class="am-teams-pane">
       <TeamsActions />
+    </div>
+  {:else if activeTab === "scheduler"}
+    <div class="am-teams-pane">
+      <SchedulerActions />
     </div>
   {:else}
     {@const dt = deferredTabs[activeTab]}

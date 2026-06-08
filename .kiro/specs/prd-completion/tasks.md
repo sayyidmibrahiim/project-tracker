@@ -325,7 +325,7 @@ data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, en
     - Cover create/edit/delete validation + persistence, pause/resume, filter match/no-match
       recording, and preservation of the 60-second auto IN-PROGRESS job.
     - _Requirements: 10.4, 10.5, 10.9, 10.10, 10.11_
-  - [ ] 19.4 Bind scheduler controls in `Automations.svelte` (Scheduler tab)
+  - [x] 19.4 Bind scheduler controls in `Automations.svelte` (Scheduler tab)
     - Bind to `scheduler_status`/`scheduler_start`/`scheduler_stop`/`scheduler_run_once`; add an
       entry table with add/edit/delete/pause; gate Outlook/Teams channels with `ConfirmModal`.
     - _Requirements: 3.1, 10.1, 10.7_
