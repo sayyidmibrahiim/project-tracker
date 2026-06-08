@@ -38,6 +38,44 @@ Each phase needs explicit approval and verification before moving to the next ph
 - Git diff shows only Phase 0 allowed files changed.
 - No production code is changed.
 
+### Slice 0 Truth Reset Addendum — 2026-06-08
+
+This addendum supersedes stale phase-status wording when it conflicts with `PROJECT_STATUS.md` current summary. It does not supersede `PRD.md` v3.1.
+
+Purpose:
+
+- Reconcile old phase labels with current PRD-completion implementation reality.
+- Make Windows-only gates explicit before release packaging.
+- Prevent production coding against stale deferred/gap lists.
+
+Acceptance categories:
+
+| Category         | Meaning                                                                    |
+| ---------------- | -------------------------------------------------------------------------- |
+| `linux-verified` | Automated Linux tests/build/import checks passed for this area.            |
+| `safe-slice`     | Feature works in guarded/local scope but still needs Windows manual smoke. |
+| `windows-manual` | Cannot be fully verified on Linux; must run on Windows.                    |
+| `docs-only`      | Planning/status/checklist work only.                                       |
+| `deferred`       | Explicitly outside current release scope or blocked by Windows gate.       |
+
+Current PRD-to-release acceptance matrix:
+
+| Area                         | Category       | Required next action                                                                         |
+| ---------------------------- | -------------- | -------------------------------------------------------------------------------------------- |
+| PRD/status truth             | docs-only      | Keep `PROJECT_STATUS.md` current after every verified slice.                                 |
+| Dependency/runtime alignment | safe-slice     | Re-check `pyproject.toml`, `requirements.txt`, frontend package metadata before packaging.   |
+| Bridge/API contract          | linux-verified | Keep `test_bridge_contract_guard.py` green after frontend/bridge edits.                      |
+| Main project userflow        | safe-slice     | Run manual Windows disposable-workspace flow before release.                                 |
+| Filesystem operations        | windows-manual | Verify `send2trash`, `os.startfile`, path-with-spaces, and non-admin permissions on Windows. |
+| Second Brain                 | safe-slice     | Verify filesystem index, note CRUD, pin/favorite, and reload persistence on Windows.         |
+| Link Bank                    | safe-slice     | Verify link/category CRUD, archive/restore, and `link_bank.json` persistence on Windows.     |
+| Report CSV                   | safe-slice     | Verify save dialog/path permissions and Excel-compatible CSV on Windows.                     |
+| Outlook automation           | windows-manual | Test draft-first flow with real Outlook profile; send-now only with explicit confirmation.   |
+| Teams automation             | windows-manual | Test preview-first paste; auto-send only with `teams_auto_send=true` and cancel path.        |
+| Scheduler / Rules Engine     | safe-slice     | Verify persistence/logs on Linux; verify timed UI behavior on Windows.                       |
+| PyInstaller packaging        | windows-manual | Build only on Windows; include `web/static/` and `assets/`; test clean launch.               |
+| Final zip handoff            | windows-manual | Zip only after manual Windows checklist is green.                                            |
+
 ## Phase A — Core Domain
 
 ### Scope
