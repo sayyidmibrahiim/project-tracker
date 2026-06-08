@@ -3,6 +3,7 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import type { DashboardProject, DashboardSummary } from "../types";
   import { BridgeErrorCode } from "../types";
+  import ProjectTransitions from "./ProjectTransitions.svelte";
 
   // ── Props from parent ──
   let { selectedYear, searchQuery }: {
@@ -310,7 +311,15 @@
                 </div>
                 <div class="table-cell"><input class="link-edit" value={row.crNumber} readonly /></div>
                 <div class="table-cell"><span class="state-combo">{row.crState}</span></div>
-                <div class="table-cell cell-center"><button class="cell-action">⋮</button></div>
+                <div class="table-cell cell-center">
+                  <ProjectTransitions
+                    projectPath={p.project_path}
+                    projectState={p.project_state}
+                    projectName={p.project_name}
+                    variant="menu"
+                    onApplied={() => refresh()}
+                  />
+                </div>
               </div>
             {/each}
           {/if}

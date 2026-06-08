@@ -16,22 +16,34 @@ import webview
 
 from project_tracker.core.enums import CRState, ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
-from project_tracker.core.rules import extract_cr_number
-from project_tracker.infrastructure.cache_db import CacheDb
-from project_tracker.infrastructure.filesystem import discover_subproject_paths, scan_year
+from project_tracker.core.rules import TransitionGuardResult, extract_cr_number
+from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
+from project_tracker.infrastructure import outlook_client
+from project_tracker.infrastructure.filesystem import (
+    create_file,
+    create_file_from_template,
+    discover_subproject_paths,
+    rename_file,
+    scan_year,
+)
 from project_tracker.infrastructure.link_bank_store import LinkBankStore
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.infrastructure.settings_store import SettingsStore
 from project_tracker.services.automation_service import AutomationService
 from project_tracker.services.dashboard_service import DashboardService
-from project_tracker.services.email_service import EmailService
+from project_tracker.services.download_email_service import DownloadEmailService
+from project_tracker.services.email_service import (
+    EmailService,
+    TemplateConditionsNotMetError,
+    UnresolvedPlaceholderError,
+)
 from project_tracker.services.notification_service import NotificationService
 from project_tracker.services.project_service import ProjectService
 from project_tracker.services.report_service import ReportService
 from project_tracker.services.safe_delete_service import SafeDeleteService
 from project_tracker.services.second_brain_service import SecondBrainItem, SecondBrainService
-from project_tracker.services.teams_service import TeamsMessage
-from project_tracker.web.js_api import JsApi
+from project_tracker.services.teams_service import TeamsMessage, TeamsService
+from project_tracker.web.js_api import JsApi, fail, ok
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -53,6 +65,22 @@ def _parse_optional_datetime(value: object) -> datetime | None:
     if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
         parsed = parsed.replace(tzinfo=local_now().tzinfo)
     return parsed
+
+
+def _folder_state_for_path(path: Path) -> ProjectState | None:
+    """Return the ProjectState of the project folder that contains ``path``.
+
+    The canonical layout is ``root/<year>/<STATE>/<project>/...`` so the state is
+    derived by scanning the path parts for a segment whose name matches a
+    ``ProjectState`` value. Returns ``None`` when no state folder is present in
+    the path (e.g. a Second Brain or template location outside the project tree),
+    in which case file-mutation locks do not apply.
+    """
+    state_values = {state.value for state in ProjectState}
+    for part in Path(path).parts:
+        if part in state_values:
+            return ProjectState(part)
+    return None
 
 
 class AppAPI:
@@ -427,10 +455,14 @@ def create_js_api(
 
     # ── services ─────────────────────────────────────────────────────
     dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
-    notification_svc = NotificationService()
+    notification_svc = NotificationService(cache=cache_db)
+    notification_svc.load_persisted()
     report_svc = ReportService(dashboard_service=dashboard_svc)
     automation_svc = AutomationService()
-    second_brain_svc = SecondBrainService(items_provider=_second_brain_items_provider)
+    second_brain_svc = SecondBrainService(
+        items_provider=_second_brain_items_provider,
+        folder_provider=lambda: _settings_store.read().second_brain_folder,
+    )
 
     # ── settings adapter (SettingsStore.read() → get_settings()) ──────
     class _SettingsAdapter:
@@ -525,9 +557,21 @@ def create_js_api(
         rename/folder-*) are not yet wired and return controlled errors.
         """
 
-        def __init__(self, dashboard: object, metadata_store: MetadataStore) -> None:
+        def __init__(
+            self,
+            dashboard: object,
+            metadata_store: MetadataStore,
+            project_service: ProjectService,
+            settings_store: SettingsStore,
+            cache_db: CacheDb,
+            notification_service: NotificationService,
+        ) -> None:
             self._dashboard = dashboard
             self._metadata_store = metadata_store
+            self._project_service = project_service
+            self._settings_store = settings_store
+            self._cache_db = cache_db
+            self._notification_service = notification_service
 
         def list_projects(self, year: str | None = None) -> object:
             return self._dashboard.list_projects(year)
@@ -747,17 +791,175 @@ def create_js_api(
                 "cr_state": metadata.cr_state.value,
             }
 
+        # ── wired mutation: folder state transitions (guarded + rollback) ──
+
+        def _rebuild_cache_for(self, moved_path: Path) -> None:
+            """Rebuild the year cache after a successful transition (Req 4.11)."""
+            year_path = moved_path.parent.parent
+            rebuild_year_cache(self._cache_db, year_path, self._metadata_store)
+
+        def _run_transition(
+            self,
+            project_path: object,
+            service_call: Callable[[AppSettings], object],
+            *,
+            emit_t10: bool = False,
+        ) -> object:
+            """Execute a transition, map guard blocks, and update cache on success.
+
+            - Loads ``AppSettings`` and invokes ``service_call``.
+            - A blocked ``TransitionGuardResult`` raises with joined reasons so the
+              JsApi facade returns ``ok=false`` (Req 4.9). When ``emit_t10`` is set
+              and the sole failure is the T-10 guard, a T-10 violation notification
+              is emitted (Req 4.3).
+            - On success the Cache_Db is rebuilt before returning (Req 4.11). Any
+              exception during the physical move propagates without a cache update,
+              leaving the prior state and returning ``ok=false`` (Req 4.12).
+            """
+            settings = self._settings_store.read()
+            result = service_call(settings)
+
+            if isinstance(result, TransitionGuardResult) and not result.allowed:
+                reasons = list(result.failed_guards)
+                only_t10 = len(reasons) == 1 and "T-10" in reasons[0]
+                if emit_t10 and only_t10 and self._notification_service is not None:
+                    self._notification_service.add(
+                        type="T10_VIOLATION",
+                        title="T-10 violation",
+                        message=reasons[0],
+                        project_path=Path(str(project_path)),
+                    )
+                raise ValueError("; ".join(reasons))
+
+            moved_path = Path(str(result))
+            self._rebuild_cache_for(moved_path)
+            return {
+                "project_path": str(moved_path),
+                "project_state": ProjectState(moved_path.parent.name).value,
+            }
+
+        def move_to_prod_ready(
+            self, project_path: Path, *, override_t10: bool = False
+        ) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.move_to_prod_ready(
+                    Path(project_path),
+                    settings,
+                    local_now(),
+                    settings.t10_threshold_days,
+                    override_t10=override_t10,
+                ),
+                emit_t10=True,
+            )
+
+        def move_to_implemented(self, project_path: Path) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.move_to_implemented(
+                    Path(project_path), settings, local_now()
+                ),
+            )
+
+        def postpone_project(self, project_path: Path) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.postpone_project(
+                    Path(project_path), settings
+                ),
+            )
+
+        def cancel_project(self, project_path: Path) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.cancel_project(
+                    Path(project_path), settings
+                ),
+            )
+
+        def resume_project(self, project_path: Path) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.resume_project(
+                    Path(project_path), settings
+                ),
+            )
+
+        def reopen_project(self, project_path: Path) -> object:
+            return self._run_transition(
+                project_path,
+                lambda settings: self._project_service.reopen_project(
+                    Path(project_path), settings
+                ),
+            )
+
+        # ── wired mutation: rename / delete (guarded + cache rebuild) ──
+
+        def _reject_if_locked(self, project_path: Path, action: str) -> ProjectState:
+            """Return the Folder_State, rejecting rename/delete when locked.
+
+            Rename and delete are disabled while a project is in ``PROD_READY``
+            or ``IMPLEMENTED`` (Req 5.3 / 5.5). The state is derived from the
+            path's parent (state) folder name; the backend is the authoritative
+            guard regardless of the frontend lock model.
+            """
+            state = ProjectState(Path(project_path).parent.name)
+            if state in (ProjectState.PROD_READY, ProjectState.IMPLEMENTED):
+                raise ValueError(
+                    f"{action} is disabled while the project is in {state.value}"
+                )
+            return state
+
+        def rename_project(self, project_path: Path, new_name: str) -> object:
+            """Rename a project folder and rebuild the year cache (Req 5.1-5.3, 5.6).
+
+            Name validation and the case-insensitive sibling-duplicate check are
+            performed by ``ProjectService.rename_project``; invalid names raise and
+            leave the folder unchanged. On success the Cache_Db is rebuilt before
+            returning so the dashboard reflects the new name on next read.
+            """
+            self._reject_if_locked(project_path, "Rename")
+            settings = self._settings_store.read()
+            moved_path = Path(
+                str(self._project_service.rename_project(Path(project_path), new_name, settings))
+            )
+            self._rebuild_cache_for(moved_path)
+            return {
+                "project_path": str(moved_path),
+                "project_name": new_name,
+                "project_state": ProjectState(moved_path.parent.name).value,
+            }
+
+        def delete_project(self, project_path: Path) -> object:
+            """Route a project-folder delete to the Recycle Bin (Req 5.4-5.6, 5.8).
+
+            Rejected in PROD_READY/IMPLEMENTED. On success the Cache_Db is rebuilt
+            before returning ``ok=true``. If ``send2trash`` fails the exception
+            propagates (so the facade returns ``ok=false``); the folder is left in
+            place and the cache is not updated.
+            """
+            path = Path(project_path)
+            self._reject_if_locked(path, "Delete")
+            year_path = path.parent.parent
+            self._project_service.delete_project(path)
+            rebuild_year_cache(self._cache_db, year_path, self._metadata_store)
+            return {"project_path": str(path), "deleted": True}
+
+        def delete_subproject(self, project_path: Path, name: str) -> object:
+            """Route a subproject-folder delete to the Recycle Bin (Req 5.7-5.8).
+
+            Resolves the subproject path under ``project_path`` and routes to
+            ``ProjectService.delete_subproject`` → ``SafeDeleteService``. On a
+            ``send2trash`` failure the exception propagates and the folder is left
+            in place.
+            """
+            subproject_path = Path(project_path) / name
+            self._project_service.delete_subproject(subproject_path)
+            return {"project_path": str(Path(project_path)), "subproject": name, "deleted": True}
+
         # ── unsupported: return None so JsApi returns SERVICE_UNAVAILABLE ──
         open_folder = None  # type: ignore[assignment]
-        rename_project = None  # type: ignore[assignment]
-        move_to_prod_ready = None  # type: ignore[assignment]
-        move_to_implemented = None  # type: ignore[assignment]
-        postpone_project = None  # type: ignore[assignment]
-        resume_project = None  # type: ignore[assignment]
-        cancel_project = None  # type: ignore[assignment]
-        reopen_project = None  # type: ignore[assignment]
         create_subproject = None  # type: ignore[assignment]
-        delete_subproject = None  # type: ignore[assignment]
 
     # ── year service adapter (SettingsStore → year list) ──────────────
     class _YearServiceAdapter:
@@ -777,9 +979,28 @@ def create_js_api(
                 if child.is_dir() and child.name.isdigit()
             )
 
-    # ── file service adapter (read-only file listing) ─────────────────
+    # ── file service adapter (list / open / create / rename / delete) ─
     class _FileServiceAdapter:
-        """Read-only file listing adapter. No open/write/delete."""
+        """File management adapter backed by ``filesystem.py`` helpers.
+
+        - ``list_files``: read-only directory listing.
+        - ``open_file``: guarded ``os.startfile`` on Windows; a dev-skipped
+          no-op off-Windows that never invokes ``os.startfile`` (Req 6.4/6.5).
+        - ``create_file`` / ``create_file_from_template`` / ``rename_file``:
+          name-validated, reject existing names, routed through ``assert_within``
+          so a failure leaves folder contents unchanged (Req 6.1-6.3, 6.6-6.7, 6.9).
+        - ``delete_file``: routed to ``SafeDeleteService`` (send2trash, Req 6.8).
+        - Create/rename/delete are rejected while the containing project is in
+          ``PROD_READY`` or ``IMPLEMENTED`` (Req 6.10), enforced backend-side.
+        """
+
+        def __init__(
+            self,
+            settings_store: SettingsStore,
+            safe_delete_service: SafeDeleteService,
+        ) -> None:
+            self._settings_store = settings_store
+            self._safe_delete_service = safe_delete_service
 
         def list_files(self, path: Path) -> object:
             p = Path(path)
@@ -793,12 +1014,65 @@ def create_js_api(
             entries.sort(key=lambda e: e["name"])
             return entries
 
-        open_file = None  # type: ignore[assignment]
+        def open_file(self, path: Path) -> None:
+            """Open a file externally; guarded on Windows, dev-skipped elsewhere."""
+            if sys.platform == "win32":
+                import os
+
+                os.startfile(str(Path(path)))  # noqa: S606 (Windows-only guarded)
+                return
+            # Dev-skipped off-Windows: never invoke os.startfile (Req 6.5).
+            return None
+
+        def _reject_if_locked(self, path: Path, action: str) -> None:
+            """Reject create/rename/delete while the project is locked (Req 6.10)."""
+            state = _folder_state_for_path(Path(path))
+            if state in (ProjectState.PROD_READY, ProjectState.IMPLEMENTED):
+                raise ValueError(
+                    f"{action} is disabled while the project is in {state.value}"
+                )
+
+        def create_file(self, folder: Path, filename: str) -> object:
+            target_folder = Path(folder)
+            self._reject_if_locked(target_folder, "File create")
+            created = create_file(target_folder, target_folder / filename)
+            return {"path": str(created), "name": created.name}
+
+        def create_file_from_template(self, folder: Path, template_name: str) -> object:
+            target_folder = Path(folder)
+            self._reject_if_locked(target_folder, "File create")
+            template_folder = self._settings_store.read().file_template_folder
+            if template_folder is None:
+                raise ValueError("Template folder is not configured")
+            template = Path(template_folder) / template_name
+            created = create_file_from_template(
+                target_folder, template, target_folder / template_name
+            )
+            return {"path": str(created), "name": created.name}
+
+        def rename_file(self, filepath: Path, new_name: str) -> object:
+            source = Path(filepath)
+            self._reject_if_locked(source, "File rename")
+            base = source.parent
+            renamed = rename_file(base, source, base / new_name)
+            return {"path": str(renamed), "name": renamed.name}
+
+        def delete_file(self, filepath: Path) -> object:
+            target = Path(filepath)
+            self._reject_if_locked(target, "File delete")
+            self._safe_delete_service.delete_to_trash(target)
+            return {"path": str(target), "deleted": True}
+
         open_folder = None  # type: ignore[assignment]
 
     # ── notes service adapter (MetadataStore → notes) ─────────────────
     class _NotesServiceAdapter:
-        """Notes adapter: read/write notes.md file (PRD-correct)."""
+        """Notes adapter: read/write notes.md file (PRD-correct).
+
+        Notes remain editable in ``PROD_READY`` (Req 6.11) but are view-only in
+        ``IMPLEMENTED`` (Req 6.12): edit submissions are rejected without
+        persisting, leaving the existing notes file unchanged.
+        """
 
         def get_notes(self, project_path: Path) -> object:
             notes_file = Path(project_path) / "notes.md"
@@ -807,9 +1081,202 @@ def create_js_api(
             return notes_file.read_text(encoding="utf-8")
 
         def update_notes(self, project_path: Path, notes: str) -> object:
+            state = _folder_state_for_path(Path(project_path))
+            if state is ProjectState.IMPLEMENTED:
+                raise ValueError(
+                    "Notes are view-only while the project is in IMPLEMENTED"
+                )
             notes_file = Path(project_path) / "notes.md"
             notes_file.write_text(notes, encoding="utf-8")
             return notes
+
+    # ── outlook service adapter (EmailService + guarded outlook_client) ─
+    class _OutlookServiceAdapter:
+        """Outlook automation adapter (Draft_First, guarded, layered).
+
+        Composes emails by reusing ``EmailService.render_email_template`` for the
+        Template_Category (``ACK_UAT``/``ACK_SOP``/``APRVL_CR``/``APRVL_SOP``) and
+        performs draft/send through the guarded ``outlook_client`` (dev-skipped
+        off-Windows, never executing COM). An unresolved required placeholder
+        returns ``ok=false`` naming it; unmet Template_Category conditions return a
+        skipped Bridge_Response (Req 8.5/8.6). Contacts use
+        ``outlook_client.get_contacts`` with name/email filtering on Windows and a
+        dev fallback off-Windows (Req 8.7). Download is dev-skipped off-Windows and
+        routed through ``DownloadEmailService`` on Windows (Req 8.8). Every method
+        returns a complete Bridge_Response dict; runtime failures are ``ok=false``
+        without claiming the email was drafted or sent (Req 8.9).
+        """
+
+        def __init__(
+            self,
+            settings_store: SettingsStore,
+            metadata_store: MetadataStore,
+            email_service: EmailService,
+            download_email_service: DownloadEmailService,
+        ) -> None:
+            self._settings_store = settings_store
+            self._metadata_store = metadata_store
+            self._email_service = email_service
+            self._download_email_service = download_email_service
+
+        def _render(self, category_code: str, project_path: Path) -> object:
+            """Resolve metadata + category and render the email (may raise)."""
+            path = Path(project_path)
+            settings = self._settings_store.read()
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {path}")
+            category = settings.email.categories.get(category_code)
+            if category is None:
+                raise ValueError(f"Email category is not configured: {category_code}")
+            return self._email_service.render_email_template(metadata, category, settings)
+
+        def draft_email(self, category_code: str, project_path: Path) -> dict[str, object]:
+            try:
+                rendered = self._render(category_code, project_path)
+            except UnresolvedPlaceholderError as exc:
+                return fail(
+                    str(exc),
+                    code="OUTLOOK_DRAFT_FAILED",
+                    details={"placeholder": exc.placeholder},
+                )
+            except TemplateConditionsNotMetError as exc:
+                return ok({"status": "skipped", "reason": exc.reason})
+            return outlook_client.create_draft_email(
+                rendered.to,
+                rendered.cc,
+                rendered.subject,
+                rendered.body,
+                rendered.attachment_path,
+            )
+
+        def send_email(self, category_code: str, project_path: Path) -> dict[str, object]:
+            try:
+                rendered = self._render(category_code, project_path)
+            except UnresolvedPlaceholderError as exc:
+                return fail(
+                    str(exc),
+                    code="OUTLOOK_SEND_FAILED",
+                    details={"placeholder": exc.placeholder},
+                )
+            except TemplateConditionsNotMetError as exc:
+                return ok({"status": "skipped", "reason": exc.reason})
+            return outlook_client.send_email(
+                rendered.to,
+                rendered.cc,
+                rendered.subject,
+                rendered.body,
+                rendered.attachment_path,
+            )
+
+        def get_contacts(self, query: str = "") -> dict[str, object]:
+            result = outlook_client.get_contacts()
+            # Off-Windows the client returns the dev fallback contact; never filter
+            # it away (Req 8.7). Filter real contacts only on Windows.
+            if not query or not result.get("ok") or not outlook_client.IS_WINDOWS:
+                return result
+            data = result.get("data") or {}
+            contacts = data.get("contacts", []) if isinstance(data, dict) else []
+            needle = query.casefold()
+            filtered = [
+                contact
+                for contact in contacts
+                if needle in str(contact.get("name", "")).casefold()
+                or needle in str(contact.get("email", "")).casefold()
+            ]
+            return ok({"contacts": filtered})
+
+        def download_emails(
+            self,
+            project_path: Path,
+            cr_number: str = "",
+            project_name: str = "",
+        ) -> dict[str, object]:
+            path = Path(project_path)
+            if not outlook_client.IS_WINDOWS:
+                # Dev-skipped off-Windows: no COM, no worker started (Req 8.8).
+                message = f"[DEV] Would download Outlook reply emails for {path}"
+                return ok({"status": "dev_skipped", "message": message})
+            # Windows path (manual-tested): derive identifiers from metadata when
+            # not supplied, then start the guarded background download job.
+            if not cr_number or not project_name:
+                metadata = self._metadata_store.read(path)
+                if metadata is not None:
+                    if not project_name:
+                        project_name = metadata.project_name or path.name
+                    if not cr_number:
+                        cr_number = extract_cr_number(metadata.cr_link) or ""
+            job_id = self._download_email_service.start_job(cr_number, project_name, path)
+            return ok({"status": "started", "job_id": job_id})
+
+    # ── teams service adapter (TeamsService + guarded teams_client) ────
+    class _TeamsServiceAdapter:
+        """Teams automation adapter (Preview_First, opt-in auto-send, layered).
+
+        Builds a ``TeamsMessage`` from the bridge args (message text plus optional
+        target/mentions) and delegates to ``TeamsService`` (``services ->
+        infrastructure``). Preview is always Preview_First (deep link + clipboard,
+        no keystroke; Req 9.1). For send, the adapter reads ``teams_auto_send`` and
+        ``countdown_seconds`` from ``AppSettings.teams`` so auto-send only ever runs
+        on an explicit opt-in after a visible countdown (Req 9.2-9.4); when
+        disabled it behaves as Preview_First. Off-Windows the underlying client is
+        dev-skipped and no ``pyautogui``/``pyperclip`` runs (Req 9.6). Runtime
+        failures surface as ``ok=false`` with settings/draft unchanged (Req 9.7).
+        """
+
+        def __init__(
+            self,
+            settings_store: SettingsStore,
+            teams_service: TeamsService,
+        ) -> None:
+            self._settings_store = settings_store
+            self._teams_service = teams_service
+
+        @staticmethod
+        def _build_message(
+            message: str,
+            target_email: str,
+            target_group: str,
+            mentions: list[str] | None,
+        ) -> TeamsMessage:
+            return TeamsMessage(
+                target_email=str(target_email or ""),
+                target_group=str(target_group or ""),
+                mentions=[str(item) for item in (mentions or [])],
+                message=str(message or ""),
+            )
+
+        def preview_message(
+            self,
+            message: str,
+            *,
+            target_email: str = "",
+            target_group: str = "",
+            mentions: list[str] | None = None,
+        ) -> dict[str, object]:
+            teams_message = self._build_message(
+                message, target_email, target_group, mentions
+            )
+            return self._teams_service.preview_message(teams_message)
+
+        def send_message(
+            self,
+            message: str,
+            *,
+            target_email: str = "",
+            target_group: str = "",
+            mentions: list[str] | None = None,
+        ) -> dict[str, object]:
+            settings = self._settings_store.read()
+            teams_settings = settings.teams
+            teams_message = self._build_message(
+                message, target_email, target_group, mentions
+            )
+            return self._teams_service.send_message(
+                teams_message,
+                teams_auto_send=teams_settings.teams_auto_send,
+                countdown_seconds=teams_settings.countdown_seconds,
+            )
 
     # ── JsApi ─────────────────────────────────────────────────────────
     _metadata_store = MetadataStore()
@@ -817,14 +1284,31 @@ def create_js_api(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
         report_service=report_svc,
-        project_service=_ProjectServiceAdapter(dashboard_svc, _metadata_store),
+        project_service=_ProjectServiceAdapter(
+            dashboard_svc,
+            _metadata_store,
+            ProjectService(_metadata_store),
+            _settings_store,
+            cache_db,
+            notification_svc,
+        ),
         settings_store=_SettingsAdapter(_settings_store),
         linkbank_store=_LinkBankAdapter(_linkbank_store),
         automation_service=automation_svc,
         second_brain_service=second_brain_svc,
         year_service=_YearServiceAdapter(_settings_store),
-        file_service=_FileServiceAdapter(),
+        file_service=_FileServiceAdapter(_settings_store, SafeDeleteService()),
         notes_service=_NotesServiceAdapter(),
+        outlook_service=_OutlookServiceAdapter(
+            _settings_store,
+            _metadata_store,
+            EmailService(),
+            DownloadEmailService(notification_service=notification_svc),
+        ),
+        teams_service=_TeamsServiceAdapter(
+            _settings_store,
+            TeamsService(),
+        ),
     )
 
 

@@ -1342,13 +1342,13 @@ Remaining deferred after RC hardening:
 Slices completed after the RC Hardening section above (all docs/UI-copy only,
 no bridge contract or service signature changes):
 
-| Commit    | Subject                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------ |
-| `75780e9` | update project status after rc hardening                                                         |
-| `8cf64b6` | style: format markdown files with prettier                                                       |
-| `572eb23` | add kiro steering for project tracker dbs (`.kiro/steering/*.md`)                                 |
-| `c74d47d` | improve windows manual test documentation (`docs/windows-manual-test-checklist.md`)              |
-| `fa0b5f4` | document packaging readiness (`docs/packaging-readiness.md`)                                      |
+| Commit    | Subject                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `75780e9` | update project status after rc hardening                                                                                                                                                    |
+| `8cf64b6` | style: format markdown files with prettier                                                                                                                                                  |
+| `572eb23` | add kiro steering for project tracker dbs (`.kiro/steering/*.md`)                                                                                                                           |
+| `c74d47d` | improve windows manual test documentation (`docs/windows-manual-test-checklist.md`)                                                                                                         |
+| `fa0b5f4` | document packaging readiness (`docs/packaging-readiness.md`)                                                                                                                                |
 | `0476b94` | fix release candidate polish issues — replace stale "Landing in Phase E" copy with accurate deferred-pending-Windows-integration messaging in `Automations.svelte` and `SecondBrain.svelte` |
 
 Post-polish checks:
@@ -1374,3 +1374,108 @@ Windows test**.
 Phase 0 documentation alignment is complete. `PROJECT_STATUS_old.md` remains historical reference unless deletion is explicitly approved.
 
 No legacy/reference files should be deleted without explicit approval.
+
+## PRD Completion Spec — In Progress (uncommitted, 2026-06-08)
+
+Implementation against `.kiro/specs/prd-completion/` (Requirements / Design /
+Tasks) is in progress on `prd-v31-migration`. All work below is **uncommitted**
+in the working tree on top of `3cb5dac update release candidate documentation`.
+
+The spec scope is the deferred high-risk and Windows-only work that the RC
+intentionally left out: filesystem safety, folder transitions, project/file
+mutations, persistent automation/notification logs, Second Brain CRUD,
+guarded Outlook/Teams, scheduler control surface, rules engine execution, the
+bridge-contract guard, and the Windows manual-test/packaging gate.
+
+### Slice Status
+
+| Spec Slice | Area                                                                                                                                                                 | Status  |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1.1–1.4    | Frontend safety foundation (`bridge.ts` timeout/malformed, `ConfirmModal`, `DisabledHint`, `folderLocks.ts`)                                                         | Done    |
+| 3.1–3.8    | Filesystem safety (`assert_within`, atomic write preservation, `SafeDeleteService` route, P1–P4 + Windows-path test)                                                 | Done    |
+| 5.1–5.6    | Folder state transitions (`_ProjectServiceAdapter` wiring, T-10 override `override_t10` keyword, rollback, P5, gated UI in Dashboard/ProjectDetails)                 | Done    |
+| 7.1–7.5    | Project rename/delete + subproject delete (validator, `project_delete`, `subproject_delete` wiring, P6, gated UI)                                                    | Done    |
+| 9.1–9.4    | File management (`file_create`, `file_create_from_template`, `file_rename`, `file_delete`, `_FileServiceAdapter`, gated UI)                                          | Done    |
+| 11.1–11.4  | Persistent automation + notification logs (`notifications` and `automation_rule_logs` schemas wired to services)                                                     | Done    |
+| 13.1–13.5  | Second Brain CRUD + persistent pin/favorite (sidecar `.project_tracker_index.json`, atomic note write, P9, frontend Notes CRUD)                                      | Done    |
+| 15.1–15.3  | Outlook guarding + `EmailService` reuse + `outlook_*` JsApi methods (`outlook_draft_email`, `outlook_send_email`, `outlook_get_contacts`, `outlook_download_emails`) | Done    |
+| 15.4       | Off-Windows guarding property test (P10)                                                                                                                             | Pending |
+| 15.5, 15.7 | Outlook unit tests + frontend Outlook actions                                                                                                                        | Pending |
+| 17.1       | Teams `teams_service.py` / `teams_client.py` preview/send + countdown + FAILSAFE                                                                                     | Done    |
+| 17.2–17.4  | Teams JsApi methods + tests + frontend                                                                                                                               | Pending |
+| 19.1       | Scheduler service entry CRUD + filters + 60-second auto-IN-PROGRESS preserved                                                                                        | Done    |
+| 19.2–19.4  | Scheduler `scheduler_entry_*` JsApi methods + tests + frontend Scheduler tab                                                                                         | Pending |
+| 21.1       | Rules engine execution (trigger → condition → action, halt-on-failure, log row)                                                                                      | Done    |
+| 21.2–21.5  | Rules `rules_*` JsApi methods + tests (P8) + frontend Rules tab                                                                                                      | Pending |
+| 23.1–23.3  | Bridge-contract guard (`callBridge` ↔ `create_js_api()` reconciliation + P7)                                                                                         | Pending |
+| 25.1–25.2  | Manual-test docs refresh + `project_tracker_dbs.spec` PyInstaller spec with non-Windows refuse guard                                                                 | Done    |
+
+### New Implementation Surface (uncommitted)
+
+Backend:
+
+- `infrastructure/filesystem.py` — `assert_within()` guard + file create/rename/delete helpers.
+- `infrastructure/metadata_store.py` — atomic-write failure-preservation path.
+- `infrastructure/cache_db.py` — `notifications` + `automation_rule_logs` schemas wired to services.
+- `infrastructure/outlook_client.py` / `infrastructure/teams_client.py` — hardened guarding, COM thread `CoInitialize`/`CoUninitialize` pattern, lazy Windows-only imports.
+- `services/project_service.py` — transition guards/rollback/T-10 override + rename/delete validation.
+- `services/email_service.py`, `services/download_email_service.py` — placeholder/condition handling and attachment storage.
+- `services/teams_service.py` — Preview-First default, countdown clamp, FAILSAFE abort.
+- `services/scheduler_service.py` — entry CRUD, filter logic, in-app delivery, 60-second auto-IN-PROGRESS preserved.
+- `services/automation_service.py` — execution engine + persistent rule logs.
+- `services/notification_service.py` — persistence on create/dismiss + restore on startup.
+- `services/second_brain_service.py` — sidecar pin/favorite store + note CRUD with atomic write.
+- `web/js_api.py` — new methods: `project_delete`, `file_create`, `file_create_from_template`, `file_rename`, `file_delete`, `outlook_draft_email`, `outlook_send_email`, `outlook_get_contacts`, `outlook_download_emails`, `second_brain_note_create`, `second_brain_note_write`, `second_brain_note_delete`. Existing `folder_*`, `project_rename`, `subproject_delete`, `second_brain_pin`/`favorite` adapters wired to real services. Only proven-necessary signature change: `override_t10: bool = False` optional keyword on the relevant transition path (preserves all existing callers).
+- `app_web.py` — `_ProjectServiceAdapter` transition + rename/delete hooks; new `_FileServiceAdapter`; new Outlook/Teams/Scheduler/Rules adapters; durable Second Brain store; cache-update on success; rollback on failure.
+
+Frontend:
+
+- `frontend/src/lib/bridge.ts` — 30-second timeout, malformed-response guard, stable error codes (`BRIDGE_TIMEOUT`, `BRIDGE_MALFORMED_RESPONSE`).
+- `frontend/src/lib/folderLocks.ts` — Folder_State → disabled-action mapping (mirrors PRD §9.5; backend remains authoritative).
+- New components: `ConfirmModal.svelte`, `DisabledHint.svelte`, `ProjectActions.svelte`, `ProjectTransitions.svelte`, `FileActions.svelte`, `OutlookActions.svelte`.
+- `Dashboard.svelte` / `ProjectDetails.svelte` / `SecondBrain.svelte` — gated transitions, rename/delete, file CRUD, Notes CRUD, persistent pin/favorite.
+- `frontend/tests/` — new component + `bridge.ts` unit tests (Node `--test` runner); 64 tests passing.
+
+Tests added (Linux-runnable; destructive paths use `tmp_path` only):
+
+- `tests/test_filesystem_assert_within.py`, `tests/test_filesystem_temp_root_property.py` (P1)
+- `tests/test_metadata_store_atomic_write.py`, `tests/test_metadata_store_atomic_write_property.py` (P2)
+- `tests/test_metadata_store_project_state_property.py` (P3)
+- `tests/test_metadata_store_datetime_property.py` (P4)
+- `tests/test_settings_windows_path_preservation.py`
+- `tests/test_project_transitions_unit.py`, `tests/test_project_transitions_property.py` (P5)
+- `tests/test_project_rename_delete.py`, `tests/test_name_validation_property.py` (P6)
+- `tests/test_project_file_operations.py`
+- `tests/test_persistence_logs_notifications.py`, `tests/test_phase_c_automation_service_persistence.py`
+- `tests/test_second_brain_note_crud.py`, `tests/test_second_brain_pin_favorite_property.py` (P9)
+- `tests/test_outlook_off_windows_property.py` (work-in-progress for P10)
+- `tests/test_email_service_render.py`, `tests/test_download_email_attachments.py`, `tests/test_project_outlook_service_adapter.py`
+
+Packaging artifact (Windows-manual only, not Linux-executable):
+
+- `project_tracker_dbs.spec` — PyInstaller spec bundling `web/static/` + `assets/`, with platform-guard refusing to package off-Windows.
+
+### Verification_Suite (current state, uncommitted)
+
+```text
+Branch: prd-v31-migration
+Working tree: dirty (PRD-completion implementation in progress, not yet committed)
+svelte-check: 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Backend tests (pytest): 1664 passed (up from 453 RC baseline)
+Frontend tests (node --test): 64 passed
+py_compile: pass (app_web.py, js_api.py — Linux)
+Latest committed commit: 3cb5dac update release candidate documentation
+```
+
+### Remaining Before PRD-Completion Exit
+
+- Slices 15.4 / 15.5 / 15.7 — Outlook off-Windows property test (P10), Outlook unit tests, and frontend Outlook actions.
+- Slices 17.2 / 17.3 / 17.4 — Teams `teams_preview_message` / `teams_send_message` JsApi methods, unit tests, and frontend Teams actions.
+- Slices 19.2 / 19.3 / 19.4 — Scheduler `scheduler_entry_*` JsApi methods, unit tests, and frontend Scheduler tab bindings.
+- Slices 21.2 / 21.3 / 21.4 / 21.5 — Rules `rules_*` JsApi methods, action-ordering property test (P8), unit tests, and frontend Rules CRUD/logs view.
+- Slices 23.1 / 23.2 / 23.3 — `callBridge` ↔ `create_js_api()` reconciliation, contract guard test, and Bridge_Response shape property (P7).
+- Commit each completed slice separately (per `release-candidate-rules.md`); the working tree currently bundles many slices together and must be sliced into per-slice commits before merge.
+- Windows manual test gate + Windows packaging session remain deferred (Linux-unrunnable by design).
+
+Linux-automated readiness for the PRD-completion increment is **green**. Windows-only runtime behavior (real Outlook COM, Teams `pyautogui` send, `os.startfile`, real PyInstaller packaging) is **not verified** — that remains gated by the manual Windows test plan in `docs/release-candidate-manual-test-plan.md` and `docs/windows-manual-test-checklist.md`.

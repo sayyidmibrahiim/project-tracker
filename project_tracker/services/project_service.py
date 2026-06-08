@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from project_tracker.core.enums import CRState, ProjectState
+from project_tracker.core.exceptions import InvalidFolderNameError
 from project_tracker.core.models import AppSettings, HistoryEntry, local_now
 from project_tracker.core.rules import (
     TransitionGuardResult,
@@ -11,14 +12,18 @@ from project_tracker.core.rules import (
     should_auto_start_cr,
     should_auto_start_drone,
     validate_prod_ready_to_implemented_transition,
+    validate_t10,
     validate_uat_to_prod_ready_transition,
+    validate_windows_folder_name,
 )
 from project_tracker.core.state_machine import (
     reopen_project_state,
     validate_cr_transition,
     validate_drone_state_change_allowed,
+    validate_project_state_transition,
 )
 from project_tracker.infrastructure.metadata_store import MetadataStore
+from project_tracker.services.safe_delete_service import SafeDeleteService
 
 
 def state_from_project_path(project_path: Path) -> ProjectState:
@@ -30,8 +35,78 @@ def year_path_from_project_path(project_path: Path) -> Path:
 
 
 class ProjectService:
-    def __init__(self, metadata_store: MetadataStore | None = None) -> None:
+    def __init__(
+        self,
+        metadata_store: MetadataStore | None = None,
+        safe_delete_service: SafeDeleteService | None = None,
+    ) -> None:
         self.metadata_store = metadata_store or MetadataStore()
+        self.safe_delete_service = safe_delete_service or SafeDeleteService()
+
+    def rename_project(
+        self, project_path: Path, new_name: str, settings: AppSettings
+    ) -> Path:
+        """Validate and rename a project folder.
+
+        Validation reuses the core Windows folder-name validator (non-empty,
+        1-255, forbidden characters, reserved device names, no trailing
+        space/dot) and adds a case-insensitive sibling-duplicate check.
+        Raises ``InvalidFolderNameError`` on any validation failure, leaving
+        the folder unchanged.
+        """
+        validate_windows_folder_name(new_name)
+
+        parent = project_path.parent
+        target_path = parent / new_name
+
+        # Case-insensitive sibling-duplicate check (excluding the project
+        # being renamed so a case-only rename is permitted).
+        new_name_lower = new_name.lower()
+        if parent.exists():
+            for sibling in parent.iterdir():
+                if sibling == project_path:
+                    continue
+                if sibling.name.lower() == new_name_lower:
+                    raise InvalidFolderNameError(
+                        f"A folder named '{new_name}' already exists in this location"
+                    )
+
+        if target_path.exists() and target_path != project_path:
+            raise FileExistsError(f"Target project folder already exists: {target_path}")
+
+        moved_path = (
+            Path(shutil.move(str(project_path), str(target_path)))
+            if project_path != target_path
+            else project_path
+        )
+
+        metadata = self.metadata_store.load(moved_path)
+        now = local_now()
+        metadata.project_name = new_name
+        metadata.updated_at = now
+        metadata.history.append(
+            HistoryEntry(
+                timestamp=now,
+                action="RENAME",
+                detail=f"RENAME: {project_path.name} → {new_name}",
+                user=current_user(settings),
+            )
+        )
+        self.metadata_store.save(moved_path, metadata)
+        return moved_path
+
+    def delete_project(self, project_path: Path) -> None:
+        """Route a project-folder deletion to the Recycle Bin via send2trash.
+
+        Deletion is delegated to ``SafeDeleteService.delete_to_trash`` which is
+        the single permitted deletion path. On failure the exception
+        propagates and the folder is left in place.
+        """
+        self.safe_delete_service.delete_to_trash(project_path)
+
+    def delete_subproject(self, subproject_path: Path) -> None:
+        """Route a subproject-folder deletion to the Recycle Bin via send2trash."""
+        self.safe_delete_service.delete_to_trash(subproject_path)
 
     def reopen_project(self, project_path: Path, settings: AppSettings) -> Path:
         metadata = self.metadata_store.load(project_path)
@@ -61,15 +136,33 @@ class ProjectService:
         return moved_path
 
     def move_to_prod_ready(
-        self, project_path: Path, settings: AppSettings, current_time, threshold_days: int = 10
+        self,
+        project_path: Path,
+        settings: AppSettings,
+        current_time,
+        threshold_days: int = 10,
+        *,
+        override_t10: bool = False,
     ) -> Path | TransitionGuardResult:
         metadata = self.metadata_store.load(project_path)
+        source_state = state_from_project_path(project_path)
+        validate_project_state_transition(source_state, ProjectState.PROD_READY)
+
         guard_result = validate_uat_to_prod_ready_transition(
             metadata, current_time=current_time, threshold_days=threshold_days
         )
 
+        overridden = False
         if not guard_result.allowed:
-            return guard_result
+            t10_result = validate_t10(metadata, threshold_days=threshold_days)
+            only_t10_failed = (
+                not t10_result.passed
+                and guard_result.failed_guards == [t10_result.reason or "T-10 rule failed"]
+            )
+            if override_t10 and only_t10_failed:
+                overridden = True
+            else:
+                return guard_result
 
         target_dir = year_path_from_project_path(project_path) / ProjectState.PROD_READY.value
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -81,12 +174,16 @@ class ProjectService:
         now = local_now()
         metadata.cr_state_updated_at = now
         metadata.updated_at = now
+        detail = f"{source_state.value} → {ProjectState.PROD_READY.value}"
+        if overridden:
+            detail = f"{detail} (T-10 override)"
         metadata.history.append(
             HistoryEntry(
                 timestamp=now,
                 action="STATE_CHANGE",
-                detail="UAT_PREPARE → PROD_READY",
+                detail=detail,
                 user=current_user(settings),
+                override=overridden,
             )
         )
         self.metadata_store.save(moved_path, metadata)
@@ -96,6 +193,9 @@ class ProjectService:
         self, project_path: Path, settings: AppSettings, current_time
     ) -> Path | TransitionGuardResult:
         metadata = self.metadata_store.load(project_path)
+        source_state = state_from_project_path(project_path)
+        validate_project_state_transition(source_state, ProjectState.IMPLEMENTED)
+
         guard_result = validate_prod_ready_to_implemented_transition(
             metadata, current_time=current_time
         )
@@ -117,7 +217,7 @@ class ProjectService:
             HistoryEntry(
                 timestamp=now,
                 action="STATE_CHANGE",
-                detail="PROD_READY → IMPLEMENTED",
+                detail=f"{source_state.value} → {ProjectState.IMPLEMENTED.value}",
                 user=current_user(settings),
             )
         )
@@ -156,8 +256,9 @@ class ProjectService:
         metadata = self.metadata_store.load(project_path)
         old_state = state_from_project_path(project_path)
         old_cr_state = metadata.cr_state
+        validate_project_state_transition(old_state, ProjectState.CANCELED)
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.POSTPONED.value
+        target_dir = year_path_from_project_path(project_path) / ProjectState.CANCELED.value
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -172,7 +273,7 @@ class ProjectService:
             HistoryEntry(
                 timestamp=now,
                 action="STATE_CHANGE",
-                detail=f"CANCELED: {old_cr_state.value} → CANCELED, moved to POSTPONED",
+                detail=f"CANCELED: {old_state.value} → CANCELED (CR {old_cr_state.value} → CANCELED)",
                 user=current_user(settings),
             )
         )
@@ -182,6 +283,8 @@ class ProjectService:
     def postpone_project(self, project_path: Path, settings: AppSettings) -> Path:
         metadata = self.metadata_store.load(project_path)
         old_state = state_from_project_path(project_path)
+        old_cr_state = metadata.cr_state
+        validate_project_state_transition(old_state, ProjectState.POSTPONED)
 
         target_dir = year_path_from_project_path(project_path) / ProjectState.POSTPONED.value
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -191,12 +294,14 @@ class ProjectService:
 
         moved_path = Path(shutil.move(str(project_path), str(target_path))) if project_path != target_path else project_path
         now = local_now()
+        metadata.cr_state = CRState.POSTPONED
+        metadata.cr_state_updated_at = now
         metadata.updated_at = now
         metadata.history.append(
             HistoryEntry(
                 timestamp=now,
                 action="STATE_CHANGE",
-                detail=f"{old_state.value} → POSTPONED",
+                detail=f"POSTPONED: {old_state.value} → POSTPONED (CR {old_cr_state.value} → POSTPONED)",
                 user=current_user(settings),
             )
         )

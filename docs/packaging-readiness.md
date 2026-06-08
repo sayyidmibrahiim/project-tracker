@@ -4,6 +4,16 @@ Audit-only. No packaging is performed here. Packaging must run on Windows and
 only after the Windows manual RC test passes
 (`docs/windows-manual-test-checklist.md`).
 
+## Gate rule: manual test must pass first (Requirements 14.1, 14.6)
+
+- Packaging is BLOCKED until the Windows manual test gate passes. The gate runs
+  exclusively against a disposable test root, never real project folders
+  (Requirement 14.1).
+- If ANY check in the manual gate fails, all packaging steps are blocked and the
+  failing check must be identified in the manual checklist observation log
+  (Requirement 14.6).
+- Do not begin a packaging session until every manual check is green.
+
 ## Current readiness
 
 - **App entry point**: `project_tracker/main.py` → `project_tracker.app_web.run()`
@@ -68,7 +78,7 @@ dependency — out of scope.
 
 > Packaging session (Windows only). Preconditions: Windows manual RC test in
 > `docs/windows-manual-test-checklist.md` passed; `npm --prefix frontend run
-> build` done so `web/static/` exists. Tasks: (1) Decide whether to reconcile
+build` done so `web/static/` exists. Tasks: (1) Decide whether to reconcile
 > `pyproject.toml` deps with `requirements.txt` in a separate approved slice
 > first. (2) Author a PyInstaller spec for entry `project_tracker/main.py` that
 > bundles `web/static/` as data and keeps Windows-only imports lazy. (3) Build a

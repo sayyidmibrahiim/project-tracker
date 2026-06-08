@@ -5,18 +5,38 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
+from project_tracker.core.exceptions import AtomicWriteError
 from project_tracker.core.models import PROJECT_DATA_SCHEMA, ProjectMetadata
 
 METADATA_FILE = "project_data.json"
 
 
 def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    """Write JSON atomically: serialize to a temp file in the same directory,
+    then atomically replace the target.
+
+    If the write fails before the replace step completes, the existing target
+    file is left unchanged, the partial temp file is removed, and an
+    AtomicWriteError is raised to indicate the write did not complete.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f"{path.name}.tmp")
-    with temp_path.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
-        file.write("\n")
-    temp_path.replace(path)
+    try:
+        with temp_path.open("w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+        temp_path.replace(path)
+    except Exception as exc:
+        # The write did not reach the atomic replace, so the existing target
+        # file is preserved unchanged. Clean up the partial temp file and
+        # surface an explicit error indicating the write did not complete.
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
+        raise AtomicWriteError(
+            f"Atomic write to {path} did not complete; target left unchanged"
+        ) from exc
 
 
 class MetadataStore:

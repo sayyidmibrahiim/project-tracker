@@ -70,7 +70,66 @@ def test_initialize_creates_expected_tables(tmp_path: Path) -> None:
 
     CacheDb(db_path).initialize()
 
-    assert _table_names(db_path) == {"project_index", "drone_tickets", "scan_warnings"}
+    assert _table_names(db_path) == {
+        "project_index",
+        "drone_tickets",
+        "scan_warnings",
+        "notifications",
+        "automation_rule_logs",
+    }
+
+
+def test_initialize_creates_notifications_and_rule_logs_with_documented_columns(tmp_path: Path) -> None:
+    import sqlite3
+
+    db_path = tmp_path / "cache.sqlite3"
+
+    CacheDb(db_path).initialize()
+
+    with sqlite3.connect(db_path) as connection:
+        notification_columns = [
+            row[1] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
+        ]
+        rule_log_columns = [
+            row[1] for row in connection.execute("PRAGMA table_info(automation_rule_logs)").fetchall()
+        ]
+
+    assert notification_columns == [
+        "id",
+        "type",
+        "title",
+        "message",
+        "timestamp",
+        "project_path",
+        "dismissed",
+        "created_at",
+    ]
+    assert rule_log_columns == [
+        "id",
+        "rule_id",
+        "rule_name",
+        "trigger_type",
+        "conditions_passed",
+        "actions_executed",
+        "success",
+        "error_message",
+        "timestamp",
+    ]
+
+
+def test_notifications_and_rule_logs_tables_are_queryable_after_init(tmp_path: Path) -> None:
+    import sqlite3
+
+    db_path = tmp_path / "cache.sqlite3"
+
+    CacheDb(db_path).initialize()
+
+    with sqlite3.connect(db_path) as connection:
+        notifications = connection.execute("SELECT * FROM notifications").fetchall()
+        rule_logs = connection.execute("SELECT * FROM automation_rule_logs").fetchall()
+
+    assert notifications == []
+    assert rule_logs == []
 
 
 def test_project_index_schema_matches_prd_cache_columns(tmp_path: Path) -> None:
@@ -143,7 +202,25 @@ def test_reset_recreates_corrupt_db(tmp_path: Path) -> None:
     cache.reset()
 
     assert cache.health_check() is True
-    assert _table_names(db_path) == {"project_index", "drone_tickets", "scan_warnings"}
+    assert _table_names(db_path) == {
+        "project_index",
+        "drone_tickets",
+        "scan_warnings",
+        "notifications",
+        "automation_rule_logs",
+    }
+
+
+def test_reset_recreates_notifications_and_rule_logs_tables(tmp_path: Path) -> None:
+    db_path = tmp_path / "cache.sqlite3"
+    cache = CacheDb(db_path)
+    cache.initialize()
+
+    cache.reset()
+
+    table_names = _table_names(db_path)
+    assert "notifications" in table_names
+    assert "automation_rule_logs" in table_names
 
 
 def test_upsert_project_and_list_projects_round_trip_cache_fields(tmp_path: Path) -> None:
@@ -238,3 +315,73 @@ def test_replace_projects_for_year_removes_stale_drone_rows_for_removed_projects
     )
 
     assert cache.list_drone_tickets(stale_project) == []
+
+
+def test_notification_insert_and_list_round_trip_preserves_dismissed(tmp_path: Path) -> None:
+    from project_tracker.core.models import Notification, local_now
+
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+
+    created = Notification(
+        id="n-1",
+        type="WARNING",
+        title="T-10 violation",
+        message="Move blocked",
+        timestamp=local_now(),
+        project_path=tmp_path / "2026" / "UAT_PREPARE" / "PROJECT_A",
+        dismissed=False,
+    )
+    cache.insert_notification(created)
+
+    loaded = cache.list_notifications()
+    assert len(loaded) == 1
+    assert loaded[0].id == "n-1"
+    assert loaded[0].type == "WARNING"
+    assert loaded[0].dismissed is False
+    assert loaded[0].project_path == created.project_path
+
+
+def test_notification_set_dismissed_persists(tmp_path: Path) -> None:
+    from project_tracker.core.models import Notification, local_now
+
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.insert_notification(
+        Notification(
+            id="n-1",
+            type="INFO",
+            title="Title",
+            message="Message",
+            timestamp=local_now(),
+            project_path=None,
+            dismissed=False,
+        )
+    )
+
+    cache.set_notification_dismissed("n-1", True)
+
+    loaded = cache.list_notifications()
+    assert loaded[0].dismissed is True
+    assert loaded[0].project_path is None
+
+
+def test_notification_service_persists_and_reloads_dismissed_state(tmp_path: Path) -> None:
+    from project_tracker.services.notification_service import NotificationService
+
+    db_path = tmp_path / "cache.sqlite3"
+    cache = CacheDb(db_path)
+    cache.initialize()
+
+    service = NotificationService(event_publisher=None, cache=cache)
+    created = service.add("WARNING", "Heads up", "Check project")
+    service.dismiss(created.id)
+
+    # Simulate a restart: a fresh service over the same cache loads prior state.
+    reloaded = NotificationService(event_publisher=None, cache=CacheDb(db_path))
+    reloaded.load_persisted()
+
+    all_notifications = reloaded.get_all()
+    assert len(all_notifications) == 1
+    assert all_notifications[0].id == created.id
+    assert all_notifications[0].dismissed is True

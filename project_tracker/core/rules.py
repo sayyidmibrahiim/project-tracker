@@ -73,6 +73,8 @@ def extract_drone_ticket(url: str) -> str | None:
 def validate_windows_folder_name(name: str) -> None:
     if not name:
         raise InvalidFolderNameError("Folder name cannot be empty")
+    if len(name) > 255:
+        raise InvalidFolderNameError("Folder name cannot exceed 255 characters")
     if name[-1] in {" ", "."}:
         raise InvalidFolderNameError("Folder name cannot end with a space or dot")
     invalid_characters = sorted({character for character in name if character in WINDOWS_INVALID_FOLDER_CHARS})

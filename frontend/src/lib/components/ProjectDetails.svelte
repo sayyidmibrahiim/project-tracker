@@ -3,6 +3,10 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import type { ProjectRow, ProjectDetail, FileRow, DroneTicket } from "../types";
   import { BridgeErrorCode } from "../types";
+  import ProjectTransitions from "./ProjectTransitions.svelte";
+  import ProjectActions from "./ProjectActions.svelte";
+  import FileActions from "./FileActions.svelte";
+  import OutlookActions from "./OutlookActions.svelte";
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -329,6 +333,53 @@
   }
 
   export function refresh() { loadProjects(); }
+
+  // After a folder transition the project folder physically moves, so its path
+  // and Folder_State change. Reload the list and re-select the project at its
+  // new path so the detail panel reflects the new state (Req 4.11).
+  async function onTransitionApplied(next: { projectPath: string; projectState: string }) {
+    await loadProjects();
+    if (next.projectPath) {
+      await selectProject(next.projectPath);
+    }
+  }
+
+  // After a successful rename the project folder physically moves, so its path
+  // changes. Reload the list and re-select at the new path (Req 5.6).
+  async function onProjectRenamed(next: { projectPath: string }) {
+    await loadProjects();
+    if (next.projectPath) {
+      await selectProject(next.projectPath);
+    }
+  }
+
+  // After a successful delete the project folder is gone. Clear the selection
+  // and reload the list so the dashboard reflects the change (Req 5.6).
+  async function onProjectDeleted() {
+    selectedPath = "";
+    detail = null;
+    subprojects = [];
+    files = [];
+    notes = "";
+    detailState = "idle";
+    await loadProjects();
+  }
+
+  // After a successful subproject delete, reload the subproject list (Req 5.7).
+  async function reloadSubprojects() {
+    if (!selectedPath || !isPywebviewReady()) return;
+    const resp = await callBridge<string[]>("subproject_list", selectedPath);
+    if (resp.ok) subprojects = resp.data ?? [];
+  }
+
+  // After a successful file create/rename/delete, reload the file list so the
+  // Files area reflects the change (Req 6.10 — honest post-action state).
+  async function reloadFiles() {
+    if (!selectedPath || !isPywebviewReady()) return;
+    const resp = await callBridge<FileRow[]>("file_list", selectedPath);
+    if (resp.ok) files = resp.data ?? [];
+  }
+
 </script>
 
 <div class="pd-screen">
@@ -386,6 +437,17 @@
               <p class="pd-detail-path">{detail.project_path}</p>
             </div>
             <span class="state-combo">{detail.project_state}</span>
+          </div>
+
+          <div class="pd-section pd-transitions">
+            <h4 class="pd-section-title">Folder Transitions</h4>
+            <ProjectTransitions
+              projectPath={detail.project_path}
+              projectState={detail.project_state}
+              projectName={detail.project_name}
+              variant="inline"
+              onApplied={onTransitionApplied}
+            />
           </div>
           <dl class="pd-detail-grid">
             <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
@@ -500,29 +562,34 @@
           </div>
 
           <div class="pd-section">
-            <h4 class="pd-section-title">Subprojects <span class="pd-deferred-hint">(add/delete deferred)</span></h4>
-            {#if subprojects.length === 0}
-              <p class="muted-text">No subprojects.</p>
-            {:else}
-              <ul class="pd-simple-list">
-                {#each subprojects as sp}
-                  <li>{sp}</li>
-                {/each}
-              </ul>
-            {/if}
+            <h4 class="pd-section-title">Project Actions</h4>
+            <ProjectActions
+              projectPath={detail.project_path}
+              projectState={detail.project_state}
+              projectName={detail.project_name}
+              {subprojects}
+              onRenamed={onProjectRenamed}
+              onDeleted={onProjectDeleted}
+              onSubprojectsChanged={reloadSubprojects}
+            />
           </div>
 
           <div class="pd-section">
-            <h4 class="pd-section-title">Files <span class="pd-deferred-hint">(open/write deferred)</span></h4>
-            {#if files.length === 0}
-              <p class="muted-text">No files.</p>
-            {:else}
-              <ul class="pd-simple-list">
-                {#each files as f}
-                  <li><span class="pd-file-name">{f.name}</span> <span class="pd-file-path">{f.path}</span></li>
-                {/each}
-              </ul>
-            {/if}
+            <h4 class="pd-section-title">Files</h4>
+            <FileActions
+              projectPath={detail.project_path}
+              projectState={detail.project_state}
+              {files}
+              onFilesChanged={reloadFiles}
+            />
+          </div>
+
+          <div class="pd-section">
+            <h4 class="pd-section-title">Outlook Email</h4>
+            <OutlookActions
+              projectPath={detail.project_path}
+              projectName={detail.project_name}
+            />
           </div>
 
           <div class="pd-section">
@@ -553,7 +620,7 @@
       <!-- Deferred bar -->
       {#if selectedPath}
         <div class="pd-deferred-bar">
-          <span>⚠ Folder moves, rename, subproject CRUD, file open/write deferred. CR/Drone/Notes/Metadata active.</span>
+          <span>⚠ Folder moves deferred. Rename, delete, subproject delete, file create/open/rename/delete, CR/Drone/Notes/Metadata active.</span>
         </div>
       {/if}
     </div>
@@ -585,10 +652,6 @@
   .pd-dl-item dd { margin:0; font-size:12px; font-weight:850; color:var(--color-ink); }
   .pd-section { border-top:1px solid #E5E7EB; padding-top:10px; }
   .pd-section-title { margin:0 0 6px; font-size:11px; font-weight:900; color:var(--color-ink); display:flex; align-items:center; gap:6px; }
-  .pd-deferred-hint { font-size:9px; font-weight:800; color:var(--color-muted-light); font-style:italic; }
-  .pd-simple-list { margin:0; padding:0 0 0 16px; font-size:11px; font-weight:750; color:var(--color-ink); line-height:1.55; }
-  .pd-file-name { font-weight:800; }
-  .pd-file-path { color:var(--color-muted); font-size:9px; margin-left:4px; }
   .pd-notes-edit { display:flex; flex-direction:column; gap:6px; }
   .pd-notes-textarea { width:100%; min-height:100px; max-height:240px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; color:var(--color-ink); resize:vertical; outline:none; }
   .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }

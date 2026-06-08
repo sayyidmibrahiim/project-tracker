@@ -1,5 +1,13 @@
 export { isPywebviewReady, callBridge } from "./bridge";
 export {
+  isFolderState,
+  isActionDisabled,
+  lockReason,
+  disabledActions,
+  type FolderState,
+  type LockableAction,
+} from "./folderLocks";
+export {
   BridgeErrorCode,
   type BridgeResponse,
   type BridgeOk,

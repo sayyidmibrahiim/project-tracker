@@ -225,15 +225,26 @@ def test_project_create_no_root_fails(js_api_no_root):
     assert "root folder" in result["error"]["message"].lower()
 
 
-# ── rename_project still returns SERVICE_UNAVAILABLE ─────────────────────
+# ── rename_project is wired (Req 5.1-5.3, 5.6) ───────────────────────────
 
 
-def test_rename_project_still_unavailable(js_api, temp_project):
-    """rename_project must still fail (None callable → error)."""
+def test_rename_project_wired_and_returns_ok(js_api, temp_project):
+    """rename_project is wired: a valid rename in UAT_PREPARE succeeds."""
     path = str(temp_project["project_path"])
-    result = js_api.project_rename(path, "new-name")
+    result = js_api.project_rename(path, "renamed-project")
+    assert result["ok"] is True, result
+    assert result["data"]["project_name"] == "renamed-project"
+    assert result["data"]["project_path"].endswith("renamed-project")
+    assert (temp_project["root"] / "2025" / "UAT_PREPARE" / "renamed-project").is_dir()
+
+
+def test_rename_project_invalid_name_fails(js_api, temp_project):
+    """An invalid Windows folder name is rejected, folder left unchanged."""
+    path = str(temp_project["project_path"])
+    result = js_api.project_rename(path, "bad:name?")
     assert result["ok"] is False
     assert result["error"]["code"] == "PROJECT_RENAME_FAILED"
+    assert (temp_project["root"] / "2025" / "UAT_PREPARE" / "my-project").is_dir()
 
 
 # ── folder_move still returns SERVICE_UNAVAILABLE ────────────────────────

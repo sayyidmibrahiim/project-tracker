@@ -165,7 +165,7 @@ def test_folder_move_still_deferred(js_api):
     assert result["ok"] is False
 
 
-def test_file_open_still_deferred(js_api):
-    """File open remains SERVICE_UNAVAILABLE."""
+def test_file_open_dev_skipped_off_windows(js_api):
+    """File open is wired: dev-skipped (ok=true) off-Windows, no os.startfile (Req 6.5)."""
     result = js_api.file_open("/tmp/x")
-    assert result["ok"] is False
+    assert result["ok"] is True

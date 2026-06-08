@@ -138,6 +138,9 @@ class ProjectServiceProtocol(Protocol):
     def rename_project(self, project_path: Path, new_name: str) -> object:
         """Rename project and return project DTO."""
 
+    def delete_project(self, project_path: Path) -> object:
+        """Delete project (route to Recycle Bin) and return result."""
+
     def update_cr_link(self, project_path: Path, cr_link: str) -> object:
         """Update CR link and return project DTO."""
 
@@ -158,7 +161,9 @@ class ProjectServiceProtocol(Protocol):
     def delete_drone(self, project_path: Path, drone_index: int) -> object:
         """Delete Drone ticket and return project DTO."""
 
-    def move_to_prod_ready(self, project_path: Path) -> object:
+    def move_to_prod_ready(
+        self, project_path: Path, *, override_t10: bool = False
+    ) -> object:
         """Move project to PROD_READY and return result."""
 
     def move_to_implemented(self, project_path: Path) -> object:
@@ -197,6 +202,18 @@ class FileServiceProtocol(Protocol):
 
     def open_folder(self, path: Path) -> None:
         """Open folder through service layer."""
+
+    def create_file(self, folder: Path, filename: str) -> object:
+        """Create a new empty file in ``folder``."""
+
+    def create_file_from_template(self, folder: Path, template_name: str) -> object:
+        """Create a new file in ``folder`` from a configured template."""
+
+    def rename_file(self, filepath: Path, new_name: str) -> object:
+        """Rename the file at ``filepath`` to ``new_name``."""
+
+    def delete_file(self, filepath: Path) -> object:
+        """Delete the file at ``filepath`` (route to Recycle Bin)."""
 
 
 class NotesServiceProtocol(Protocol):
@@ -270,6 +287,72 @@ class SecondBrainServiceProtocol(Protocol):
     def favorite_item(self, item_id: str) -> object:
         """Favorite Second Brain item."""
 
+    def create_note(self, parent: Path, filename: str, content: str = "") -> object:
+        """Create a new Second Brain note."""
+
+    def write_note(self, filepath: Path, content: str) -> object:
+        """Write content to an existing Second Brain note."""
+
+    def delete_note(self, filepath: Path) -> object:
+        """Delete a Second Brain note."""
+
+
+class OutlookServiceProtocol(Protocol):
+    """Outlook service surface used by JsApi.
+
+    Each method returns a complete Bridge_Response dict ``{ok, data, error}``.
+    Off-Windows the underlying client returns dev-skipped/dev-fallback responses
+    and never executes COM. Runtime failures are returned as ``ok=false`` without
+    claiming the email was drafted or sent (Req 8.9).
+    """
+
+    def draft_email(self, category_code: str, project_path: Path) -> dict[str, object]:
+        """Create an Outlook draft email (Draft_First; never sends)."""
+
+    def send_email(self, category_code: str, project_path: Path) -> dict[str, object]:
+        """Send an Outlook email (only after frontend confirmation)."""
+
+    def get_contacts(self, query: str = "") -> dict[str, object]:
+        """Return matching Outlook contacts (dev fallback off-Windows)."""
+
+    def download_emails(
+        self, project_path: Path, cr_number: str = "", project_name: str = ""
+    ) -> dict[str, object]:
+        """Download reply emails/attachments (guarded; dev-skipped off-Windows)."""
+
+
+class TeamsServiceProtocol(Protocol):
+    """Teams service surface used by JsApi.
+
+    Each method returns a complete Bridge_Response dict ``{ok, data, error}``.
+    Preview_First is the default: ``preview_message`` opens the deep link and
+    copies the text with no keystroke/auto-send (Req 9.1). ``send_message``
+    auto-sends only when ``teams_auto_send`` is enabled in settings and the
+    frontend has confirmed; the adapter reads ``teams_auto_send``/
+    ``countdown_seconds`` from ``AppSettings.teams``. Off-Windows the underlying
+    client returns dev-skipped responses and never executes ``pyautogui``.
+    """
+
+    def preview_message(
+        self,
+        message: str,
+        *,
+        target_email: str = "",
+        target_group: str = "",
+        mentions: list[str] | None = None,
+    ) -> dict[str, object]:
+        """Preview a Teams message (deep link + clipboard; never auto-sends)."""
+
+    def send_message(
+        self,
+        message: str,
+        *,
+        target_email: str = "",
+        target_group: str = "",
+        mentions: list[str] | None = None,
+    ) -> dict[str, object]:
+        """Send a Teams message (auto-send only when enabled and confirmed)."""
+
 
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
@@ -307,6 +390,8 @@ class JsApi:
         linkbank_store: LinkBankDependencyProtocol | None = None,
         second_brain_service: SecondBrainServiceProtocol | None = None,
         automation_service: AutomationServiceProtocol | None = None,
+        outlook_service: OutlookServiceProtocol | None = None,
+        teams_service: TeamsServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -321,6 +406,8 @@ class JsApi:
         self._settings_dependency = settings_service or settings_store
         self._linkbank_dependency = linkbank_service or linkbank_store
         self._second_brain_service = second_brain_service
+        self._outlook_service = outlook_service
+        self._teams_service = teams_service
 
     def poll_events(self, limit: int | None = None) -> dict[str, object]:
         """Drain queued bridge events."""
@@ -533,6 +620,26 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="PROJECT_RENAME_FAILED")
 
+    def project_delete(self, project_path: str) -> dict[str, object]:
+        """Delete a project folder to the Recycle Bin through the service layer.
+
+        Routes to ``ProjectService.delete_project`` →
+        ``SafeDeleteService.delete_to_trash``. Rename/delete are rejected by the
+        adapter while the project is in ``PROD_READY`` or ``IMPLEMENTED``. On a
+        ``send2trash`` failure the exception propagates here and the facade
+        returns ``ok=false`` with the folder left in place and no cache update.
+        """
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.delete_project(Path(project_path))
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="PROJECT_DELETE_FAILED")
+
     def cr_update_link(self, project_path: str, cr_link: str) -> dict[str, object]:
         """Update project CR link through service layer."""
         try:
@@ -595,12 +702,21 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="DRONE_DELETE_FAILED")
 
-    def folder_move_to_prod_ready(self, project_path: str) -> dict[str, object]:
-        """Move project to PROD_READY through service layer."""
+    def folder_move_to_prod_ready(
+        self, project_path: str, override_t10: bool = False
+    ) -> dict[str, object]:
+        """Move project to PROD_READY through service layer.
+
+        ``override_t10`` performs a manual T-10 override when only the T-10
+        guard failed (Req 4.4 / 1.8). It defaults to ``False`` so existing
+        callers are unaffected.
+        """
         try:
             return ok(
                 _to_frontend_safe(
-                    self._project_service.move_to_prod_ready(Path(project_path))
+                    self._project_service.move_to_prod_ready(
+                        Path(project_path), override_t10=override_t10
+                    )
                 )
             )
         except Exception as exc:
@@ -722,6 +838,218 @@ class JsApi:
             return ok()
         except Exception as exc:
             return fail(str(exc), code="FOLDER_OPEN_FAILED")
+
+    def file_create(self, path: str, filename: str) -> dict[str, object]:
+        """Create a new manual file in the target folder (Req 6.2/6.3/6.10).
+
+        The file name is validated and the create is rejected when the name
+        already exists, so an existing file is never overwritten. Creation is
+        disabled (rejected) while the containing project is in ``PROD_READY`` or
+        ``IMPLEMENTED``. Any validation/existence/filesystem failure returns
+        ``ok=false`` with the folder contents left unchanged.
+        """
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(self._file_service.create_file(Path(path), filename))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FILE_CREATE_FAILED")
+
+    def file_create_from_template(
+        self, path: str, template_name: str
+    ) -> dict[str, object]:
+        """Create a new file in the target folder from a template (Req 6.1/6.3/6.10).
+
+        Copies the configured template into the target folder. The target name is
+        validated and the copy is rejected when the name already exists. Creation
+        is disabled while the project is in ``PROD_READY`` or ``IMPLEMENTED``. A
+        failed copy leaves the folder contents unchanged.
+        """
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._file_service.create_file_from_template(
+                        Path(path), template_name
+                    )
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FILE_CREATE_FROM_TEMPLATE_FAILED")
+
+    def file_rename(self, filepath: str, new_name: str) -> dict[str, object]:
+        """Rename a file through the service layer (Req 6.6/6.7/6.10).
+
+        The new name is validated against the same rules as file creation and the
+        rename is rejected when the destination already exists. Rename is disabled
+        while the project is in ``PROD_READY`` or ``IMPLEMENTED``. A rejected
+        rename leaves the file unchanged.
+        """
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._file_service.rename_file(Path(filepath), new_name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FILE_RENAME_FAILED")
+
+    def file_delete(self, filepath: str) -> dict[str, object]:
+        """Delete a file by routing it to the Recycle Bin (Req 6.8/6.10).
+
+        Routes the delete to ``SafeDeleteService.delete_to_trash`` (``send2trash``).
+        Delete is disabled while the project is in ``PROD_READY`` or
+        ``IMPLEMENTED``. On a ``send2trash`` failure the exception propagates here
+        and the facade returns ``ok=false`` with the file left in place.
+        """
+        try:
+            if self._file_service is None:
+                return fail("file_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(self._file_service.delete_file(Path(filepath)))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="FILE_DELETE_FAILED")
+
+    def outlook_draft_email(
+        self, category_code: str, project_path: str
+    ) -> dict[str, object]:
+        """Create an Outlook draft email from a template (Draft_First, no send).
+
+        Reuses ``EmailService.render_email_template`` to compose the email for the
+        Template_Category ``category_code`` (``ACK_UAT``/``ACK_SOP``/``APRVL_CR``/
+        ``APRVL_SOP``) and creates a draft through the guarded Outlook_Client; the
+        email is never transmitted (Req 8.1). An unresolved required placeholder
+        returns ``ok=false`` naming it (``OUTLOOK_DRAFT_FAILED``); unmet template
+        conditions return a skipped Bridge_Response. Off-Windows the client returns
+        a dev-skipped response and no COM is executed. A runtime failure returns
+        ``ok=false`` without claiming the email was drafted (Req 8.9).
+        """
+        try:
+            if self._outlook_service is None:
+                return fail("outlook_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._outlook_service.draft_email(category_code, Path(project_path))
+        except Exception as exc:
+            return fail(str(exc), code="OUTLOOK_DRAFT_FAILED")
+
+    def outlook_send_email(
+        self, category_code: str, project_path: str
+    ) -> dict[str, object]:
+        """Send an Outlook email from a template (only after frontend confirmation).
+
+        The Frontend gates this call behind a Confirmation_UI (Req 8.2/8.3); the
+        backend performs the send through the guarded Outlook_Client. Composition
+        reuses ``EmailService.render_email_template``; an unresolved placeholder or
+        unmet condition is handled exactly as for drafting. Off-Windows the client
+        returns a dev-skipped response and no COM is executed. A runtime failure
+        returns ``ok=false`` without claiming the email was sent (Req 8.9).
+        """
+        try:
+            if self._outlook_service is None:
+                return fail("outlook_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._outlook_service.send_email(category_code, Path(project_path))
+        except Exception as exc:
+            return fail(str(exc), code="OUTLOOK_SEND_FAILED")
+
+    def outlook_get_contacts(self, query: str = "") -> dict[str, object]:
+        """Return Outlook contacts matching ``query`` (Req 8.7).
+
+        On Windows the guarded Outlook_Client returns contacts whose display name
+        or email matches ``query``; off-Windows a dev fallback contact is returned
+        and no COM is executed.
+        """
+        try:
+            if self._outlook_service is None:
+                return fail("outlook_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._outlook_service.get_contacts(query)
+        except Exception as exc:
+            return fail(str(exc), code="OUTLOOK_CONTACTS_FAILED")
+
+    def outlook_download_emails(
+        self,
+        project_path: str,
+        cr_number: str = "",
+        project_name: str = "",
+    ) -> dict[str, object]:
+        """Download reply emails/attachments for a project (Req 8.8).
+
+        On Windows the guarded Outlook_Client retrieves reply emails and stores
+        attachments under the target project folder; off-Windows a dev-skipped
+        Bridge_Response is returned and no COM is executed. A runtime failure
+        returns ``ok=false``.
+        """
+        try:
+            if self._outlook_service is None:
+                return fail("outlook_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._outlook_service.download_emails(
+                Path(project_path), cr_number, project_name
+            )
+        except Exception as exc:
+            return fail(str(exc), code="OUTLOOK_DOWNLOAD_FAILED")
+
+    def teams_preview_message(
+        self,
+        message: str,
+        target_email: str = "",
+        target_group: str = "",
+        mentions: list[str] | None = None,
+    ) -> dict[str, object]:
+        """Preview a Teams message (Preview_First; deep link + clipboard, no send).
+
+        Builds a ``TeamsMessage`` from the supplied text and optional
+        target/mentions and previews it through the guarded Teams_Client: the deep
+        link is opened and the text is copied with no keystroke/auto-send (Req 9.1).
+        Off-Windows the client returns a dev-skipped response and no ``pyautogui``/
+        ``pyperclip`` action is executed. A runtime failure returns ``ok=false``
+        (``TEAMS_PREVIEW_FAILED``) and leaves the user's draft unchanged.
+        """
+        try:
+            if self._teams_service is None:
+                return fail("teams_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._teams_service.preview_message(
+                message,
+                target_email=target_email,
+                target_group=target_group,
+                mentions=mentions,
+            )
+        except Exception as exc:
+            return fail(str(exc), code="TEAMS_PREVIEW_FAILED")
+
+    def teams_send_message(
+        self,
+        message: str,
+        target_email: str = "",
+        target_group: str = "",
+        mentions: list[str] | None = None,
+    ) -> dict[str, object]:
+        """Send a Teams message (auto-send only when enabled and confirmed).
+
+        Builds a ``TeamsMessage`` from the supplied text and optional
+        target/mentions and sends it through the guarded Teams_Client. The adapter
+        reads ``teams_auto_send``/``countdown_seconds`` from ``AppSettings.teams``;
+        auto-send runs only when ``teams_auto_send`` is enabled (and the Frontend
+        has confirmed) after a visible countdown (Req 9.3/9.4). When auto-send is
+        not enabled this behaves as Preview_First. Off-Windows the client returns a
+        dev-skipped response and no ``pyautogui`` action is executed (Req 9.6). A
+        runtime failure returns ``ok=false`` (``TEAMS_SEND_FAILED``) and leaves the
+        ``teams_auto_send`` setting and the user's draft unchanged (Req 9.7).
+        """
+        try:
+            if self._teams_service is None:
+                return fail("teams_service is not configured", code="SERVICE_UNAVAILABLE")
+            return self._teams_service.send_message(
+                message,
+                target_email=target_email,
+                target_group=target_group,
+                mentions=mentions,
+            )
+        except Exception as exc:
+            return fail(str(exc), code="TEAMS_SEND_FAILED")
 
     def notes_get(self, project_path: str) -> dict[str, object]:
         """Return notes through service layer."""
@@ -874,6 +1202,40 @@ class JsApi:
             return ok(_to_frontend_safe(self._second_brain_service.favorite_item(item_id)))
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_FAVORITE_FAILED")
+
+    def second_brain_note_create(
+        self, parent: str, filename: str, content: str = ""
+    ) -> dict[str, object]:
+        """Create a new Second Brain note ``parent/filename``."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            created = self._second_brain_service.create_note(
+                Path(parent), filename, content
+            )
+            return ok(_to_frontend_safe(created))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_NOTE_CREATE_FAILED")
+
+    def second_brain_note_write(self, filepath: str, content: str) -> dict[str, object]:
+        """Write ``content`` to an existing Second Brain note."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            written = self._second_brain_service.write_note(Path(filepath), content)
+            return ok(_to_frontend_safe(written))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_NOTE_WRITE_FAILED")
+
+    def second_brain_note_delete(self, filepath: str) -> dict[str, object]:
+        """Delete a Second Brain note (sends to Recycle Bin)."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._second_brain_service.delete_note(Path(filepath))
+            return ok(None)
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_NOTE_DELETE_FAILED")
 
     def report_filter_projects(
         self,

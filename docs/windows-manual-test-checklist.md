@@ -8,6 +8,12 @@ and an observation log.
 > Safety: use a DISPOSABLE test root and DISPOSABLE project folders only. Never
 > point the app at real production project folders during manual testing.
 
+> Requirement coverage: §4 → 14.2 (WebView2 from `web/static/`), §5 Settings →
+> 14.3 (Windows-path preservation), §5 → 14.4 (six page checks), §7 → 14.5
+> (deferred high-risk action confirmation / disabled-state), §7a → 14.6
+> (block packaging on failure). The whole gate runs only against a disposable
+> test root (14.1).
+
 ## 1. Environment prerequisites
 
 - Windows 10/11 with **WebView2 Runtime** installed (Edge WebView2). Verify via
@@ -64,6 +70,9 @@ calls `webview.start(http_server=True)` on the main thread.)
 
 ## 5. Per-page checks
 
+The six pages below must each load without runtime or bridge errors
+(Requirement 14.4).
+
 ### Dashboard
 
 - [ ] CR - Project Summary table renders.
@@ -114,13 +123,32 @@ calls `webview.start(http_server=True)` on the main thread.)
       rejected.
 - [ ] Link Bank add/edit/archive: archive is soft (no hard delete).
 
-## 7. Deferred checks — confirm still disabled/deferred
+## 7. Deferred / high-risk action checks (Requirement 14.5)
 
-- [ ] Folder move/rename/delete/transition controls deferred or disabled.
-- [ ] File open / external-app / write / delete not executed.
-- [ ] Outlook COM draft/send/download not executed.
-- [ ] Teams / pyautogui not executed.
-- [ ] Scheduler start/stop/run-once not executed from real controls.
+Each deferred high-risk action must EITHER present a confirmation step before it
+executes, OR remain deferred/disabled with an accurate disabled-state message.
+While deferred, confirm the underlying action does NOT fire.
+
+- [ ] Folder move/rename/delete/transition: disabled or confirmation-gated;
+      accurate disabled-state message shown; no real folder is touched.
+- [ ] File open / external-app / write / delete: disabled or confirmation-gated;
+      accurate message; nothing executed.
+- [ ] Outlook COM draft/send/download: disabled or confirmation-gated; accurate
+      message; nothing executed.
+- [ ] Teams / pyautogui: disabled or confirmation-gated; accurate message;
+      nothing executed.
+- [ ] Scheduler start/stop/run-once: disabled or confirmation-gated; accurate
+      message; scheduler does not actually start/stop from real controls.
+
+> Any confirmed (non-deferred) high-risk action exercised during testing MUST
+> target the disposable test root only — never a real project folder.
+
+## 7a. Block-packaging-on-failure (Requirement 14.6)
+
+- [ ] If ANY check in sections 4–7 fails, STOP. Packaging is blocked.
+- [ ] Record the failing check in the observation log (section 9) so the blocker
+      is identifiable.
+- [ ] Proceed to packaging only when every check passes.
 
 ## 8. Rollback notes
 
@@ -136,14 +164,14 @@ calls `webview.start(http_server=True)` on the main thread.)
 
 Record actual results for the handoff. Example table:
 
-| Area | Step | Expected | Observed | Pass/Fail | Notes |
-| ---- | ---- | -------- | -------- | --------- | ----- |
-| Startup | WebView2 opens | window + UI | | | |
-| Settings | Save Windows path | not normalized | | | |
-| Project Details | CR Link Save | persists | | | |
-| Project Details | Guarded CR state invalid | visible error, no persist | | | |
-| Second Brain | List files | dotfiles excluded | | | |
-| Automations | Evaluate preview | badge only, no side effects | | | |
+| Area            | Step                     | Expected                    | Observed | Pass/Fail | Notes |
+| --------------- | ------------------------ | --------------------------- | -------- | --------- | ----- |
+| Startup         | WebView2 opens           | window + UI                 |          |           |       |
+| Settings        | Save Windows path        | not normalized              |          |           |       |
+| Project Details | CR Link Save             | persists                    |          |           |       |
+| Project Details | Guarded CR state invalid | visible error, no persist   |          |           |       |
+| Second Brain    | List files               | dotfiles excluded           |          |           |       |
+| Automations     | Evaluate preview         | badge only, no side effects |          |           |       |
 
 A green run here is the gate before any packaging session (see
 `docs/packaging-readiness.md`).

@@ -49,6 +49,7 @@ class HistoryEntry:
     action: str
     detail: str
     user: str
+    override: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HistoryEntry:
@@ -60,6 +61,7 @@ class HistoryEntry:
             action=str(data.get("action", "")),
             detail=str(data.get("detail", "")),
             user=str(data.get("user", "")),
+            override=bool(data.get("override", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -68,6 +70,7 @@ class HistoryEntry:
             "action": self.action,
             "detail": self.detail,
             "user": self.user,
+            "override": self.override,
         }
 
 
@@ -360,6 +363,104 @@ class TeamsSettings:
 
 
 @dataclass(slots=True)
+class SchedulerEntry:
+    """A single user-configured scheduler entry persisted under
+    ``settings.automation.scheduler.entries``."""
+
+    id: str = ""
+    name: str = ""
+    notes: str = ""
+    schedule_type: str = "one_time"  # one_time|daily|weekly|monthly|cron
+    schedule_config: dict[str, Any] = field(default_factory=dict)
+    project_filter: str | None = None
+    state_filter: str | None = None
+    channels: list[str] = field(default_factory=list)  # in_app|outlook_email|teams
+    channel_configs: dict[str, Any] = field(default_factory=dict)
+    enabled: bool = True
+    status: str = "active"  # active|paused|completed
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SchedulerEntry:
+        project_filter = data.get("project_filter")
+        state_filter = data.get("state_filter")
+        schedule_config = data.get("schedule_config", {})
+        channel_configs = data.get("channel_configs", {})
+        return cls(
+            id=str(data.get("id", "")),
+            name=str(data.get("name", "")),
+            notes=str(data.get("notes", "")),
+            schedule_type=str(data.get("schedule_type", "one_time")),
+            schedule_config=dict(schedule_config) if isinstance(schedule_config, dict) else {},
+            project_filter=str(project_filter) if project_filter else None,
+            state_filter=str(state_filter) if state_filter else None,
+            channels=_string_list(data.get("channels", [])),
+            channel_configs=dict(channel_configs) if isinstance(channel_configs, dict) else {},
+            enabled=bool(data.get("enabled", True)),
+            status=str(data.get("status", "active")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "notes": self.notes,
+            "schedule_type": self.schedule_type,
+            "schedule_config": self.schedule_config,
+            "project_filter": self.project_filter,
+            "state_filter": self.state_filter,
+            "channels": self.channels,
+            "channel_configs": self.channel_configs,
+            "enabled": self.enabled,
+            "status": self.status,
+        }
+
+
+@dataclass(slots=True)
+class SchedulerSettings:
+    entries: list[SchedulerEntry] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SchedulerSettings:
+        entries = data.get("entries", [])
+        return cls(
+            entries=[
+                SchedulerEntry.from_dict(item) for item in entries if isinstance(item, dict)
+            ]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"entries": [entry.to_dict() for entry in self.entries]}
+
+
+@dataclass(slots=True)
+class AutomationSettings:
+    """Automation settings persisted under ``settings.automation``.
+
+    ``scheduler`` is modelled here (Task 19); ``rules_engine`` is preserved as a
+    raw round-tripped mapping so the Rules Engine slice (Task 21) can model it
+    without losing any persisted data in the interim.
+    """
+
+    scheduler: SchedulerSettings = field(default_factory=SchedulerSettings)
+    rules_engine: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AutomationSettings:
+        scheduler = data.get("scheduler", {})
+        rules_engine = data.get("rules_engine", {})
+        return cls(
+            scheduler=SchedulerSettings.from_dict(scheduler if isinstance(scheduler, dict) else {}),
+            rules_engine=dict(rules_engine) if isinstance(rules_engine, dict) else {},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scheduler": self.scheduler.to_dict(),
+            "rules_engine": self.rules_engine,
+        }
+
+
+@dataclass(slots=True)
 class AppSettings:
     root_folder: Path | None = None
     display_name: str = ""
@@ -374,6 +475,7 @@ class AppSettings:
     automation_rules: list[AutomationRule] = field(default_factory=list)
     email: EmailSettings = field(default_factory=EmailSettings.default)
     teams: TeamsSettings = field(default_factory=TeamsSettings)
+    automation: AutomationSettings = field(default_factory=AutomationSettings)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AppSettings:
@@ -394,6 +496,7 @@ class AppSettings:
             automation_rules=[AutomationRule.from_dict(item) for item in data.get("automation_rules", [])],
             email=EmailSettings.from_dict(data.get("email", {})),
             teams=TeamsSettings.from_dict(data.get("teams", {})),
+            automation=AutomationSettings.from_dict(data.get("automation", {})),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -411,6 +514,7 @@ class AppSettings:
             "automation_rules": [rule.to_dict() for rule in self.automation_rules],
             "email": self.email.to_dict(),
             "teams": self.teams.to_dict(),
+            "automation": self.automation.to_dict(),
         }
 
 @dataclass(slots=True)

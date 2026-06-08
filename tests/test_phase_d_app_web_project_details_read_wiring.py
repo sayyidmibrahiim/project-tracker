@@ -216,11 +216,11 @@ def test_subproject_create_still_deferred(js_api):
     assert result["error"] is not None
 
 
-def test_file_open_still_deferred(js_api):
-    """file_open still returns SERVICE_UNAVAILABLE."""
+def test_file_open_dev_skipped_off_windows(js_api):
+    """file_open is wired: dev-skipped (ok=true) off-Windows, never calls os.startfile (Req 6.5)."""
     result = js_api.file_open("/tmp/x")
-    assert result["ok"] is False
-    assert result["error"] is not None
+    assert result["ok"] is True
+    assert result["error"] is None
 
 
 def test_notes_update_wired_phase_e(js_api):

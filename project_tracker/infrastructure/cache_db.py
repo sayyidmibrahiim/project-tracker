@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Iterable
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import datetime_from_json, datetime_to_json, local_now
+from project_tracker.core.models import (
+    Notification,
+    datetime_from_json,
+    datetime_to_json,
+    local_now,
+)
 from project_tracker.core.rules import extract_cr_number, extract_drone_ticket, validate_t10
 from project_tracker.infrastructure.filesystem import ScannedProject, scan_year
 from project_tracker.infrastructure.metadata_store import MetadataStore
@@ -41,6 +46,18 @@ class CachedProjectRow:
     t10_status: str = "UNKNOWN"
     updated_at: datetime | None = None
     scanned_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AutomationRuleLogRow:
+    rule_id: str
+    rule_name: str = ""
+    trigger_type: str = ""
+    conditions_passed: int = 0
+    actions_executed: str = "[]"
+    success: bool = False
+    error_message: str | None = None
+    timestamp: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +163,13 @@ class CacheDb:
             return False
         return (
             integrity == ("ok",)
-            and tables == {"project_index", "drone_tickets", "scan_warnings"}
+            and tables == {
+                "project_index",
+                "drone_tickets",
+                "scan_warnings",
+                "notifications",
+                "automation_rule_logs",
+            }
             and invalid_project_states is None
             and invalid_cr_states is None
             and invalid_drone_states is None
@@ -310,6 +333,97 @@ class CacheDb:
             ).fetchall()
         return [self._drone_from_row(row) for row in rows]
 
+    def append_rule_log(self, row: AutomationRuleLogRow) -> int:
+        """Persist a single automation rule execution result.
+
+        Returns the new row id. Raises sqlite3.DatabaseError on write failure
+        so callers can retain the in-memory result and surface the error.
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO automation_rule_logs (
+                    rule_id,
+                    rule_name,
+                    trigger_type,
+                    conditions_passed,
+                    actions_executed,
+                    success,
+                    error_message,
+                    timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._rule_log_values(row),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def list_rule_logs(self) -> list[AutomationRuleLogRow]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT rule_id, rule_name, trigger_type, conditions_passed,
+                       actions_executed, success, error_message, timestamp
+                FROM automation_rule_logs
+                ORDER BY id
+                """
+            ).fetchall()
+        return [self._rule_log_from_row(row) for row in rows]
+
+    def insert_notification(self, notification: Notification) -> None:
+        """Persist a notification keyed by its id.
+
+        Idempotent: re-inserting the same id updates the stored content and
+        dismissed state. A single-statement write means a failure raises
+        sqlite3.DatabaseError and leaves the prior persisted state unchanged
+        with no partial update, so callers can surface the error.
+        """
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO notifications (
+                    id,
+                    type,
+                    title,
+                    message,
+                    timestamp,
+                    project_path,
+                    dismissed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    type = excluded.type,
+                    title = excluded.title,
+                    message = excluded.message,
+                    timestamp = excluded.timestamp,
+                    project_path = excluded.project_path,
+                    dismissed = excluded.dismissed
+                """,
+                self._notification_values(notification),
+            )
+
+    def set_notification_dismissed(self, notification_id: str, dismissed: bool = True) -> None:
+        """Persist the dismissed state for a single notification.
+
+        Raises sqlite3.DatabaseError on write failure so callers can retain the
+        prior persisted state and surface the error.
+        """
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE notifications SET dismissed = ? WHERE id = ?",
+                (1 if dismissed else 0, notification_id),
+            )
+
+    def list_notifications(self) -> list[Notification]:
+        """Load all persisted notifications preserving stored dismissed state."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, type, title, message, timestamp, project_path, dismissed
+                FROM notifications
+                ORDER BY created_at, id
+                """
+            ).fetchall()
+        return [self._notification_from_row(row) for row in rows]
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.execute("PRAGMA foreign_keys = ON")
@@ -359,6 +473,35 @@ class CacheDb:
                 project_path TEXT NOT NULL DEFAULT '',
                 message TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                timestamp TEXT,
+                project_path TEXT NOT NULL DEFAULT '',
+                dismissed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS automation_rule_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_id TEXT NOT NULL DEFAULT '',
+                rule_name TEXT NOT NULL DEFAULT '',
+                trigger_type TEXT NOT NULL DEFAULT '',
+                conditions_passed INTEGER NOT NULL DEFAULT 0,
+                actions_executed TEXT NOT NULL DEFAULT '',
+                success INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                timestamp TEXT
             )
             """
         )
@@ -442,4 +585,63 @@ class CacheDb:
             owner=row[4],
             display=row[5],
             updated_at=datetime_from_json(row[6]),
+        )
+
+    @staticmethod
+    def _rule_log_values(
+        row: AutomationRuleLogRow,
+    ) -> tuple[str, str, str, int, str, int, str | None, str | None]:
+        return (
+            row.rule_id,
+            row.rule_name,
+            row.trigger_type,
+            int(row.conditions_passed),
+            row.actions_executed,
+            1 if row.success else 0,
+            row.error_message,
+            datetime_to_json(row.timestamp),
+        )
+
+    @staticmethod
+    def _rule_log_from_row(
+        row: tuple[str, str, str, int, str, int, str | None, str | None],
+    ) -> AutomationRuleLogRow:
+        return AutomationRuleLogRow(
+            rule_id=row[0],
+            rule_name=row[1],
+            trigger_type=row[2],
+            conditions_passed=int(row[3]),
+            actions_executed=row[4] or "[]",
+            success=bool(row[5]),
+            error_message=row[6],
+            timestamp=datetime_from_json(row[7]),
+        )
+
+    @staticmethod
+    def _notification_values(
+        notification: Notification,
+    ) -> tuple[str, str, str, str, str | None, str, int]:
+        return (
+            notification.id,
+            notification.type,
+            notification.title,
+            notification.message,
+            datetime_to_json(notification.timestamp),
+            str(notification.project_path) if notification.project_path else "",
+            1 if notification.dismissed else 0,
+        )
+
+    @staticmethod
+    def _notification_from_row(
+        row: tuple[str, str, str, str, str | None, str | None, int],
+    ) -> Notification:
+        project_path = Path(row[5]) if row[5] else None
+        return Notification(
+            id=row[0],
+            type=row[1],
+            title=row[2],
+            message=row[3],
+            timestamp=datetime_from_json(row[4]) or local_now(),
+            project_path=project_path,
+            dismissed=bool(row[6]),
         )

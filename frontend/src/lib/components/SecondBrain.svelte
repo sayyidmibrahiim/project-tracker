@@ -3,6 +3,7 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import type { SecondBrainItem } from "../types";
   import { BridgeErrorCode } from "../types";
+  import ConfirmModal from "./ConfirmModal.svelte";
 
   // ── Tab state ──
   type TabId = "notes" | "linkbank";
@@ -180,6 +181,26 @@
   let notesSearch: string = $state("");
   let selectedItem: SecondBrainItem | null = $state(null);
 
+  // ── Notes CRUD state ──
+  // Absolute Second Brain root folder (parent for note creation), from settings_get.
+  let secondBrainRoot: string = $state("");
+  // Inline action error for pin/favorite/delete.
+  let notesActionError: string = $state("");
+
+  // Create note form.
+  let createOpen: boolean = $state(false);
+  let createFilename: string = $state("");
+  let createContent: string = $state("");
+  let createError: string = $state("");
+
+  // Edit note (full-content replace via second_brain_note_write).
+  let editingNotePath: string | null = $state(null);
+  let editContent: string = $state("");
+  let editNoteError: string = $state("");
+
+  // Delete confirmation (no bridge call until confirmed).
+  let deleteTarget: SecondBrainItem | null = $state(null);
+
   let filteredNotes: SecondBrainItem[] = $derived.by(() => {
     const q = notesSearch.trim().toLowerCase();
     if (!q) return notesItems;
@@ -194,7 +215,9 @@
     notesLoadState = "loading";
     notesErrorCode = "";
     notesErrorMessage = "";
+    notesActionError = "";
     selectedItem = null;
+    editingNotePath = null;
 
     if (!isPywebviewReady()) {
       notesErrorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
@@ -202,6 +225,10 @@
       notesLoadState = "error";
       return;
     }
+    // Fetch the configured Second Brain root folder (parent for note creation).
+    const settingsResp = await callBridge<{ second_brain_folder?: string }>("settings_get");
+    secondBrainRoot = settingsResp.ok ? (settingsResp.data?.second_brain_folder ?? "") : "";
+
     const resp = await callBridge<SecondBrainItem[]>("second_brain_list");
     if (!resp.ok) {
       notesErrorCode = resp.error.code;
@@ -234,6 +261,132 @@
     if (!isPywebviewReady()) return;
     const resp = await callBridge<SecondBrainItem>("second_brain_get", itemId);
     selectedItem = resp.ok ? (resp.data ?? null) : null;
+    // Leaving a note cancels any in-progress edit of a different note.
+    if (!selectedItem || editingNotePath !== selectedItem.path) {
+      editingNotePath = null;
+      editNoteError = "";
+    }
+  }
+
+  // ── Create note ──
+  function openCreate() {
+    createOpen = !createOpen;
+    createFilename = "";
+    createContent = "";
+    createError = "";
+  }
+
+  async function handleCreateNote() {
+    createError = "";
+    if (!isPywebviewReady()) return;
+    if (!secondBrainRoot) {
+      createError = "No Second Brain folder configured. Set one in Settings first.";
+      return;
+    }
+    const filename = createFilename.trim();
+    if (!filename) {
+      createError = "Filename is required.";
+      return;
+    }
+    const resp = await callBridge<SecondBrainItem>(
+      "second_brain_note_create",
+      secondBrainRoot,
+      filename,
+      createContent,
+    );
+    if (!resp.ok) {
+      createError = resp.error.message;
+      return;
+    }
+    createOpen = false;
+    createFilename = "";
+    createContent = "";
+    await loadNotes();
+  }
+
+  // ── Edit / save note (full-content replace) ──
+  function startEditNote() {
+    if (!selectedItem) return;
+    editingNotePath = selectedItem.path;
+    // Pre-fill with the preview excerpt. This preview is limited to the first
+    // 200 characters; saving overwrites the entire note with the editor content.
+    editContent = selectedItem.excerpt ?? "";
+    editNoteError = "";
+  }
+
+  function cancelEditNote() {
+    editingNotePath = null;
+    editNoteError = "";
+  }
+
+  async function handleSaveNote() {
+    editNoteError = "";
+    if (!isPywebviewReady() || !editingNotePath) return;
+    const resp = await callBridge<SecondBrainItem>(
+      "second_brain_note_write",
+      editingNotePath,
+      editContent,
+    );
+    if (!resp.ok) {
+      editNoteError = resp.error.message;
+      return;
+    }
+    editingNotePath = null;
+    await loadNotes();
+  }
+
+  // ── Delete note (gated by ConfirmModal — no bridge call until confirm) ──
+  function requestDeleteNote(item: SecondBrainItem) {
+    notesActionError = "";
+    deleteTarget = item;
+  }
+
+  function cancelDeleteNote() {
+    deleteTarget = null;
+  }
+
+  async function confirmDeleteNote() {
+    const target = deleteTarget;
+    deleteTarget = null;
+    if (!target || !isPywebviewReady()) return;
+    const resp = await callBridge("second_brain_note_delete", target.path);
+    if (!resp.ok) {
+      notesActionError = resp.error.message;
+      return;
+    }
+    await loadNotes();
+  }
+
+  // ── Pin / favorite toggles (persist; reflect returned state) ──
+  // Re-read the list without clearing the current selection (Req 13.x list refresh).
+  async function refreshNotesList() {
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<SecondBrainItem[]>("second_brain_list");
+    if (resp.ok) notesItems = resp.data ?? [];
+  }
+
+  async function handleTogglePin(itemId: string) {
+    notesActionError = "";
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<SecondBrainItem>("second_brain_pin", itemId);
+    if (!resp.ok) {
+      notesActionError = resp.error.message;
+      return;
+    }
+    if (resp.data && selectedItem?.id === itemId) selectedItem = resp.data;
+    await refreshNotesList();
+  }
+
+  async function handleToggleFavorite(itemId: string) {
+    notesActionError = "";
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<SecondBrainItem>("second_brain_favorite", itemId);
+    if (!resp.ok) {
+      notesActionError = resp.error.message;
+      return;
+    }
+    if (resp.data && selectedItem?.id === itemId) selectedItem = resp.data;
+    await refreshNotesList();
   }
 
   onMount(() => {
@@ -284,8 +437,32 @@
           />
         </div>
         <span class="project-count">{filteredNotes.length} item(s)</span>
-        <span class="lb-deferred-hint">✎ Pin/Favorite/Edit deferred</span>
+        <button class="lb-add-btn" onclick={openCreate}>
+          {createOpen ? "Cancel" : "+ New Note"}
+        </button>
       </div>
+
+      <!-- Create note form -->
+      {#if createOpen}
+        <div class="lb-add-form">
+          {#if !secondBrainRoot}
+            <span class="lb-form-error">No Second Brain folder configured. Set one in Settings to create notes.</span>
+          {:else}
+            <span class="sb-create-parent">in {secondBrainRoot}</span>
+            <input class="lb-form-input" placeholder="Filename (e.g. idea.md) *" bind:value={createFilename} />
+            <textarea class="sb-create-content" placeholder="Note content (optional)" bind:value={createContent}></textarea>
+            <button class="lb-form-submit" onclick={handleCreateNote}>Create</button>
+          {/if}
+          {#if createError}
+            <span class="lb-form-error">{createError}</span>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Notes action error -->
+      {#if notesActionError}
+        <div class="lb-inline-error">{notesActionError}</div>
+      {/if}
 
       {#if notesLoadState === "loading"}
         <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading notes…</span></div>
@@ -328,13 +505,57 @@
                   <div class="pd-dl-item"><dt>Updated</dt><dd>{selectedItem.updated_at ? new Date(selectedItem.updated_at).toLocaleString("en-GB") : "—"}</dd></div>
                   <div class="pd-dl-item"><dt>Flags</dt><dd>{selectedItem.pinned ? "📌 Pinned " : ""}{selectedItem.favorite ? "★ Favorite" : ""}{!selectedItem.pinned && !selectedItem.favorite ? "—" : ""}</dd></div>
                 </dl>
-                <span class="lb-deferred-hint" style="display:block;margin-top:10px;">✎ Pin/Favorite/Edit deferred — read-only preview only.</span>
+
+                <!-- Pin / favorite toggles (persist) -->
+                <div class="sb-note-actions">
+                  <button class="lb-action-btn" onclick={() => handleTogglePin(selectedItem!.id)}>
+                    {selectedItem.pinned ? "📌 Unpin" : "📌 Pin"}
+                  </button>
+                  <button class="lb-action-btn" onclick={() => handleToggleFavorite(selectedItem!.id)}>
+                    {selectedItem.favorite ? "★ Unfavorite" : "★ Favorite"}
+                  </button>
+                  {#if selectedItem.item_type === "note" && editingNotePath !== selectedItem.path}
+                    <button class="lb-action-btn" onclick={startEditNote}>✎ Edit</button>
+                  {/if}
+                  <button class="lb-action-btn lb-action-archive" onclick={() => requestDeleteNote(selectedItem!)}>Delete</button>
+                </div>
+
+                {#if editingNotePath === selectedItem.path}
+                  <!-- Full-content edit (overwrites the note via second_brain_note_write) -->
+                  <div class="sb-edit-block">
+                    <p class="sb-edit-caveat">
+                      ⚠ Preview is limited to the first 200 characters. Saving overwrites the entire
+                      note with the text below.
+                    </p>
+                    <textarea class="sb-edit-textarea" bind:value={editContent}></textarea>
+                    <div class="sb-edit-actions">
+                      <button class="lb-form-submit" onclick={handleSaveNote}>Save</button>
+                      <button class="lb-form-cancel" onclick={cancelEditNote}>Cancel</button>
+                    </div>
+                    {#if editNoteError}
+                      <span class="lb-form-error">{editNoteError}</span>
+                    {/if}
+                  </div>
+                {:else if selectedItem.excerpt}
+                  <div class="sb-note-excerpt">{selectedItem.excerpt}</div>
+                {/if}
               </div>
             {/if}
           </div>
         </div>
       {/if}
     </div>
+
+    {#if deleteTarget}
+      <ConfirmModal
+        title="Delete Second Brain note"
+        actionLabel="Delete note"
+        targetName={deleteTarget.path}
+        reversible={false}
+        onConfirm={confirmDeleteNote}
+        onCancel={cancelDeleteNote}
+      />
+    {/if}
 
   <!-- ── Link Bank tab ── -->
   {:else}
@@ -594,6 +815,75 @@
   .sb-note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
   @media (max-width: 700px) { .sb-note-grid { grid-template-columns: 1fr; } }
 
+  /* ── Notes CRUD ── */
+  .sb-note-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .sb-note-excerpt {
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--color-workspace-panel);
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--color-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+  .sb-edit-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .sb-edit-caveat {
+    margin: 0;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--color-dbs-red);
+    line-height: 1.35;
+  }
+  .sb-edit-textarea {
+    min-height: 160px;
+    padding: 8px;
+    border: 1px solid #D7DCE2;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--color-ink);
+    resize: vertical;
+    line-height: 1.4;
+  }
+  .sb-edit-textarea:focus { outline: none; border-color: var(--color-dbs-red); }
+  .sb-edit-actions { display: flex; gap: 6px; }
+  .sb-create-parent {
+    flex: 1 1 100%;
+    font-size: 10px;
+    font-weight: 750;
+    color: var(--color-muted);
+    word-break: break-all;
+  }
+  .sb-create-content {
+    flex: 1 1 100%;
+    min-height: 80px;
+    padding: 8px;
+    border: 1px solid #D7DCE2;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--color-ink);
+    resize: vertical;
+    line-height: 1.4;
+  }
+  .sb-create-content:focus { outline: none; border-color: var(--color-dbs-red); }
+
   /* ── Link Bank Toolbar ── */
   .lb-toolbar {
     display: flex;
@@ -616,12 +906,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-  .lb-deferred-hint {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-muted-light);
-    font-style: italic;
   }
 
   /* ── Link list ── */

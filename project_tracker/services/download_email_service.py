@@ -139,6 +139,10 @@ class DownloadEmailWorker:
                 # Check if CR number is in subject
                 subject = str(item.Subject)
                 if self.job.cr_number.upper() in subject.upper():
+                    # Save attachments under the target project folder before
+                    # returning (Requirement 8.8). COM attachment objects must be
+                    # handled on this COM thread, so the save happens here.
+                    self._save_attachments(item)
                     return {
                         "subject": subject,
                         "body": str(item.Body),
@@ -148,6 +152,33 @@ class DownloadEmailWorker:
                 continue  # Skip items that can't be read
 
         return None
+
+    def _save_attachments(self, item: object) -> None:
+        """Save an Outlook mail item's attachments under the project folder.
+
+        Each attachment is written to ``job.project_path`` using ``pathlib`` for
+        path construction so attachments always land under the target project
+        folder (Requirement 8.8). Accepts any object exposing the Outlook
+        ``Attachments`` collection interface (``Count`` + ``Item(i)``), which
+        keeps the method unit-testable without a live COM object.
+        """
+        attachments = getattr(item, "Attachments", None)
+        if attachments is None:
+            return
+
+        try:
+            count = int(attachments.Count)
+        except (AttributeError, TypeError, ValueError):
+            return
+
+        for index in range(1, count + 1):
+            attachment = attachments.Item(index)
+            filename = str(getattr(attachment, "FileName", "") or "")
+            if not filename:
+                continue
+            # Use only the base name to keep the file under the project folder.
+            target = self.job.project_path / Path(filename).name
+            attachment.SaveAsFile(str(target))
 
 
 class DownloadEmailService:
