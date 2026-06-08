@@ -269,16 +269,16 @@ Hard rules baked into every slice:
       `outlook_download_emails(project_path, …)` (guarded; dev-skipped off-Windows); runtime failure
       → `ok=false` without claiming drafted/sent.
     - _Requirements: 8.1, 8.2, 8.3, 8.7, 8.9_
-  - [ ] 15.4 Write property test for off-Windows guarding (**Property 10**)
+  - [x] 15.4 Write property test for off-Windows guarding (**Property 10**)
     - **Property 10: Off-Windows guard never executes native automation** — for any Outlook/Teams
       call on a non-Windows platform, no COM/`pyautogui`/`pyperclip` is invoked and a dev-skipped
       response is returned.
     - **Validates: Requirements 7.2, 9.6**
-  - [ ] 15.5 Write unit tests for Outlook draft/send/contacts/download
+  - [x] 15.5 Write unit tests for Outlook draft/send/contacts/download
     - Cover unresolved-placeholder abort, unmet-condition skip, dev fallback contact off-Windows,
       and dev-skipped download off-Windows.
     - _Requirements: 8.5, 8.6, 8.7, 8.8_
-  - [ ] 15.7 Add Outlook actions to the frontend (draft default; send gated)
+  - [x] 15.7 Add Outlook actions to the frontend (draft default; send gated)
     - Draft is default; send routed through `ConfirmModal`; cancel retains the draft; `ok=false`
       shows the error without success indication.
     - _Requirements: 3.1, 8.1, 8.2, 8.3, 8.9_
@@ -294,11 +294,11 @@ Hard rules baked into every slice:
       `ok=false`; off-Windows dev-skipped (no `pyautogui`); runtime failure leaves auto-send + draft
       unchanged.
     - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
-  - [ ] 17.2 Add `teams_preview_message` + `teams_send_message` methods + adapters (`js_api.py` + `app_web.py`)
+  - [x] 17.2 Add `teams_preview_message` + `teams_send_message` methods + adapters (`js_api.py` + `app_web.py`)
     - `teams_preview_message(...)` default Preview_First; `teams_send_message(...)` only when
       enabled + confirmed.
     - _Requirements: 9.1_
-  - [ ] 17.3 Write unit tests for Teams preview/send
+  - [x] 17.3 Write unit tests for Teams preview/send
     - Cover `teams_auto_send` default false, countdown clamp/invalid→3, FAILSAFE abort → `ok=false`,
       and off-Windows dev-skip with no `pyautogui` invocation.
     - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.6_
