@@ -1490,16 +1490,16 @@ a Windows-manual gate).
 
 ### Slices Completed in This Session
 
-| Commit    | Subject                                                                     |
-| --------- | --------------------------------------------------------------------------- |
-| `844e61a` | Teams preview/send unit tests (slice 17.3); mark 15.5/15.7/17.2 [x]         |
-| `8758db4` | Teams frontend actions in Automations tab (slice 17.4)                      |
-| `52bddce` | scheduler_entry_* JsApi + adapter + unit tests (slices 19.2/19.3)           |
-| `000d9ac` | Scheduler control surface + entry CRUD UI (slice 19.4)                      |
-| `8c6d4a6` | rules_* JsApi methods + settings-backed adapter (slice 21.2)                |
+| Commit    | Subject                                                                       |
+| --------- | ----------------------------------------------------------------------------- |
+| `844e61a` | Teams preview/send unit tests (slice 17.3); mark 15.5/15.7/17.2 [x]           |
+| `8758db4` | Teams frontend actions in Automations tab (slice 17.4)                        |
+| `52bddce` | scheduler*entry*\* JsApi + adapter + unit tests (slices 19.2/19.3)            |
+| `000d9ac` | Scheduler control surface + entry CRUD UI (slice 19.4)                        |
+| `8c6d4a6` | rules\_\* JsApi methods + settings-backed adapter (slice 21.2)                |
 | `551a18d` | Rules CRUD + execution + P8 ordering halt-on-failure tests (slices 21.3/21.4) |
-| `c8b8f5b` | Rules CRUD + per-rule logs view (slice 21.5)                                |
-| `0dd3735` | Bridge contract guard + P7 Bridge_Response shape (slices 23.1/23.2/23.3)    |
+| `c8b8f5b` | Rules CRUD + per-rule logs view (slice 21.5)                                  |
+| `0dd3735` | Bridge contract guard + P7 Bridge_Response shape (slices 23.1/23.2/23.3)      |
 
 ### New Backend Surface (this session)
 
@@ -1567,11 +1567,11 @@ Latest commit: 0dd3735 test: bridge contract guard + P7 Bridge_Response shape
 
 ### Tasks Still Pending (Windows-Manual Only)
 
-| Item                                                                       | Reason                                       |
-| -------------------------------------------------------------------------- | -------------------------------------------- |
-| `.kiro/specs/prd-completion/tasks.md` § 25.* (manual test + packaging)     | Windows-manual gate; spec/docs already produced |
-| `.kiro/specs/prd-completion/tasks.md` § 15/16/17/18/19/20/21/22/23/24/26 checkpoints | Markers only, no executable work             |
-| Real Outlook COM, Teams `pyautogui` send, `os.startfile`, PyInstaller       | Windows-only runtime; deferred by design     |
+| Item                                                                                 | Reason                                          |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `.kiro/specs/prd-completion/tasks.md` § 25.\* (manual test + packaging)              | Windows-manual gate; spec/docs already produced |
+| `.kiro/specs/prd-completion/tasks.md` § 15/16/17/18/19/20/21/22/23/24/26 checkpoints | Markers only, no executable work                |
+| Real Outlook COM, Teams `pyautogui` send, `os.startfile`, PyInstaller                | Windows-only runtime; deferred by design        |
 
 Linux-automated readiness for the PRD-completion increment is **green**. The
 manual Windows gate plan in `docs/release-candidate-manual-test-plan.md` and
