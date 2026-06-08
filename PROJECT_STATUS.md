@@ -1479,3 +1479,102 @@ Latest committed commit: 3cb5dac update release candidate documentation
 - Windows manual test gate + Windows packaging session remain deferred (Linux-unrunnable by design).
 
 Linux-automated readiness for the PRD-completion increment is **green**. Windows-only runtime behavior (real Outlook COM, Teams `pyautogui` send, `os.startfile`, real PyInstaller packaging) is **not verified** — that remains gated by the manual Windows test plan in `docs/release-candidate-manual-test-plan.md` and `docs/windows-manual-test-checklist.md`.
+
+## PRD Completion Final Exit Audit (2026-06-08)
+
+All Linux-safe PRD-completion slices are implemented, verified, and committed
+on `prd-v31-migration` (no force-push, no rebase). The remaining unchecked
+items in `.kiro/specs/prd-completion/tasks.md` are intentional Windows-only
+gates (slices 16/18/20/22/24/26 are checkpoint markers; slice 25 packaging is
+a Windows-manual gate).
+
+### Slices Completed in This Session
+
+| Commit    | Subject                                                                     |
+| --------- | --------------------------------------------------------------------------- |
+| `844e61a` | Teams preview/send unit tests (slice 17.3); mark 15.5/15.7/17.2 [x]         |
+| `8758db4` | Teams frontend actions in Automations tab (slice 17.4)                      |
+| `52bddce` | scheduler_entry_* JsApi + adapter + unit tests (slices 19.2/19.3)           |
+| `000d9ac` | Scheduler control surface + entry CRUD UI (slice 19.4)                      |
+| `8c6d4a6` | rules_* JsApi methods + settings-backed adapter (slice 21.2)                |
+| `551a18d` | Rules CRUD + execution + P8 ordering halt-on-failure tests (slices 21.3/21.4) |
+| `c8b8f5b` | Rules CRUD + per-rule logs view (slice 21.5)                                |
+| `0dd3735` | Bridge contract guard + P7 Bridge_Response shape (slices 23.1/23.2/23.3)    |
+
+### New Backend Surface (this session)
+
+- `project_tracker/web/js_api.py`: `RulesServiceProtocol`, `rules_service` slot,
+  `scheduler_entry_list`/`scheduler_entry_create`/`scheduler_entry_update`/
+  `scheduler_entry_delete`/`scheduler_entry_toggle`, `rules_create`/
+  `rules_update`/`rules_delete`/`rules_toggle`/`rules_get_logs`,
+  `_scheduler_entry_payload` (attaches `requires_confirmation` flag for
+  Outlook/Teams channels).
+- `project_tracker/services/scheduler_service.py`: `_create_scheduler_safe()`
+  classmethod tolerates a missing `apscheduler` on Linux; `start()` re-attempts
+  creation and surfaces a clear error if a scheduler is required.
+- `project_tracker/app_web.py`: `SchedulerService` wired into `create_js_api()`;
+  `_RulesAdapter` (CRUD over `settings.automation.rules_engine["rules"]`,
+  validates the eight supported action types, fetches filtered logs from the
+  durable `automation_rule_logs` cache); `AutomationService` rebuilt with the
+  shared `rules_provider` so evaluation and CRUD see one rule list.
+
+### New Frontend Surface (this session)
+
+- `frontend/src/lib/components/TeamsActions.svelte`: preview default;
+  auto-send gated by `ConfirmModal` and only offered when
+  `settings.teams.teams_auto_send === true`.
+- `frontend/src/lib/components/SchedulerActions.svelte`: status pill +
+  start/stop/run-once + entry table with create/edit/delete/toggle/trigger,
+  Outlook/Teams entries gated by `ConfirmModal` via `requires_confirmation`.
+- `frontend/src/lib/components/RulesActions.svelte`: full CRUD form, per-rule
+  logs viewer, evaluate single + evaluate all, `ConfirmModal` gating any rule
+  whose actions include `send_outlook_email` or `send_teams_message`.
+- `frontend/src/lib/components/Automations.svelte`: rewritten as a clean tab
+  dispatcher delegating to `RulesActions` / `TeamsActions` / `SchedulerActions`;
+  Outlook tab now points to the project-scoped `OutlookActions` in
+  `ProjectDetails`.
+
+### New Tests (Linux-runnable)
+
+- `tests/test_teams_service_unit.py` (10 tests): auto-send default,
+  countdown clamp, FAILSAFE abort under simulated Windows, off-Windows
+  dev-skip.
+- `tests/test_scheduler_entries_unit.py` (12 tests): entry CRUD persistence,
+  enable/disable, trigger filter match/no-match, 60-second auto-IN-PROGRESS
+  preservation, JsApi `requires_confirmation` flag.
+- `tests/test_rules_engine_unit.py` (7 tests): rules CRUD validation, log
+  retrieval filtered by rule id, unmet-condition skip, dispatch of all eight
+  supported action types, **P8 property test** (200 random orderings;
+  halt-on-failure leaves `actions_executed = order[:fail_at]` and writes
+  exactly one `automation_rule_logs` row).
+- `tests/test_bridge_contract_guard.py` (3 tests): every frontend
+  `callBridge(...)` literal maps to a real `JsApi` method on `create_js_api()`,
+  `window.pywebview` only inside `bridge.ts` (comments stripped so doc
+  reminders are not false positives), **P7 Bridge_Response shape property**
+  via reflection.
+
+### Final Verification (2026-06-08, Linux)
+
+```text
+Branch: prd-v31-migration
+Working tree: clean before final-status update
+svelte-check: 0 errors, 0 warnings
+vite build: clean, outputs to web/static/
+Tests (pytest): 1696 passed
+py_compile: pass (project_tracker/app_web.py, project_tracker/web/js_api.py)
+Latest commit: 0dd3735 test: bridge contract guard + P7 Bridge_Response shape
+```
+
+### Tasks Still Pending (Windows-Manual Only)
+
+| Item                                                                       | Reason                                       |
+| -------------------------------------------------------------------------- | -------------------------------------------- |
+| `.kiro/specs/prd-completion/tasks.md` § 25.* (manual test + packaging)     | Windows-manual gate; spec/docs already produced |
+| `.kiro/specs/prd-completion/tasks.md` § 15/16/17/18/19/20/21/22/23/24/26 checkpoints | Markers only, no executable work             |
+| Real Outlook COM, Teams `pyautogui` send, `os.startfile`, PyInstaller       | Windows-only runtime; deferred by design     |
+
+Linux-automated readiness for the PRD-completion increment is **green**. The
+manual Windows gate plan in `docs/release-candidate-manual-test-plan.md` and
+the packaging readiness check in `docs/packaging-readiness.md` remain the only
+pre-release work, executed on a Windows machine against a disposable test
+root.
