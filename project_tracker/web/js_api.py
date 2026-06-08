@@ -284,6 +284,25 @@ class AutomationServiceProtocol(Protocol):
         """Evaluate all rules."""
 
 
+class RulesServiceProtocol(Protocol):
+    """Rules-engine CRUD + log surface used by JsApi (Req 11.1/11.2)."""
+
+    def create(self, data: dict[str, object]) -> object:
+        """Create a rule; reject incomplete/unsupported definitions."""
+
+    def update(self, rule_id: str, data: dict[str, object]) -> object:
+        """Update a rule by id."""
+
+    def delete(self, rule_id: str) -> None:
+        """Delete a rule by id."""
+
+    def toggle(self, rule_id: str, enabled: bool) -> object:
+        """Enable or disable a rule by id."""
+
+    def get_logs(self, rule_id: str, limit: int) -> object:
+        """Return up to ``limit`` recent execution logs for ``rule_id``."""
+
+
 class SecondBrainServiceProtocol(Protocol):
     """Second Brain service surface used by JsApi."""
 
@@ -405,6 +424,7 @@ class JsApi:
         linkbank_store: LinkBankDependencyProtocol | None = None,
         second_brain_service: SecondBrainServiceProtocol | None = None,
         automation_service: AutomationServiceProtocol | None = None,
+        rules_service: RulesServiceProtocol | None = None,
         outlook_service: OutlookServiceProtocol | None = None,
         teams_service: TeamsServiceProtocol | None = None,
     ) -> None:
@@ -416,6 +436,7 @@ class JsApi:
         self._project_service = project_service
         self._year_service = year_service
         self._automation_service = automation_service
+        self._rules_service = rules_service
         self._file_service = file_service
         self._notes_service = notes_service
         self._settings_dependency = settings_service or settings_store
@@ -1218,6 +1239,52 @@ class JsApi:
             return ok(_to_frontend_safe(self._automation_service.evaluate_all(context)))
         except Exception as exc:
             return fail(str(exc), code="AUTOMATION_EVALUATE_ALL_FAILED")
+
+    def rules_create(self, data: dict[str, object]) -> dict[str, object]:
+        """Create a rule (Req 11.1/11.2). Reject incomplete/unsupported defs."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.create(dict(data or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_CREATE_FAILED")
+
+    def rules_update(self, rule_id: str, data: dict[str, object]) -> dict[str, object]:
+        """Update a rule by id (Req 11.1/11.2)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.update(rule_id, dict(data or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_UPDATE_FAILED")
+
+    def rules_delete(self, rule_id: str) -> dict[str, object]:
+        """Delete a rule by id (Req 11.1)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._rules_service.delete(rule_id)
+            return ok({"deleted": rule_id})
+        except Exception as exc:
+            return fail(str(exc), code="RULES_DELETE_FAILED")
+
+    def rules_toggle(self, rule_id: str, enabled: bool) -> dict[str, object]:
+        """Enable or disable a rule by id (Req 11.1)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.toggle(rule_id, bool(enabled))))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_TOGGLE_FAILED")
+
+    def rules_get_logs(self, rule_id: str, limit: int = 50) -> dict[str, object]:
+        """Return up to ``limit`` recent execution logs for ``rule_id`` (Req 11.1)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.get_logs(rule_id, int(limit or 50))))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_GET_LOGS_FAILED")
 
     def second_brain_list(self) -> dict[str, object]:
         """Return Second Brain items."""

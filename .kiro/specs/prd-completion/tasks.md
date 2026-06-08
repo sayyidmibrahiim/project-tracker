@@ -342,7 +342,7 @@ data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, en
       actions; write an `automation_rule_logs` row per execution; halt on first action failure,
       recording completed actions + the failure, and return `ok=false`.
     - _Requirements: 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9_
-  - [ ] 21.2 Add `rules_*` methods + adapters (`js_api.py` + `app_web.py`)
+  - [x] 21.2 Add `rules_*` methods + adapters (`js_api.py` + `app_web.py`)
     - Add `rules_create(data)`, `rules_update(rule_id, data)`, `rules_delete(rule_id)`,
       `rules_toggle(rule_id, enabled)`, `rules_get_logs(rule_id, limit)`; persist under
       `settings.automation.rules_engine.rules`; reject incomplete/unsupported definitions leaving the

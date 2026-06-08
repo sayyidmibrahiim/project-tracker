@@ -1287,6 +1287,149 @@ def create_js_api(
                 countdown_seconds=teams_settings.countdown_seconds,
             )
 
+    # ── rules adapter (settings-backed CRUD + cache-backed log retrieval) ──
+    class _RulesAdapter:
+        """Persist rules under ``settings.automation.rules_engine["rules"]``.
+
+        Provides CRUD over rule dicts (Req 11.1/11.2) and a ``get_logs`` helper
+        that filters the durable ``automation_rule_logs`` cache by rule id and
+        returns the most recent ``limit`` entries. Validation rejects incomplete
+        or unsupported definitions and leaves the prior persisted state unchanged.
+        """
+
+        SUPPORTED_ACTIONS = {
+            "download_email",
+            "save_attachment",
+            "update_cr_state",
+            "update_drone_state",
+            "send_outlook_email",
+            "send_teams_message",
+            "in_app_notification",
+            "append_history",
+        }
+
+        def __init__(self, settings_store: SettingsStore, cache: CacheDb) -> None:
+            self._settings_store = settings_store
+            self._cache = cache
+
+        # -- helpers -------------------------------------------------
+        def _read(self) -> tuple[Any, list[dict[str, object]]]:
+            settings = self._settings_store.read()
+            store = settings.automation.rules_engine
+            if not isinstance(store, dict):
+                store = {}
+                settings.automation.rules_engine = store
+            rules = store.get("rules") or []
+            if not isinstance(rules, list):
+                rules = []
+            return settings, [dict(r) for r in rules]
+
+        def _persist(self, settings: Any, rules: list[dict[str, object]]) -> None:
+            store = settings.automation.rules_engine
+            if not isinstance(store, dict):
+                store = {}
+                settings.automation.rules_engine = store
+            store["rules"] = rules
+            self._settings_store.write(settings)
+
+        @classmethod
+        def _validate(cls, rule: dict[str, object]) -> None:
+            if not isinstance(rule, dict):
+                raise ValueError("Rule must be a mapping")
+            name = str(rule.get("name", "")).strip()
+            if not name:
+                raise ValueError("Rule name is required")
+            actions = rule.get("actions") or []
+            if not isinstance(actions, list):
+                raise ValueError("Rule actions must be a list")
+            for action in actions:
+                if not isinstance(action, dict):
+                    raise ValueError("Each action must be a mapping")
+                action_type = action.get("type")
+                if action_type not in cls.SUPPORTED_ACTIONS:
+                    raise ValueError(f"Unsupported action type: {action_type!r}")
+
+        def _index_of(self, rules: list[dict[str, object]], rule_id: str) -> int:
+            for i, rule in enumerate(rules):
+                if str(rule.get("id", "")) == rule_id:
+                    return i
+            raise ValueError(f"Rule not found: {rule_id}")
+
+        # -- provider for AutomationService --------------------------
+        def list_rules(self) -> list[dict[str, object]]:
+            _, rules = self._read()
+            return rules
+
+        # -- CRUD ----------------------------------------------------
+        def create(self, data: dict[str, object]) -> dict[str, object]:
+            payload = dict(data)
+            if not payload.get("id"):
+                import uuid
+
+                payload["id"] = str(uuid.uuid4())
+            payload.setdefault("enabled", True)
+            payload.setdefault("conditions", [])
+            payload.setdefault("actions", [])
+            self._validate(payload)
+            settings, rules = self._read()
+            if any(str(r.get("id", "")) == payload["id"] for r in rules):
+                raise ValueError(f"Rule already exists: {payload['id']}")
+            rules.append(payload)
+            self._persist(settings, rules)
+            return payload
+
+        def update(self, rule_id: str, data: dict[str, object]) -> dict[str, object]:
+            settings, rules = self._read()
+            index = self._index_of(rules, rule_id)
+            merged = {**rules[index], **dict(data), "id": rule_id}
+            self._validate(merged)
+            rules[index] = merged
+            self._persist(settings, rules)
+            return merged
+
+        def delete(self, rule_id: str) -> None:
+            settings, rules = self._read()
+            index = self._index_of(rules, rule_id)
+            del rules[index]
+            self._persist(settings, rules)
+
+        def toggle(self, rule_id: str, enabled: bool) -> dict[str, object]:
+            settings, rules = self._read()
+            index = self._index_of(rules, rule_id)
+            rules[index] = {**rules[index], "enabled": bool(enabled)}
+            self._persist(settings, rules)
+            return rules[index]
+
+        def get_logs(self, rule_id: str, limit: int) -> list[dict[str, object]]:
+            try:
+                rows = self._cache.list_rule_logs()
+            except Exception:  # noqa: BLE001 — return empty on cache failure
+                return []
+            matched = [r for r in rows if getattr(r, "rule_id", None) == rule_id]
+            if limit and limit > 0:
+                matched = matched[-limit:]
+            return [
+                {
+                    "rule_id": getattr(r, "rule_id", ""),
+                    "rule_name": getattr(r, "rule_name", ""),
+                    "trigger_type": getattr(r, "trigger_type", ""),
+                    "conditions_passed": getattr(r, "conditions_passed", False),
+                    "actions_executed": getattr(r, "actions_executed", []),
+                    "success": getattr(r, "success", False),
+                    "error_message": getattr(r, "error_message", ""),
+                    "timestamp": getattr(r, "timestamp", ""),
+                }
+                for r in matched
+            ]
+
+    rules_adapter = _RulesAdapter(_settings_store, cache_db)
+    # Re-build automation service so rules CRUD + evaluation share one rule list.
+    automation_svc = AutomationService(
+        rules_provider=rules_adapter.list_rules,
+        cache=cache_db,
+        notification_service=notification_svc,
+    )
+
     # ── JsApi ─────────────────────────────────────────────────────────
     _metadata_store = MetadataStore()
     return JsApi(
@@ -1304,6 +1447,7 @@ def create_js_api(
         settings_store=_SettingsAdapter(_settings_store),
         linkbank_store=_LinkBankAdapter(_linkbank_store),
         automation_service=automation_svc,
+        rules_service=rules_adapter,
         second_brain_service=second_brain_svc,
         scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
