@@ -356,7 +356,7 @@ data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, en
     - Cover invalid/unsupported-definition rejection, unmet-condition skip, each action type, and
       log writing.
     - _Requirements: 11.2, 11.4, 11.5, 11.7_
-  - [ ] 21.5 Add Rules CRUD + logs view to `Automations.svelte` (Rules tab)
+  - [x] 21.5 Add Rules CRUD + logs view to `Automations.svelte` (Rules tab)
     - Create/edit/delete/toggle + logs view; Outlook/Teams actions gated by `ConfirmModal`.
     - _Requirements: 3.1, 11.1_
 
