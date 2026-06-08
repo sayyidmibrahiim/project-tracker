@@ -348,11 +348,11 @@ data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, en
       `settings.automation.rules_engine.rules`; reject incomplete/unsupported definitions leaving the
       store unchanged.
     - _Requirements: 11.1, 11.2_
-  - [ ] 21.3 Write property test for action ordering halt-on-failure (**Property 8**)
+  - [x] 21.3 Write property test for action ordering halt-on-failure (**Property 8**)
     - **Property 8: Rule action ordering halts on failure** — actions execute in order, stop at the
       first failure, with completed actions and the failure recorded in `automation_rule_logs`.
     - **Validates: Requirements 11.8, 11.9**
-  - [ ] 21.4 Write unit tests for rules CRUD + execution
+  - [x] 21.4 Write unit tests for rules CRUD + execution
     - Cover invalid/unsupported-definition rejection, unmet-condition skip, each action type, and
       log writing.
     - _Requirements: 11.2, 11.4, 11.5, 11.7_
