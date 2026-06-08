@@ -364,16 +364,16 @@ data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, en
   - Ensure all four Verification_Suite checks pass; ask the user if questions arise.
 
 - [ ] 23. Bridge-contract integrity guard
-  - [ ] 23.1 Reconcile frontend `callBridge` names against `create_js_api()` methods
+  - [x] 23.1 Reconcile frontend `callBridge` names against `create_js_api()` methods
     - Enumerate every `callBridge("…")` literal; ensure each maps to a real `JsApi` attribute on the
       object returned by `create_js_api()`; fix any drift (no invented contracts; no
       `window.pywebview` outside `bridge.ts`).
     - _Requirements: 1.1, 1.2, 1.3_
-  - [ ] 23.2 Write the bridge-contract guard test
+  - [x] 23.2 Write the bridge-contract guard test
     - Assert every frontend `callBridge` name exists on the `create_js_api()` object and fail on any
       mismatch.
     - _Requirements: 1.2, 1.3_
-  - [ ] 23.3 Write property test for universal Bridge_Response shape (**Property 7**)
+  - [x] 23.3 Write property test for universal Bridge_Response shape (**Property 7**)
     - **Property 7: Bridge_Response shape is universal** — every `JsApi` method returns a dict with
       an `ok` boolean; `ok=false` always carries an `error` whose `code` matches `^[A-Z0-9_]{1,64}$`.
     - **Validates: Requirements 1.4, 1.5, 1.6**
