@@ -41,6 +41,7 @@ from project_tracker.services.notification_service import NotificationService
 from project_tracker.services.project_service import ProjectService
 from project_tracker.services.report_service import ReportService
 from project_tracker.services.safe_delete_service import SafeDeleteService
+from project_tracker.services.scheduler_service import SchedulerService
 from project_tracker.services.second_brain_service import SecondBrainItem, SecondBrainService
 from project_tracker.services.teams_service import TeamsMessage, TeamsService
 from project_tracker.web.js_api import JsApi, fail, ok
@@ -459,6 +460,14 @@ def create_js_api(
     notification_svc.load_persisted()
     report_svc = ReportService(dashboard_service=dashboard_svc)
     automation_svc = AutomationService()
+    # Scheduler control surface (entry CRUD persisted under settings.automation.
+    # scheduler.entries). No interval job here — the 60s auto IN-PROGRESS job is
+    # owned by AutoTransitionService; the scheduler is not auto-started.
+    scheduler_svc = SchedulerService(
+        settings_store=_settings_store,
+        notification_service=notification_svc,
+        project_provider=lambda: [],
+    )
     second_brain_svc = SecondBrainService(
         items_provider=_second_brain_items_provider,
         folder_provider=lambda: _settings_store.read().second_brain_folder,
@@ -1296,6 +1305,7 @@ def create_js_api(
         linkbank_store=_LinkBankAdapter(_linkbank_store),
         automation_service=automation_svc,
         second_brain_service=second_brain_svc,
+        scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
         file_service=_FileServiceAdapter(_settings_store, SafeDeleteService()),
         notes_service=_NotesServiceAdapter(),

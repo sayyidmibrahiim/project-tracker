@@ -60,7 +60,7 @@ class SchedulerService:
     ) -> None:
         self._job = job
         self._interval_seconds = interval_seconds
-        self._scheduler = scheduler if scheduler is not None else self._create_scheduler()
+        self._scheduler = scheduler if scheduler is not None else self._create_scheduler_safe()
         self._job_id = job_id
         self._started = False
         self._settings_store = settings_store
@@ -83,6 +83,8 @@ class SchedulerService:
         """Schedule the interval job (when present) and start the scheduler once."""
         if self._started:
             return
+        if self._scheduler is None:
+            self._scheduler = self._create_scheduler()  # raises clearly if apscheduler missing
         if self._job is not None:
             self._scheduler.add_job(
                 self._job,
@@ -112,6 +114,48 @@ class SchedulerService:
         from apscheduler.schedulers.background import BackgroundScheduler
 
         return BackgroundScheduler()
+
+    @classmethod
+    def _create_scheduler_safe(cls) -> Any | None:
+        """Create the default scheduler, tolerating a missing apscheduler.
+
+        On environments where ``apscheduler`` is not installed (Linux dev/test
+        baseline), return ``None`` so entry CRUD still works (job-management
+        calls are getattr-guarded no-ops). ``start()`` re-attempts creation and
+        surfaces a clear error if a scheduler is genuinely required.
+        """
+        try:
+            return cls._create_scheduler()
+        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
+            return None
+
+    @classmethod
+    def _create_scheduler_safe(cls) -> Any | None:
+        """Create the default scheduler, tolerating a missing apscheduler.
+
+        On environments where ``apscheduler`` is not installed (the Linux
+        dev/test baseline), return ``None`` so entry CRUD still works
+        (job-management calls are getattr-guarded no-ops). ``start()`` re-attempts
+        creation and surfaces a clear error if a scheduler is genuinely required.
+        """
+        try:
+            return cls._create_scheduler()
+        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
+            return None
+
+    @classmethod
+    def _create_scheduler_safe(cls) -> Any | None:
+        """Create the default scheduler, tolerating a missing apscheduler.
+
+        On platforms/environments where ``apscheduler`` is not installed (e.g. the
+        Linux dev/test baseline), return ``None`` so entry CRUD still works
+        (job-management calls are getattr-guarded no-ops). ``start()`` re-attempts
+        creation and surfaces a clear error if a scheduler is genuinely required.
+        """
+        try:
+            return cls._create_scheduler()
+        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
+            return None
 
     # ------------------------------------------------------------------
     # Entry CRUD (persisted under settings.automation.scheduler.entries)

@@ -109,6 +109,21 @@ class SchedulerServiceProtocol(Protocol):
     def run_once(self) -> None:
         """Run scheduled job once."""
 
+    def list_entries(self) -> object:
+        """Return persisted scheduler entries."""
+
+    def create_entry(self, data: dict[str, object]) -> object:
+        """Create a scheduler entry."""
+
+    def update_entry(self, entry_id: str, data: dict[str, object]) -> object:
+        """Update a scheduler entry."""
+
+    def delete_entry(self, entry_id: str) -> None:
+        """Delete a scheduler entry."""
+
+    def set_enabled(self, entry_id: str, enabled: bool) -> object:
+        """Enable or disable a scheduler entry."""
+
 
 class YearServiceProtocol(Protocol):
     """Year service surface used by JsApi."""
@@ -564,6 +579,52 @@ class JsApi:
             return ok(_scheduler_status_payload(self._scheduler_service))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_STATUS_FAILED")
+
+    def scheduler_entry_list(self) -> dict[str, object]:
+        """Return persisted scheduler entries (Req 10.7)."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok([_scheduler_entry_payload(e) for e in self._scheduler_service.list_entries()])
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_LIST_FAILED")
+
+    def scheduler_entry_create(self, data: dict[str, object]) -> dict[str, object]:
+        """Create a scheduler entry; validation failure leaves state unchanged (Req 10.7)."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_scheduler_entry_payload(self._scheduler_service.create_entry(dict(data or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_CREATE_FAILED")
+
+    def scheduler_entry_update(self, entry_id: str, data: dict[str, object]) -> dict[str, object]:
+        """Update a scheduler entry; validation failure leaves state unchanged (Req 10.7)."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_scheduler_entry_payload(self._scheduler_service.update_entry(entry_id, dict(data or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_UPDATE_FAILED")
+
+    def scheduler_entry_delete(self, entry_id: str) -> dict[str, object]:
+        """Delete a scheduler entry (Req 10.7)."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._scheduler_service.delete_entry(entry_id)
+            return ok({"deleted": entry_id})
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_DELETE_FAILED")
+
+    def scheduler_entry_toggle(self, entry_id: str, enabled: bool) -> dict[str, object]:
+        """Enable or disable a scheduler entry (Req 10.8)."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_scheduler_entry_payload(self._scheduler_service.set_enabled(entry_id, bool(enabled))))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_TOGGLE_FAILED")
 
     def project_get(self, project_path: str) -> dict[str, object]:
         """Return full project detail."""
@@ -1279,6 +1340,21 @@ class JsApi:
 def _scheduler_status_payload(scheduler_service: SchedulerServiceProtocol) -> dict[str, object]:
     """Return frontend-safe scheduler status."""
     return {"is_running": bool(scheduler_service.is_running)}
+
+
+def _scheduler_entry_payload(entry: object) -> dict[str, object]:
+    """Return a frontend-safe scheduler entry dict with a confirmation flag.
+
+    Outlook/Teams-channel entries are flagged ``requires_confirmation=True`` so
+    the frontend gates them behind a Confirmation_UI before triggering (Req 10.7).
+    """
+    data = _to_frontend_safe(entry.to_dict())  # type: ignore[attr-defined]
+    if isinstance(data, dict):
+        channels = data.get("channels") or []
+        data["requires_confirmation"] = isinstance(channels, list) and any(
+            c in ("outlook_email", "teams") for c in channels
+        )
+    return data
 
 
 def _to_frontend_safe(value: object) -> object:

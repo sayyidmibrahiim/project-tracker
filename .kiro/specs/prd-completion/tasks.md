@@ -317,11 +317,11 @@ Hard rules baked into every slice:
       record + no action); deliver in-app alarms via `NotificationService`; preserve the existing
       60-second auto IN-PROGRESS evaluation; validation/persistence failure → reject + retain prior.
     - _Requirements: 10.2, 10.3, 10.4, 10.5, 10.6, 10.9, 10.10, 10.11_
-  - [ ] 19.2 Add `scheduler_entry_*` methods + adapters (`js_api.py` + `app_web.py`) - Add `scheduler_entry_list`, `scheduler_entry_create(data)`, `scheduler_entry_update(entry_id,
+  - [x] 19.2 Add `scheduler_entry_*` methods + adapters (`js_api.py` + `app_web.py`) - Add `scheduler_entry_list`, `scheduler_entry_create(data)`, `scheduler_entry_update(entry_id,
 data)`, `scheduler_entry_delete(entry_id)`, `scheduler_entry_toggle(entry_id, enabled)`; signal
         that Outlook/Teams-channel entries require frontend confirmation before triggering, and do not
         trigger those actions when declined. - _Requirements: 10.7, 10.8_
-  - [ ] 19.3 Write unit tests for scheduler entries
+  - [x] 19.3 Write unit tests for scheduler entries
     - Cover create/edit/delete validation + persistence, pause/resume, filter match/no-match
       recording, and preservation of the 60-second auto IN-PROGRESS job.
     - _Requirements: 10.4, 10.5, 10.9, 10.10, 10.11_
