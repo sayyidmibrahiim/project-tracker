@@ -7,6 +7,7 @@
   import ProjectActions from "./ProjectActions.svelte";
   import FileActions from "./FileActions.svelte";
   import OutlookActions from "./OutlookActions.svelte";
+  import NotesEditor from "./NotesEditor.svelte";
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -35,11 +36,9 @@
   let crStateSaveState: CrStateSave = $state("idle");
   let crStateSaveError: string = $state("");
 
-  // ── Notes edit state ──
-  let notesEdit: string = $state("");
-  type NotesSave = "idle" | "saving" | "success" | "error";
-  let notesSaveState: NotesSave = $state("idle");
-  let notesSaveError: string = $state("");
+  // ── Notes state ──
+  // Notes editing now lives in NotesEditor.svelte (autosave + toolbar + preview,
+  // PRD §12.12). `notes` holds the last loaded/saved value passed into it.
 
   // ── Metadata edit state ──
   let metaNameEdit: string = $state("");
@@ -109,7 +108,6 @@
     detail = null; subprojects = []; files = []; notes = "";
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
-    notesEdit = ""; notesSaveState = "idle"; notesSaveError = "";
     droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
     droneStateEdits = {}; droneStateBusy = -1; droneStateError = {};
     errorCode = ""; errorMessage = "";
@@ -137,7 +135,6 @@
     if (detail) crStateEdit = detail.cr_state || "";
     if (detail) syncDroneStateEdits();
     if (detail) { metaNameEdit = detail.project_name || ""; metaPlanEdit = detail.implementation_plan || ""; }
-    notesEdit = notes;
 
     if (!dResp.ok) {
       errorCode = dResp.error.code;
@@ -189,29 +186,6 @@
     if (detail) detail.cr_state = crStateEdit;
     crStateSaveState = "success";
     setTimeout(() => { if (crStateSaveState === "success") crStateSaveState = "idle"; }, 2500);
-  }
-
-  async function saveNotes() {
-    if (!selectedPath) return;
-    notesSaveState = "saving";
-    notesSaveError = "";
-
-    if (!isPywebviewReady()) {
-      notesSaveError = "pywebview bridge unavailable.";
-      notesSaveState = "error";
-      return;
-    }
-
-    const resp = await callBridge("notes_update", selectedPath, notesEdit);
-    if (!resp.ok) {
-      notesSaveError = resp.error.message;
-      notesSaveState = "error";
-      return;
-    }
-
-    notes = notesEdit;
-    notesSaveState = "success";
-    setTimeout(() => { if (notesSaveState === "success") notesSaveState = "idle"; }, 2500);
   }
 
   async function saveMetadata() {
@@ -301,7 +275,7 @@
       callBridge<string>("notes_get", selectedPath),
     ]);
     if (dResp.ok && dResp.data) { detail = dResp.data; syncDroneStateEdits(); }
-    if (ntResp.ok) { notes = ntResp.data ?? ""; notesEdit = notes; }
+    if (ntResp.ok) { notes = ntResp.data ?? ""; }
   }
 
   function syncDroneStateEdits() {
@@ -594,25 +568,13 @@
 
           <div class="pd-section">
             <h4 class="pd-section-title">Notes</h4>
-            <div class="pd-notes-edit">
-              <textarea
-                class="pd-notes-textarea"
-                placeholder="Write project notes (saved to notes.md)…"
-                bind:value={notesEdit}
-                disabled={notesSaveState === "saving"}
-                rows="6"
-              ></textarea>
-              <div class="pd-notes-actions">
-                <button class="cr-link-save-btn" onclick={saveNotes} disabled={notesSaveState === "saving" || notesEdit === notes}>
-                  {#if notesSaveState === "saving"}⏳ Saving…{:else}Save Notes{/if}
-                </button>
-                {#if notesSaveState === "success"}
-                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
-                {:else if notesSaveState === "error"}
-                  <span class="cr-link-feedback cr-link-err">✗ {notesSaveError}</span>
-                {/if}
-              </div>
-            </div>
+            {#key detail.project_path}
+              <NotesEditor
+                projectPath={detail.project_path}
+                initialNotes={notes}
+                onSaved={(n) => { notes = n; }}
+              />
+            {/key}
           </div>
         </div>
       {/if}
@@ -652,7 +614,6 @@
   .pd-dl-item dd { margin:0; font-size:12px; font-weight:850; color:var(--color-ink); }
   .pd-section { border-top:1px solid #E5E7EB; padding-top:10px; }
   .pd-section-title { margin:0 0 6px; font-size:11px; font-weight:900; color:var(--color-ink); display:flex; align-items:center; gap:6px; }
-  .pd-notes-edit { display:flex; flex-direction:column; gap:6px; }
   .pd-notes-textarea { width:100%; min-height:100px; max-height:240px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; color:var(--color-ink); resize:vertical; outline:none; }
   .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }
   .pd-notes-textarea:disabled { background:#f3f4f6; color:var(--color-muted); }
