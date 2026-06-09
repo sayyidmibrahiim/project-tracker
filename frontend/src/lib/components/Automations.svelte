@@ -1,18 +1,27 @@
 <script lang="ts">
   /**
-   * Automations screen — tab dispatcher.
+   * Automations screen — PRD §16.2 tab dispatcher.
    *
-   * Each tab is implemented in its own component so this file stays a thin
-   * tab bar + dispatcher with no per-tab state. Outlook is the only tab still
-   * presented as a project-scoped action surface (used from ProjectDetails),
-   * so it remains a deferred placeholder here.
+   * Tab order is fixed by PRD: Outlook, Teams, Scheduler, Rules Engine, and the
+   * page defaults to Outlook. Each tab owns only UI state. Python services
+   * remain the owner of automation persistence, rule execution, scheduler jobs,
+   * and Windows-only integrations.
    */
-  import RulesActions from "./RulesActions.svelte";
+  import AutomationsOutlook from "./AutomationsOutlook.svelte";
   import TeamsActions from "./TeamsActions.svelte";
   import SchedulerActions from "./SchedulerActions.svelte";
+  import RulesActions from "./RulesActions.svelte";
 
-  type TabId = "rules" | "outlook" | "teams" | "scheduler";
-  let activeTab: TabId = $state("rules");
+  type TabId = "outlook" | "teams" | "scheduler" | "rules";
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: "outlook", label: "Outlook" },
+    { id: "teams", label: "Teams" },
+    { id: "scheduler", label: "Scheduler" },
+    { id: "rules", label: "Rules Engine" },
+  ];
+
+  let activeTab: TabId = $state("outlook");
 
   function onTabSwitch(tab: TabId) {
     activeTab = tab;
@@ -23,27 +32,20 @@
 </script>
 
 <div class="am-screen">
-  <div class="am-tab-bar">
-    <button class="am-tab" class:active={activeTab === "rules"} onclick={() => onTabSwitch("rules")}>Rules</button>
-    <button class="am-tab" class:active={activeTab === "outlook"} onclick={() => onTabSwitch("outlook")}>Outlook</button>
-    <button class="am-tab" class:active={activeTab === "teams"} onclick={() => onTabSwitch("teams")}>Teams</button>
-    <button class="am-tab" class:active={activeTab === "scheduler"} onclick={() => onTabSwitch("scheduler")}>Scheduler</button>
+  <div class="am-tab-bar" aria-label="Automations tabs">
+    {#each tabs as tab}
+      <button class="am-tab" class:active={activeTab === tab.id} onclick={() => onTabSwitch(tab.id)}>{tab.label}</button>
+    {/each}
   </div>
 
-  {#if activeTab === "rules"}
-    <div class="am-pane"><RulesActions /></div>
+  {#if activeTab === "outlook"}
+    <div class="am-pane"><AutomationsOutlook /></div>
   {:else if activeTab === "teams"}
     <div class="am-pane"><TeamsActions /></div>
   {:else if activeTab === "scheduler"}
     <div class="am-pane"><SchedulerActions /></div>
   {:else}
-    <div class="am-deferred-tab">
-      <div class="placeholder-hero">
-        <span class="placeholder-kicker">Project-scoped</span>
-        <h2>Outlook Automation</h2>
-        <p>Outlook draft/send actions are exposed in the Project Details panel (Draft is default; Send is gated by confirmation). Off-Windows the integration returns dev-skipped responses with no COM execution.</p>
-      </div>
-    </div>
+    <div class="am-pane"><RulesActions /></div>
   {/if}
 </div>
 
@@ -54,6 +56,4 @@
   .am-tab:hover { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }
   .am-tab.active { background:var(--color-dbs-red); color:#fff; font-weight:900; }
   .am-pane { flex:1; min-height:0; overflow-y:auto; padding:4px 2px; }
-  .am-deferred-tab { flex:1; display:flex; align-items:center; justify-content:center; }
-  .am-deferred-tab .placeholder-hero { max-width:520px; }
 </style>
