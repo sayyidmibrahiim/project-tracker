@@ -16,9 +16,9 @@ child components. Basis for selecting bounded, high-value slices.
 | Locking rules visible + enforced      | §12.11 file ops locked in PROD_READY/IMPLEMENTED                                  | `folderLocks` + DisabledHints in ProjectActions/FileActions/ProjectTransitions           | done                | —                                                                                 |
 | Notes: autosave + toolbar + preview   | §12.12 autosave 1000ms, Saving/Saved, markdown toolbar at caret, Edit/Preview     | Was plain textarea + explicit "Save Notes" button — no toolbar/preview/autosave          | done (this slice)   | New `NotesEditor.svelte`: 1000ms autosave, toolbar (B/I/H1/H2/Code/List/Quote/Link), Edit/Preview via dependency-free `lib/markdown.ts` (no marked.js) |
 | NEW_PROJECT mode                      | §12.4 create-project form (name validation, year, dates, CR/drone, plan)         | Implemented: `NewProjectForm` (name + year, realtime validation) → create → SHOW_EDIT    | done                | `project_create` accepts only name+year; optional CR/drone/plan set in SHOW_EDIT (deviation noted below) |
-| Activity History panel                | §12.5/§12.13 read-only history list, newest first                                | Absent — no history shown; `ProjectDetail` payload has no history field                  | gap (backend-gated) | Needs a serialized history field on `project_get` (backend/bridge slice) before UI |
-| Sub Project table                     | §12.10 columns Sub Project/Drone/State/Owner/Actions (open/delete/rename)         | Subprojects are a `string[]` managed via ProjectActions (create/delete only)             | gap (next slice)    | Build a subproject table with per-row drone mapping/owner/actions                  |
-| Two-column Command Center layout      | §12.5 left identity/schedule/subprojects, right files/notes/history              | Single stacked detail card (sections in one column)                                      | gap (layout)        | Restructure detail into the PRD two-column layout (later slice)                    |
+| Activity History panel                | §12.5/§12.13 read-only history list, newest first                                | Placeholder card present; real feed still absent (`ProjectDetail` has no history field)  | gap (backend-gated) | Honest deferred placeholder shown; needs a serialized history field on `project_get`  |
+| Sub Project table                     | §12.10 columns Sub Project/Drone/State/Owner/Actions (open/delete/rename)         | `SubProjectTable.svelte`: columns + drone mapping + Open Folder; create/delete in Actions | done                | Table maps subfolder_name→drone; Open Folder via `folder_open`; create/delete stay in ProjectActions |
+| Two-column Command Center layout      | §12.5 left identity/schedule/subprojects, right files/notes/history              | Command Center header + two-column body (left: identity/transitions/drone/subprojects/actions; right: files/notes/history/outlook) | done                | Restructured into pd-cc header + pd-cc-body two columns; Schedule kept inside Identity card (minor deviation) |
 | Owner picker (Outlook contacts)       | §12.8 owner picker searches Outlook contacts (Windows COM) or free text          | Free-text owner input only                                                               | gap (Windows-gated) | Contacts search is Windows COM; free-text fallback already present                 |
 
 ## Selected implementation target (this slice)
@@ -52,10 +52,10 @@ intended for a different surface). No locking behavior was altered here.
 
 ## Deferred (each surfaced honestly; not hidden as done)
 
-- Sub Project table with per-row drone mapping/owner/actions.
-- Activity History panel (needs a serialized history field on `project_get`).
-- Two-column Command Center layout restructure.
+- Activity History real feed (placeholder card is shown; needs a serialized history field on `project_get`).
+- Sub-project rename (no `subproject_rename` bridge exists yet) and inline drone-state edit inside the sub-project table (edit stays in the Drone Tickets card).
 - Outlook-contacts owner picker (Windows COM; free-text fallback exists).
+- Separate Schedule card (Start/End currently shown inside the Identity card; no Start/End editor exists anywhere yet).
 - Optional create-time fields (CR link, first drone, implementation plan) and
   Start/End schedule editing: `project_create` accepts only `project_name` +
   `year`, and no Start/End editor exists anywhere yet. NEW_PROJECT collects

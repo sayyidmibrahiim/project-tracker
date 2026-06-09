@@ -9,6 +9,7 @@
   import OutlookActions from "./OutlookActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
   import NewProjectForm from "./NewProjectForm.svelte";
+  import SubProjectTable from "./SubProjectTable.svelte";
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -429,16 +430,19 @@
       {:else if detailState === "error"}
         <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Detail load failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
       {:else if detail}
-        <div class="pd-detail-card">
+        <div class="pd-cc">
           <div class="pd-detail-head">
             <span class="pd-detail-accent"></span>
             <div style="flex:1;min-width:0;">
+              <span class="pd-cc-kicker">Project Command Center</span>
               <h3 class="pd-detail-name">{detail.project_name}</h3>
               <p class="pd-detail-path">{detail.project_path}</p>
             </div>
             <span class="state-combo">{detail.project_state}</span>
           </div>
 
+          <div class="pd-cc-body">
+          <div class="pd-col">
           <div class="pd-section pd-transitions">
             <h4 class="pd-section-title">Folder Transitions</h4>
             <ProjectTransitions
@@ -449,6 +453,8 @@
               onApplied={onTransitionApplied}
             />
           </div>
+          <div class="pd-section">
+            <h4 class="pd-section-title">Project Identity</h4>
           <dl class="pd-detail-grid">
             <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
             <div class="pd-dl-item">
@@ -492,6 +498,7 @@
             <div class="pd-dl-item"><dt>T-10</dt><dd>{detail.t10_status}</dd></div>
             <div class="pd-dl-item"><dt>Drone Tickets</dt><dd>{detail.drone_ticket_count}</dd></div>
           </dl>
+          </div>
 
           <div class="pd-section">
             <h4 class="pd-section-title">Edit Metadata</h4>
@@ -575,6 +582,17 @@
           </div>
 
           <div class="pd-section">
+            <h4 class="pd-section-title">Sub Projects</h4>
+            <SubProjectTable
+              projectPath={detail.project_path}
+              {subprojects}
+              droneTickets={detail.drone_tickets}
+            />
+          </div>
+          </div>
+
+          <div class="pd-col">
+          <div class="pd-section">
             <h4 class="pd-section-title">Files</h4>
             <FileActions
               projectPath={detail.project_path}
@@ -601,6 +619,13 @@
                 onSaved={(n) => { notes = n; }}
               />
             {/key}
+          </div>
+
+          <div class="pd-section">
+            <h4 class="pd-section-title">Activity History</h4>
+            <p class="pd-muted">Activity history will appear here once the backend exposes a project history feed. Changes are still recorded to history and notifications by the services.</p>
+          </div>
+          </div>
           </div>
         </div>
       {/if}
@@ -632,8 +657,13 @@
   .pd-row-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
   .state-combo-inline { display:inline-flex; align-items:center; height:20px; border-radius:4px; background:var(--color-dbs-red); color:#fff; font-size:9px; font-weight:900; padding:0 6px; white-space:nowrap; flex:0 0 auto; }
   .pd-detail-panel { display:flex; flex-direction:column; gap:8px; min-height:0; overflow-y:auto; }
-  .pd-detail-card { background:#fff; border:1px solid #E5E7EB; border-radius:8px; box-shadow:var(--shadow-subtle); padding:14px; display:flex; flex-direction:column; gap:12px; flex:0 0 auto; }
-  .pd-detail-head { display:flex; align-items:center; gap:10px; }
+  .pd-cc { display:flex; flex-direction:column; gap:10px; flex:0 0 auto; }
+  .pd-cc-kicker { display:block; font-size:9px; font-weight:850; letter-spacing:0.4px; text-transform:uppercase; color:var(--color-muted); }
+  .pd-cc-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; align-items:start; }
+  .pd-col { display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .pd-muted { margin:0; font-size:10px; font-weight:700; color:var(--color-muted); line-height:1.45; }
+  .pd-detail-head { display:flex; align-items:center; gap:10px; background:#fff; border:1px solid #E5E7EB; border-radius:8px; box-shadow:var(--shadow-subtle); padding:12px 14px; }
+  @media (max-width:980px) { .pd-cc-body { grid-template-columns:1fr; } }
   .pd-detail-accent { width:4px; min-width:4px; height:28px; border-radius:2px; background:var(--color-dbs-red); }
   .pd-detail-name { margin:0; font-size:15px; font-weight:900; color:var(--color-ink); }
   .pd-detail-path { margin:2px 0 0; font-size:10px; color:var(--color-muted); font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -642,7 +672,7 @@
   .pd-dl-item { display:flex; flex-direction:column; gap:2px; }
   .pd-dl-item dt { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
   .pd-dl-item dd { margin:0; font-size:12px; font-weight:850; color:var(--color-ink); }
-  .pd-section { border-top:1px solid #E5E7EB; padding-top:10px; }
+  .pd-section { background:#fff; border:1px solid #E5E7EB; border-radius:8px; box-shadow:var(--shadow-subtle); padding:12px; }
   .pd-section-title { margin:0 0 6px; font-size:11px; font-weight:900; color:var(--color-ink); display:flex; align-items:center; gap:6px; }
   .pd-notes-textarea { width:100%; min-height:100px; max-height:240px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:10px; font-family:"JetBrains Mono","Fira Code",monospace; color:var(--color-ink); resize:vertical; outline:none; }
   .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }

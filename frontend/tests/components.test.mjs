@@ -28,6 +28,7 @@ const AUTOMATIONS_OUTLOOK = "../src/lib/components/AutomationsOutlook.svelte";
 const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte";
 const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
 const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
+const SUB_PROJECT_TABLE = "../src/lib/components/SubProjectTable.svelte";
 
 const noop = () => {};
 
@@ -227,4 +228,36 @@ test("NewProjectForm renders the PRD §12.4 create form (name, year, disabled un
   assert.match(body, />2025</);
   // With an empty name, Save (Create Project) is disabled.
   assert.match(body, /disabled/);
+});
+
+test("SubProjectTable renders the PRD §12.10 columns and maps drones to sub-projects", async () => {
+  const body = await renderViaLoader(SUB_PROJECT_TABLE, {
+    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
+    subprojects: ["alpha", "beta"],
+    droneTickets: [
+      { subfolder_name: "alpha", drone_link: "https://drone/DRN-1", drone_state: "UAT", owner: "Ops" },
+    ],
+  });
+  // Column headers.
+  assert.match(body, /Sub Project/);
+  assert.match(body, /Drone Ticket/);
+  assert.match(body, /Drone State/);
+  assert.match(body, /Owner/);
+  // Mapped sub-project shows its drone link/state/owner.
+  assert.match(body, /alpha/);
+  assert.match(body, /https:\/\/drone\/DRN-1/);
+  assert.match(body, /UAT/);
+  assert.match(body, /Ops/);
+  // Unmapped sub-project still renders with em-dash placeholders.
+  assert.match(body, /beta/);
+  assert.match(body, /Open Folder/);
+});
+
+test("SubProjectTable renders an empty state when there are no sub-projects", async () => {
+  const body = await renderViaLoader(SUB_PROJECT_TABLE, {
+    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
+    subprojects: [],
+    droneTickets: [],
+  });
+  assert.match(body, /No sub projects/);
 });

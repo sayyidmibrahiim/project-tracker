@@ -98,6 +98,24 @@ NewProjectForm SSR test. Backend untouched. Linux gates green: svelte-check 0/0,
 vite build clean, frontend node tests 82 passed, pytest 1696 passed, py_compile
 clean.
 
+Project Details Command Center + Sub Project table slice (2026-06-09, PRD
+§12.5/§12.10): restructured the detail panel into the PRD two-column Command
+Center — a header bar plus a two-column body (left: Project Identity, Folder
+Transitions, Edit Metadata, Drone Tickets, Sub Projects, Project Actions; right:
+Files, Notes, Activity History, Outlook). Added `SubProjectTable.svelte`
+implementing the §12.10 table (Sub Project | Drone Ticket | Drone State | Owner |
+Actions) that maps each sub-project to its drone ticket via `subfolder_name` and
+offers Open Folder through the existing `folder_open` bridge; sub-project
+create/delete remain in the tested ProjectActions and drone-state editing in the
+Drone Tickets card (no duplicated destructive flows, no new bridge contract).
+Activity History is an honest deferred placeholder card (the `project_get` payload
+has no history field yet). Minor deviation: Start/End remain inside the Identity
+card (no separate Schedule card; no Start/End editor exists anywhere yet). Added
+two SubProjectTable SSR tests. Built with Context7-confirmed Svelte 5 runes
+patterns (keyed each, `$derived` mapping, typed `$props`). Backend untouched.
+Linux gates green: svelte-check 0/0, vite build clean, frontend node tests 84
+passed, pytest 1696 passed, py_compile clean.
+
 Packaging-readiness reconciliation (2026-06-09): `docs/packaging-readiness.md`
 previously claimed no PyInstaller `.spec` existed and listed it as blocker #1. That
 was stale. Corrected to reflect reality: `project_tracker_dbs.spec` (repo root,
