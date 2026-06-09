@@ -50,6 +50,7 @@
   let formStateFilter: string = $state("");
 
   let pendingTriggerEntry: SchedulerEntry | null = $state(null);
+  let pendingDeleteEntry: SchedulerEntry | null = $state(null);
 
   function setError(msg: string) {
     errorText = msg;
@@ -144,7 +145,17 @@
     await refreshEntries();
   }
 
-  async function deleteEntry(entry: SchedulerEntry) {
+  function requestDelete(entry: SchedulerEntry) {
+    setError("");
+    pendingDeleteEntry = entry;
+  }
+  function cancelDelete() {
+    pendingDeleteEntry = null;
+  }
+  async function confirmDelete() {
+    const entry = pendingDeleteEntry;
+    pendingDeleteEntry = null;
+    if (!entry) return;
     busy = true;
     const resp = await callBridge<{ deleted: string }>("scheduler_entry_delete", entry.id);
     busy = false;
@@ -226,7 +237,7 @@
               {entry.enabled ? "Disable" : "Enable"}
             </button>
             <button class="sc-btn" onclick={() => requestTrigger(entry)} disabled={busy}>Trigger now</button>
-            <button class="sc-btn sc-btn-danger" onclick={() => deleteEntry(entry)} disabled={busy}>Delete</button>
+            <button class="sc-btn sc-btn-danger" onclick={() => requestDelete(entry)} disabled={busy}>Delete</button>
           </div>
         </div>
       {/each}
@@ -276,6 +287,17 @@
     reversible={false}
     onConfirm={confirmTrigger}
     onCancel={cancelTrigger}
+  />
+{/if}
+
+{#if pendingDeleteEntry}
+  <ConfirmModal
+    title="Delete scheduler entry"
+    actionLabel="Delete"
+    targetName={pendingDeleteEntry.name || pendingDeleteEntry.id}
+    reversible={false}
+    onConfirm={confirmDelete}
+    onCancel={cancelDelete}
   />
 {/if}
 
