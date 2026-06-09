@@ -46,3 +46,29 @@ real data.
 Execute `docs/dashboard-fix-plan.md` T1→T17 in order: backend data foundation
 (T2) → real table + inline edits + action menu + refresh fix (T3–T8) → header
 controls (T9–T16) → design polish (T17). No deps added; Windows-only stays guarded.
+
+## Resolution (T1–T17 complete, 2026-06-09)
+
+All A–F findings closed on Linux:
+
+- **A1–A5** (real data + interactions): `dashboard_data` now drives real
+  filter-tab counts; Dashboard renders real sub-projects + drone tickets/states;
+  inline CR/Drone link paste (`cr_update_link`/`drone_update`); inline CR/Drone
+  state dropdowns (IN-PROGRESS disabled, POSTPONED/CANCELED ConfirmModal, guard
+  errors surfaced); clickable Main/Sub project → `project_open_folder`/`folder_open`;
+  link → browser; `DashboardRowMenu` (Details nav, Open Folder, Delete+confirm+lock,
+  embedded transitions).
+- **B6–B9 / C10–C16**: Refresh wiring fixed (`refreshToken`) + 650ms spin; Add
+  Project → NEW_PROJECT; Add Year (+) dialog + new `year_create` backend; year
+  dropdown from `year_list`; live DateTime clock; search debounce 200ms + name
+  highlight + extended haystack; First-Run Setup overlay; Canceled filter tab;
+  poll interval 1.5s.
+- **F / T17**: sticky table header, row hover, skeleton loading, empty-state CTA.
+
+Deviations (documented): CR/Drone state inline change updates state only and does
+NOT auto-move the folder (follows the product-context independence model over PRD
+§11.10's folder-move coupling); folder moves remain in the row menu's transitions.
+Right-click context menu intentionally not added (prototype/PRD use the ⋮ button).
+Windows-only at runtime: Open Folder, link-open, native folder picker (manual path
+fallback provided). Verified Linux: svelte-check 0/0, build clean, frontend 87
+tests, pytest 1700, py_compile OK.

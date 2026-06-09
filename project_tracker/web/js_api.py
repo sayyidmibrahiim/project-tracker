@@ -131,6 +131,9 @@ class YearServiceProtocol(Protocol):
     def list_years(self) -> object:
         """Return available years."""
 
+    def create_year(self, year: str) -> object:
+        """Create a year folder and its Folder_State subfolders."""
+
 
 class ProjectServiceProtocol(Protocol):
     """Project service surface used by JsApi (read-only slice)."""
@@ -478,6 +481,15 @@ class JsApi:
             return ok(_to_frontend_safe(self._year_service.list_years()))
         except Exception as exc:
             return fail(str(exc), code="YEAR_LIST_FAILED")
+
+    def year_create(self, year: str) -> dict[str, object]:
+        """Create a year folder and its five Folder_State subfolders."""
+        try:
+            if self._year_service is None:
+                raise RuntimeError("year_service is not configured")
+            return ok(_to_frontend_safe(self._year_service.create_year(year)))
+        except Exception as exc:
+            return fail(str(exc), code="YEAR_CREATE_FAILED")
 
     def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""

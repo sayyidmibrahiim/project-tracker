@@ -988,6 +988,22 @@ def create_js_api(
                 if child.is_dir() and child.name.isdigit()
             )
 
+        def create_year(self, year: str) -> object:
+            """Create {root}/{year}/ plus the five Folder_State subfolders."""
+            year = str(year).strip()
+            if not year.isdigit():
+                raise ValueError("Year must be numeric (e.g. 2026)")
+            settings = self._settings_store.read()
+            root_folder = settings.root_folder
+            if root_folder is None:
+                raise ValueError("Root folder is not configured")
+            year_dir = root_folder / year
+            if year_dir.exists():
+                raise ValueError(f"Year folder already exists: {year_dir}")
+            for state in ProjectState:
+                (year_dir / state.value).mkdir(parents=True, exist_ok=True)
+            return {"year": year, "path": str(year_dir)}
+
     # ── file service adapter (list / open / create / rename / delete) ─
     class _FileServiceAdapter:
         """File management adapter backed by ``filesystem.py`` helpers.

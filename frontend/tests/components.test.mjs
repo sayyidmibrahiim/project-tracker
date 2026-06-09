@@ -31,6 +31,7 @@ const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
 const SUB_PROJECT_TABLE = "../src/lib/components/SubProjectTable.svelte";
 const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
+const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
 
 const noop = () => {};
 
@@ -288,4 +289,11 @@ test("DashboardRowMenu renders a closed ⋮ trigger with no menu open at render"
   assert.match(body, /Row actions/);
   // Menu items only render once opened (open=false at render).
   assert.doesNotMatch(body, /Open Project Folder/);
+});
+
+test("FirstRunSetup renders the root-folder setup dialog (PRD §11.3)", async () => {
+  const body = await renderViaLoader(FIRST_RUN_SETUP, { onSaved: () => {} });
+  assert.match(body, /First-Run Setup/);
+  assert.match(body, /root folder/i);
+  assert.match(body, /Continue/);
 });

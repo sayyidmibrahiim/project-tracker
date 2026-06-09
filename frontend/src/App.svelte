@@ -9,6 +9,7 @@
   import ProjectDetails from "./lib/components/ProjectDetails.svelte";
   import Automations from "./lib/components/Automations.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
+  import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import { callBridge, isPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
@@ -32,7 +33,13 @@
 
   // Event polling
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  const POLL_INTERVAL_MS = 5000;
+  const POLL_INTERVAL_MS = 1500;
+
+  // Years for the dashboard header dropdown (from year_list).
+  let years: string[] = $state([]);
+
+  // First-Run Setup (PRD §11.3): shown when root_folder is unset.
+  let rootUnset: boolean = $state(false);
 
   function navigate(id: string) {
     const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations"];
@@ -128,8 +135,42 @@
     }
   }
 
+  async function loadYears() {
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<string[]>("year_list");
+    if (resp.ok && resp.data) years = resp.data;
+  }
+
+  // Add Year (PRD §11.7): create the folder, refresh the list, select it.
+  async function addYear(year: string): Promise<string | null> {
+    if (!isPywebviewReady()) return "The desktop app is required to create a year folder.";
+    const r = await callBridge("year_create", year);
+    if (!r.ok) return r.error.message;
+    await loadYears();
+    selectedYear = year;
+    refreshKey++;
+    return null;
+  }
+
+  async function checkRoot() {
+    if (!isPywebviewReady()) return;
+    const r = await callBridge<Record<string, unknown>>("settings_get");
+    if (r.ok && r.data) {
+      const root = r.data["root_folder"];
+      rootUnset = !root || String(root).trim() === "";
+    }
+  }
+
+  function onRootConfigured() {
+    rootUnset = false;
+    loadYears();
+    refreshKey++;
+  }
+
   onMount(() => {
     loadNotifications();
+    loadYears();
+    checkRoot();
     startPolling();
   });
 
@@ -152,14 +193,16 @@
       {currentPage}
       {selectedYear}
       {searchQuery}
+      {years}
       showDashboardControls={currentPage === "dashboard"}
       onYearChange={handleYearChange}
       onSearchChange={handleSearchChange}
       onRefresh={handleRefresh}
       onAddProject={openNewProjectPage}
+      onAddYear={addYear}
     />
     {#if currentPage === "dashboard"}
-      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} />
+      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} />
     {:else if currentPage === "report"}
       <Report {selectedYear} {searchQuery} key={refreshKey} />
     {:else if currentPage === "settings"}
@@ -174,4 +217,7 @@
       <PagePlaceholder title="Unknown Page" subtitle="Page not found." sections={[]} />
     {/if}
   </main>
+  {#if rootUnset}
+    <FirstRunSetup onSaved={onRootConfigured} />
+  {/if}
 </div>

@@ -11,11 +11,13 @@
     searchQuery,
     refreshToken = 0,
     onOpenProjectDetails,
+    onAddProject,
   }: {
     selectedYear: string;
     searchQuery: string;
     refreshToken?: number;
     onOpenProjectDetails?: (path: string) => void;
+    onAddProject?: () => void;
     [key: string]: unknown;
   } = $props();
 
@@ -76,6 +78,29 @@
       .map((d) => d.subfolder_name)
       .filter((n): n is string => !!n && n.trim().length > 0);
     return Array.from(new Set(names));
+  }
+
+  // Split text into highlight segments around the (case-insensitive) search query.
+  // Returned as data (rendered with <mark>) — no {@html}, so it stays XSS-safe.
+  function hlSegments(text: string): { text: string; hit: boolean }[] {
+    const value = text ?? "";
+    const q = searchQuery.trim();
+    if (!q) return [{ text: value, hit: false }];
+    const lower = value.toLowerCase();
+    const ql = q.toLowerCase();
+    const out: { text: string; hit: boolean }[] = [];
+    let i = 0;
+    while (i < value.length) {
+      const idx = lower.indexOf(ql, i);
+      if (idx === -1) {
+        out.push({ text: value.slice(i), hit: false });
+        break;
+      }
+      if (idx > i) out.push({ text: value.slice(i, idx), hit: false });
+      out.push({ text: value.slice(idx, idx + q.length), hit: true });
+      i = idx + q.length;
+    }
+    return out;
   }
 
   function fmtDate(iso: string | null, which: "date" | "time"): string {
@@ -244,31 +269,37 @@
     </div>
     <div class="table-scroll">
       <div class="project-table">
-        <div class="table-header-row">
+        <div class="table-header-row" style="position:sticky;top:0;z-index:2;">
           {#each columns as col}
             <div class="table-header-cell">{col}</div>
           {/each}
         </div>
 
         {#if loadState === "loading"}
-          <div class="table-empty"><p class="empty-title">Loading…</p><p class="empty-sub">Fetching project data from backend.</p></div>
+          {#each [0, 1, 2, 3] as i}
+            <div class="project-row dash-skel"><div class="table-cell" style="grid-column:1 / -1;"><div class="dash-skel-bar"></div></div></div>
+          {/each}
         {:else if loadState === "error"}
           <div class="table-empty"><p class="empty-title">No data</p><p class="empty-sub">Backend returned: {errorMessage}</p></div>
         {:else if loadState === "idle"}
           <div class="table-empty"><p class="empty-title">Initializing…</p></div>
         {:else if filteredProjects.length === 0}
-          <div class="table-empty"><p class="empty-title">No projects found</p><p class="empty-sub">Add a project or adjust filters to see results.</p></div>
+          <div class="table-empty">
+            <p class="empty-title">No projects found</p>
+            <p class="empty-sub">Add a project or adjust filters to see results.</p>
+            <button class="dash-empty-cta" type="button" onclick={() => onAddProject?.()}>＋ Add Project</button>
+          </div>
         {:else}
           {#each filteredProjects as p, idx}
             {@const drones = (p.drone_tickets ?? [])}
             {@const subs = subprojectsOf(p)}
-            <div class="project-row" class:alt={idx % 2 === 1}>
+            <div class="project-row dash-row" class:alt={idx % 2 === 1}>
               <div class="table-cell cell-center"><strong>{idx + 1}</strong></div>
 
               <!-- Main Project (click → open folder) -->
               <div class="table-cell cell-top">
                 <div>
-                  <button class="dash-name-btn" type="button" title="Open project folder" onclick={() => openFolder(p.project_path)}>{p.project_name || "Untitled"}</button>
+                  <button class="dash-name-btn" type="button" title="Open project folder" onclick={() => openFolder(p.project_path)}>{#each hlSegments(p.project_name || "Untitled") as seg}{#if seg.hit}<mark class="dash-hl">{seg.text}</mark>{:else}{seg.text}{/if}{/each}</button>
                   <div class="project-folder">project folder · {p.year || "—"}</div>
                 </div>
               </div>
@@ -393,6 +424,7 @@
   .dash-action-error { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); color:var(--color-dbs-red); border-radius:6px; padding:7px 12px; font-size:11px; font-weight:800; flex:0 0 auto; }
   .dash-name-btn { border:0; background:transparent; padding:0; font-size:13px; font-weight:900; color:var(--color-dbs-red); cursor:pointer; text-align:left; }
   .dash-name-btn:hover { text-decoration:underline; }
+  .dash-hl { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border-radius:2px; padding:0 1px; }
   .dash-sub-btn { border:0; background:transparent; padding:0; font-size:11px; font-weight:800; color:var(--color-ink); cursor:pointer; text-align:left; }
   .dash-sub-btn:hover { color:var(--color-dbs-red); text-decoration:underline; }
   .dash-link-cell { display:flex; align-items:center; gap:5px; width:100%; }
@@ -402,4 +434,9 @@
   .dash-state-select { height:28px; border:1px solid var(--color-input-border, #D7DCE2); border-radius:5px; background:#fff; color:var(--color-ink); font-size:10px; font-weight:850; outline:none; padding:0 6px; cursor:pointer; max-width:100%; }
   .dash-state-select:focus { border-color:var(--color-dbs-red); }
   .dash-state-select:disabled { background:var(--color-workspace-panel); color:var(--color-muted); cursor:not-allowed; }
+  .dash-row:hover { background:var(--color-soft-pink-surface); }
+  .dash-skel-bar { height:14px; border-radius:4px; background:linear-gradient(90deg,#ececec 25%,#f6f6f6 37%,#ececec 63%); background-size:400% 100%; animation:dash-shimmer 1.2s ease infinite; }
+  @keyframes dash-shimmer { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
+  .dash-empty-cta { margin-top:10px; height:30px; padding:0 16px; border:1px solid var(--color-dbs-red); border-radius:5px; background:var(--color-dbs-red); color:#fff; font-size:11px; font-weight:850; cursor:pointer; }
+  .dash-empty-cta:hover { background:var(--color-dbs-red-hover); }
 </style>

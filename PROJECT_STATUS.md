@@ -10,6 +10,27 @@ Current branch: `prd-v31-migration`.
 
 Slice 0 truth reset: documentation alignment completed on 2026-06-08; production code unchanged.
 
+Dashboard menu completion (2026-06-09, PRD §11, plan in docs/dashboard-fix-plan.md,
+audit in docs/dashboard-parity-matrix.md): closed the A–F audit findings T1–T17.
+Backend: `DashboardProject` now carries `drone_tickets` (parsed from cached
+drone_tickets_json — no extra query) and a new guarded `year_create` bridge
+creates `{root}/{year}/` + the five Folder_State folders. Frontend: Dashboard
+rebuilt on `dashboard_data` (real filter-tab counts incl. Canceled), real
+sub-project/drone columns, inline CR/Drone link paste and state dropdowns (guarded,
+IN-PROGRESS disabled, POSTPONED/CANCELED confirm), `DashboardRowMenu` (Project
+Details navigation, Open Folder, Delete with confirm+lock, embedded transitions),
+clickable name/sub-folder + link-open; header now has a live DateTime clock, year
+dropdown from `year_list`, working Add Project → NEW_PROJECT, Add Year (+) dialog,
+debounced search (200ms) with name highlight, fixed Refresh (was a no-op; now a
+tracked `refreshToken` + 650ms spin); First-Run Setup overlay when `root_folder`
+is unset; event poll aligned to 1.5s; table polish (sticky header, row hover,
+skeleton, empty-state CTA). Documented deviation: inline CR/Drone state changes
+update state only (independence model from product-context), not auto folder move;
+folder moves stay in the row menu. Windows-only at runtime: Open Folder, link-open,
+native folder picker (manual-path fallback). Linux gates green: svelte-check 0/0,
+vite build clean, frontend node tests 87 passed, pytest 1700 passed, py_compile
+clean.
+
 Automations parity slice (from `master-prompt.md`, 2026-06-09): added
 `docs/automations-parity-matrix.md` (PRD §16 vs PyQt prototype vs current Svelte
 audit) and implemented the smallest high-value gap from it. The Automations tab
