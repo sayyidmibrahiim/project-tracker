@@ -24,19 +24,35 @@ only after the Windows manual RC test passes
 - **Packaging tool already declared**: `pyinstaller>=6.0.0` is present in both
   `requirements.txt` and `pyproject.toml` dependencies. No new dependency is
   required to package.
-- **No PyInstaller spec file exists yet** (`*.spec`) at the repo root. One must be
-  authored on Windows during the packaging session.
+- **PyInstaller spec is authored** (`project_tracker_dbs.spec`) at the repo root.
+  It bundles `web/static/` and `assets/` as data, excludes `PyQt6`, declares
+  guarded Windows hidden imports (`webview`, `apscheduler`, `dateutil`,
+  `send2trash`), and refuses evaluation off Windows via a `sys.platform != "win32"`
+  guard. It has NOT been executed on Windows yet, so the produced bundle is
+  unverified and packaging remains Windows-gated.
+- **A Windows-only packaging entry point is authored** (`scripts/package.py`). It
+  refuses to run on non-Windows with a clear message and non-zero exit, verifies
+  required build inputs (`web/static/`, `assets/`, the spec) before invoking
+  PyInstaller, and imports PyInstaller lazily only on Windows. The refuse path is
+  Linux-runnable and exercised by automated checks.
 - **Windows runtime deps present**: `pywin32`, `pyautogui`, `pyperclip`,
   `send2trash`, `watchdog`, `APScheduler` are declared. WebView2 Runtime is an OS
   prerequisite, not a pip dependency.
 
 ## Missing pieces (blockers/gaps for packaging)
 
-1. **No `.spec` file** and no documented PyInstaller invocation. Must be created
-   on Windows.
-2. **`web/static/` must be bundled as data.** A bare PyInstaller build will not
-   include it automatically; it needs an explicit data mapping (e.g.
-   `--add-data "web/static;web/static"` on Windows, semicolon separator).
+1. **Spec and invocation now exist but are unexecuted on Windows.** Both
+   `project_tracker_dbs.spec` and `scripts/package.py` are authored with
+   Windows-only guards. Neither has run on Windows yet, so the produced bundle is
+   unverified. Remaining work: run `python scripts/package.py` (or
+   `pyinstaller project_tracker_dbs.spec --noconfirm`) on Windows after the manual
+   RC gate, then confirm the one-folder build launches with the Svelte UI.
+2. **`web/static/` bundling is declared in the spec but unverified at runtime.**
+   The spec maps `(web/static, "web/static")` and `(assets, "assets")` as data, so
+   a bare `--add-data` flag is no longer required. This still must be verified on
+   Windows: a missing/empty `web/static/` at build time (frontend not built) would
+   produce a blank window. Build the frontend first so the spec's pre-build
+   directory check passes.
 3. **Dependency manifest drift (report-only; do NOT change without approval).**
    `pyproject.toml` `[project.dependencies]` is out of sync with
    `requirements.txt`:
@@ -80,7 +96,8 @@ dependency — out of scope.
 > `docs/windows-manual-test-checklist.md` passed; `npm --prefix frontend run
 build` done so `web/static/` exists. Tasks: (1) Decide whether to reconcile
 > `pyproject.toml` deps with `requirements.txt` in a separate approved slice
-> first. (2) Author a PyInstaller spec for entry `project_tracker/main.py` that
+> first. (2) Use the existing authored spec (`project_tracker_dbs.spec`) and entry
+> point (`scripts/package.py`) for entry `project_tracker/main.py`; review that it
 > bundles `web/static/` as data and keeps Windows-only imports lazy. (3) Build a
 > one-folder build first, launch it, confirm WebView2 window + Svelte UI load.
 > (4) Confirm settings/cache/data land in intended Windows app-data locations and
