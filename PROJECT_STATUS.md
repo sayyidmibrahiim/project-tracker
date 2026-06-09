@@ -10,6 +10,92 @@ Current branch: `prd-v31-migration`.
 
 Slice 0 truth reset: documentation alignment completed on 2026-06-08; production code unchanged.
 
+Automations parity slice (from `master-prompt.md`, 2026-06-09): added
+`docs/automations-parity-matrix.md` (PRD §16 vs PyQt prototype vs current Svelte
+audit) and implemented the smallest high-value gap from it. The Automations tab
+order/default now follows PRD §16.2 (Outlook, Teams, Scheduler, Rules Engine;
+default Outlook), replacing the prior Rules-first order. A new
+`AutomationsOutlook.svelte` provides the PRD §16.3 two-column SEND/DOWNLOAD
+workspace: the five-tile KPI row (Send Categories, Download Jobs, HTML Templates,
+On Going ACK, On Going Tech LV), the four send categories (ACK_UAT, ACK_SOP,
+APRVL_CR, APRVL_SOP), download jobs, per-column logs, and draft-first safety copy.
+The `Downloaded Emails` action calls the real `outlook_download_emails` bridge
+method (guarded; browser preview is read-only — no API contract invented). The
+full Email Template Dialog and the searchable Downloaded Emails dialog remain
+explicit next-slice gates, surfaced in-UI with honest deferral reasons rather than
+hidden as done; real Outlook COM stays Windows-only and manual. Test note: the new
+SSR regression tests use a direct loader-backed `import` + `svelte/server` render
+(not the temp-dir `renderComponent` helper, which cannot resolve a parent
+component's child `.svelte`/`.ts` imports).
+
+Automations Email Template Dialog slice (2026-06-09, follow-up): added
+`EmailTemplateDialog.svelte` implementing PRD §16.3 — a two-column modal (template
+fields + 11 placeholder chips that insert at the caret on the left; conditions
+grid, live condition preview, and a deferred per-category log on the right). It
+loads via `settings_get` and saves via `settings_update` using a full-object
+round-trip that mutates only `email.categories[code]`, so no new bridge contract
+is introduced and no other settings are touched. Condition operators are limited to
+those the backend `EmailService` actually evaluates
+(`equals/not_equals/contains/exists`). Draft-first is preserved: per-category mode
+defaults to the global Draft default and "Send Immediately" is an explicit opt-in
+that still requires Windows Outlook COM + confirmation to send. The Outlook tab's
+Edit Template buttons now open the dialog; "+ Add Category" is an honest deferral
+(the four categories are fixed by the settings model). Backend untouched. Modal
+a11y verified (svelte-check returned to 0 errors/0 warnings after switching to a
+focusable dialog + dedicated close button). Deferred next: searchable Downloaded
+Emails dialog, per-category send log, Teams Automation Dialog + countdown,
+Scheduler KPI row.
+
+Automations Scheduler delete-confirmation slice (2026-06-09, follow-up): PRD §16.5
+requires "Delete → confirmation → remove", but the Scheduler Delete button
+deleted immediately. Routed scheduler entry delete through the existing
+`ConfirmModal` (irreversible), mirroring the trigger-confirmation pattern:
+`requestDelete` only arms `pendingDeleteEntry` (no bridge call), `confirmDelete`
+holds the single `scheduler_entry_delete` bridge call, and `cancelDelete` resets
+state. Added `frontend/tests/scheduler-actions.test.mjs` (SSR bridge-spy + source
+gating assertions). Backend untouched. Audit finding recorded: the PRD Scheduler
+KPI row stays deferred because "Due Soon"/"Overdue" need a next-run timestamp that
+the scheduler entry payload does not serialize to the frontend (only
+`status` = active/paused/completed is available); adding it would be a separate
+backend/bridge slice. Linux gates green: svelte-check 0/0, vite build clean,
+frontend node tests 72 passed, pytest 1696 passed, py_compile clean.
+
+Project Details Notes editor slice (2026-06-09, PRD §12.12): added
+`docs/project-details-parity-matrix.md` (PRD §12 audit) and implemented its
+highest-value gap. The Notes section was a plain textarea + explicit "Save Notes"
+button; it is now `NotesEditor.svelte` with 1000ms debounced autosave
+(flush-on-blur; Editing…/Saving…/Saved/offline/error status), a markdown toolbar
+that inserts syntax at the caret (Bold/Italic/H1/H2/Code/List/Quote/Link), and an
+Edit/Preview toggle. Preview uses a new dependency-free, XSS-safe Markdown subset
+renderer, `frontend/src/lib/markdown.ts` (PRD names marked.js, but the release
+rules forbid adding dependencies — input is HTML-escaped first and link hrefs are
+restricted to http/https/mailto). `NotesEditor` is keyed by project path so it
+remounts per project and owns its buffer; it seeds from `initialNotes` via
+`untrack`. Tests added: `frontend/tests/markdown.test.ts` (renderer + XSS/href
+sanitization) and a NotesEditor SSR test. Documented deviations: explicit Save
+replaced by autosave per §12.12, and a local renderer instead of marked.js.
+Conflict reported (not changed): `folderLocks.notes_edit` marks notes view-only in
+IMPLEMENTED, but PRD §12.11 keeps notes editable while files lock; existing
+always-editable behavior was preserved and the discrepancy is flagged for a
+dedicated slice. Deferred next for Project Details: NEW_PROJECT create-form mode,
+sub-project table, Activity History panel (needs a serialized history field), and
+the two-column Command Center layout. Backend untouched. Linux gates green:
+svelte-check 0/0, vite build clean, frontend node tests 81 passed, pytest 1696
+passed, py_compile clean.
+
+Packaging-readiness reconciliation (2026-06-09): `docs/packaging-readiness.md`
+previously claimed no PyInstaller `.spec` existed and listed it as blocker #1. That
+was stale. Corrected to reflect reality: `project_tracker_dbs.spec` (repo root,
+`sys.platform != "win32"` refuse guard, bundles `web/static/` + `assets/`, excludes
+`PyQt6`) and `scripts/package.py` (Windows-only refuse guard, lazy PyInstaller
+import) both exist. They remain UNEXECUTED on Windows, so packaging stays
+Windows-gated and no Windows-release claim is made.
+
+Linux verification for this slice: svelte-check 0 errors/0 warnings; vite build
+clean; frontend node tests 66 passed (incl. 2 new Automations tests); pytest 1696
+passed; `py_compile` clean for `project_tracker/app_web.py` and
+`project_tracker/web/js_api.py`. Backend was not modified (frontend + docs only).
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.

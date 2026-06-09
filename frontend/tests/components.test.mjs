@@ -17,11 +17,16 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 
+import { render } from "svelte/server";
 import { renderComponent, cleanup } from "./ssrHelper.mjs";
 import { lockReason } from "../src/lib/folderLocks.ts";
 
 const CONFIRM = "../src/lib/components/ConfirmModal.svelte";
 const DISABLED = "../src/lib/components/DisabledHint.svelte";
+const AUTOMATIONS = "../src/lib/components/Automations.svelte";
+const AUTOMATIONS_OUTLOOK = "../src/lib/components/AutomationsOutlook.svelte";
+const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte";
+const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
 
 const noop = () => {};
 
@@ -122,4 +127,85 @@ test("DisabledHint renders the deferred variant message (Req 3.6)", async () => 
   });
   assert.match(body, /not yet available/i);
   assert.match(body, /data-variant="deferred"/);
+});
+
+// --- Automations: PRD §16.2 tab order + Outlook scaffold ---------------------
+
+/**
+ * Render a component (and any child `.svelte`/`.ts` imports) by importing it
+ * directly so the svelte-loader keeps the real source URL and relative imports
+ * resolve against the source tree. The temp-file `renderComponent` helper cannot
+ * do this for parent components or components that import `.ts` modules (see
+ * tests/svelte-loader.mjs), so these tests use the loader-backed import path.
+ */
+async function renderViaLoader(relativeSveltePath, props = {}) {
+  const mod = await import(relativeSveltePath);
+  const { body } = render(mod.default, { props });
+  return body;
+}
+
+test("Automations renders PRD §16.2 tab order with Outlook first and mounts the Outlook scaffold", async () => {
+  const body = await renderViaLoader(AUTOMATIONS, {});
+  const outlook = body.indexOf("Outlook");
+  const teams = body.indexOf("Teams");
+  const scheduler = body.indexOf("Scheduler");
+  const rules = body.indexOf("Rules Engine");
+  assert.ok(outlook >= 0, "Outlook tab is rendered");
+  assert.ok(teams > outlook, "Teams follows Outlook");
+  assert.ok(scheduler > teams, "Scheduler follows Teams");
+  assert.ok(rules > scheduler, "Rules Engine follows Scheduler");
+  // Default tab is Outlook, so the Outlook scaffold (not the old placeholder) renders.
+  assert.match(body, /SEND AUTOMATION/);
+  assert.doesNotMatch(body, /Project-scoped/);
+});
+
+test("AutomationsOutlook renders the two-column send/download scaffold and draft-first safety copy", async () => {
+  const body = await renderViaLoader(AUTOMATIONS_OUTLOOK, {});
+  assert.match(body, /SEND AUTOMATION/);
+  assert.match(body, /DOWNLOAD AUTOMATION/);
+  assert.match(body, /Downloaded Emails/);
+  assert.match(body, /Draft-first Outlook is the safe default/);
+  assert.match(body, /ACK_UAT/);
+  assert.match(body, /APRVL_CR/);
+});
+
+test("EmailTemplateDialog renders the PRD §16.3 two-column editor for a fixed category", async () => {
+  const body = await renderViaLoader(EMAIL_TEMPLATE_DIALOG, {
+    categoryCode: "ACK_UAT",
+    onClose: () => {},
+  });
+  assert.match(body, /ACK_UAT/);
+  assert.match(body, /Subject Template/);
+  assert.match(body, /Body Template/);
+  assert.match(body, /Active Conditions/);
+  assert.match(body, /Condition Preview/);
+  // Placeholder chips and the always-present condition controls render.
+  assert.match(body, /\{PROJECT_NAME\}/);
+  assert.match(body, /\{IMPLEMENTATION_PLAN\}/);
+  assert.match(body, /\+ Add Condition/);
+  assert.match(body, /No conditions defined/);
+  // Draft-first mode options render (send-immediately is an explicit opt-in).
+  assert.match(body, /Send Immediately/);
+  // Footer controls.
+  assert.match(body, /Save/);
+  assert.match(body, /Cancel/);
+});
+
+test("NotesEditor renders the markdown toolbar, edit/preview toggle, and autosave status", async () => {
+  const body = await renderViaLoader(NOTES_EDITOR, {
+    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
+    initialNotes: "# Hi",
+  });
+  // Toolbar (insert-at-caret) controls.
+  assert.match(body, /title="Bold"/);
+  assert.match(body, /title="Heading 1"/);
+  assert.match(body, /title="Inline code"/);
+  assert.match(body, /title="Link"/);
+  // Edit/Preview toggle.
+  assert.match(body, />Edit</);
+  assert.match(body, />Preview</);
+  // Default edit mode shows the textarea; autosave (not an explicit Save button).
+  assert.match(body, /ne-textarea/);
+  assert.match(body, /Autosave on/);
+  assert.doesNotMatch(body, /Save Notes/);
 });
