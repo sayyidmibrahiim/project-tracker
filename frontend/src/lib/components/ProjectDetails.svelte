@@ -8,6 +8,7 @@
   import FileActions from "./FileActions.svelte";
   import OutlookActions from "./OutlookActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
+  import NewProjectForm from "./NewProjectForm.svelte";
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -21,6 +22,9 @@
   let subprojects: string[] = $state([]);
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
+
+  // ── NEW_PROJECT mode (PRD §12.4): toggles the detail panel into a create form ──
+  let mode: "browse" | "new" = $state("browse");
 
   // ── CR Link edit state ──
   let crLinkEdit: string = $state("");
@@ -308,6 +312,18 @@
 
   export function refresh() { loadProjects(); }
 
+  function openNewProject() {
+    mode = "new";
+  }
+
+  // After project_create succeeds, leave NEW_PROJECT mode, reload the list, and
+  // open the freshly created project in SHOW_EDIT (PRD §12.4 navigation).
+  async function onProjectCreated(path: string) {
+    mode = "browse";
+    await loadProjects();
+    if (path) await selectProject(path);
+  }
+
   // After a folder transition the project folder physically moves, so its path
   // and Folder_State change. Reload the list and re-select the project at its
   // new path so the detail panel reflects the new state (Req 4.11).
@@ -371,7 +387,10 @@
         <input class="header-input" placeholder="Filter projects…" bind:value={searchText} />
       </div>
     </div>
-    <span class="project-count">{filtered.length} project(s)</span>
+    <div class="pd-toolbar-right">
+      <span class="project-count">{filtered.length} project(s)</span>
+      <button class="pd-add-btn" type="button" onclick={openNewProject} disabled={mode === "new"}>+ Add Project</button>
+    </div>
   </div>
 
   <!-- Body: list + detail -->
@@ -396,7 +415,14 @@
 
     <!-- Right: detail panel -->
     <div class="pd-detail-panel">
-      {#if !selectedPath}
+      {#if mode === "new"}
+        <NewProjectForm
+          yearOptions={yearOptions}
+          defaultYear={yearFilter !== "all" ? yearFilter : (yearOptions[0] ?? "")}
+          onCancel={() => (mode = "browse")}
+          onCreated={onProjectCreated}
+        />
+      {:else if !selectedPath}
         <div class="table-empty"><p class="empty-title">Select a project</p><p class="empty-sub">Click a project from the list to view details.</p></div>
       {:else if detailState === "loading"}
         <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading details…</span></div>
@@ -580,7 +606,7 @@
       {/if}
 
       <!-- Deferred bar -->
-      {#if selectedPath}
+      {#if mode !== "new" && selectedPath}
         <div class="pd-deferred-bar">
           <span>⚠ Folder moves deferred. Rename, delete, subproject delete, file create/open/rename/delete, CR/Drone/Notes/Metadata active.</span>
         </div>
@@ -593,6 +619,10 @@
   .pd-screen { flex:1; min-height:0; display:flex; flex-direction:column; padding:14px; gap:10px; overflow:hidden; }
   .pd-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:0 0 auto; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:8px; padding:10px 12px; box-shadow:0 4px 15px rgba(0,0,0,0.30); }
   .pd-toolbar-left { display:flex; align-items:center; gap:7px; }
+  .pd-toolbar-right { display:flex; align-items:center; gap:10px; }
+  .pd-add-btn { height:28px; padding:0 12px; border:1px solid var(--color-dbs-red); border-radius:5px; background:var(--color-dbs-red); color:#fff; font-size:11px; font-weight:850; cursor:pointer; white-space:nowrap; }
+  .pd-add-btn:hover:not(:disabled) { background:var(--color-dbs-red-hover); }
+  .pd-add-btn:disabled { opacity:0.5; cursor:not-allowed; }
   .pd-body { flex:1; min-height:0; display:grid; grid-template-columns:260px 1fr; gap:10px; }
   @media (max-width:900px) { .pd-body { grid-template-columns:1fr; } }
   .pd-list-panel { background:#fff; border:1px solid #D7DCE2; border-radius:8px; box-shadow:var(--shadow-card); overflow-y:auto; display:flex; flex-direction:column; gap:2px; padding:6px; }

@@ -15,7 +15,7 @@ child components. Basis for selecting bounded, high-value slices.
 | Folder transitions + REOPEN           | §12.7/§12.13 move/postpone/cancel/reopen with confirmation                       | `ProjectTransitions` (inline) with ConfirmModal + onApplied reload                       | done                | —                                                                                 |
 | Locking rules visible + enforced      | §12.11 file ops locked in PROD_READY/IMPLEMENTED                                  | `folderLocks` + DisabledHints in ProjectActions/FileActions/ProjectTransitions           | done                | —                                                                                 |
 | Notes: autosave + toolbar + preview   | §12.12 autosave 1000ms, Saving/Saved, markdown toolbar at caret, Edit/Preview     | Was plain textarea + explicit "Save Notes" button — no toolbar/preview/autosave          | done (this slice)   | New `NotesEditor.svelte`: 1000ms autosave, toolbar (B/I/H1/H2/Code/List/Quote/Link), Edit/Preview via dependency-free `lib/markdown.ts` (no marked.js) |
-| NEW_PROJECT mode                      | §12.4 create-project form (name validation, year, dates, CR/drone, plan)         | Absent from ProjectDetails (project create lives only via Dashboard/`project_create`)    | gap (next slice)    | Add a NEW_PROJECT form mode using the existing `project_create` bridge             |
+| NEW_PROJECT mode                      | §12.4 create-project form (name validation, year, dates, CR/drone, plan)         | Implemented: `NewProjectForm` (name + year, realtime validation) → create → SHOW_EDIT    | done                | `project_create` accepts only name+year; optional CR/drone/plan set in SHOW_EDIT (deviation noted below) |
 | Activity History panel                | §12.5/§12.13 read-only history list, newest first                                | Absent — no history shown; `ProjectDetail` payload has no history field                  | gap (backend-gated) | Needs a serialized history field on `project_get` (backend/bridge slice) before UI |
 | Sub Project table                     | §12.10 columns Sub Project/Drone/State/Owner/Actions (open/delete/rename)         | Subprojects are a `string[]` managed via ProjectActions (create/delete only)             | gap (next slice)    | Build a subproject table with per-row drone mapping/owner/actions                  |
 | Two-column Command Center layout      | §12.5 left identity/schedule/subprojects, right files/notes/history              | Single stacked detail card (sections in one column)                                      | gap (layout)        | Restructure detail into the PRD two-column layout (later slice)                    |
@@ -52,8 +52,12 @@ intended for a different surface). No locking behavior was altered here.
 
 ## Deferred (each surfaced honestly; not hidden as done)
 
-- NEW_PROJECT create-project form mode.
 - Sub Project table with per-row drone mapping/owner/actions.
 - Activity History panel (needs a serialized history field on `project_get`).
 - Two-column Command Center layout restructure.
 - Outlook-contacts owner picker (Windows COM; free-text fallback exists).
+- Optional create-time fields (CR link, first drone, implementation plan) and
+  Start/End schedule editing: `project_create` accepts only `project_name` +
+  `year`, and no Start/End editor exists anywhere yet. NEW_PROJECT collects
+  name + year and lands the user in SHOW_EDIT, where CR link, drone, and plan are
+  already editable; collecting them at create-time needs backend support.

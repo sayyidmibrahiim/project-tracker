@@ -83,6 +83,21 @@ the two-column Command Center layout. Backend untouched. Linux gates green:
 svelte-check 0/0, vite build clean, frontend node tests 81 passed, pytest 1696
 passed, py_compile clean.
 
+Project Details NEW_PROJECT mode slice (2026-06-09, PRD §12.4): added
+`NewProjectForm.svelte` and a "+ Add Project" toolbar button that toggles
+ProjectDetails into a create form. The form collects Project Name (realtime
+validation via `util_validate_windows_folder_name`; Save disabled while empty or
+invalid) and Year (dropdown, defaulting from the current filter), calls
+`project_create`, then navigates to SHOW_EDIT for the new project. Documented
+deviation: `project_create` accepts only `project_name` + `year`, so the optional
+CR link / first drone / implementation plan from PRD §12.4 are entered on the
+detail screen the user lands on (all already editable there); Start/End schedule
+has no editor anywhere yet (pre-existing gap, tracked in the parity matrix). The
+form remounts per new-mode entry and seeds Year via `untrack`. Added a
+NewProjectForm SSR test. Backend untouched. Linux gates green: svelte-check 0/0,
+vite build clean, frontend node tests 82 passed, pytest 1696 passed, py_compile
+clean.
+
 Packaging-readiness reconciliation (2026-06-09): `docs/packaging-readiness.md`
 previously claimed no PyInstaller `.spec` existed and listed it as blocker #1. That
 was stale. Corrected to reflect reality: `project_tracker_dbs.spec` (repo root,

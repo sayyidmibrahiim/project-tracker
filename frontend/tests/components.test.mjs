@@ -27,6 +27,7 @@ const AUTOMATIONS = "../src/lib/components/Automations.svelte";
 const AUTOMATIONS_OUTLOOK = "../src/lib/components/AutomationsOutlook.svelte";
 const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte";
 const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
+const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
 
 const noop = () => {};
 
@@ -208,4 +209,22 @@ test("NotesEditor renders the markdown toolbar, edit/preview toggle, and autosav
   assert.match(body, /ne-textarea/);
   assert.match(body, /Autosave on/);
   assert.doesNotMatch(body, /Save Notes/);
+});
+
+test("NewProjectForm renders the PRD §12.4 create form (name, year, disabled until valid)", async () => {
+  const body = await renderViaLoader(NEW_PROJECT_FORM, {
+    yearOptions: ["2026", "2025"],
+    defaultYear: "2026",
+    onCancel: () => {},
+    onCreated: () => {},
+  });
+  assert.match(body, /New Project/);
+  assert.match(body, /Project Name/);
+  assert.match(body, /Create Project/);
+  assert.match(body, /Cancel/);
+  // Year options render.
+  assert.match(body, />2026</);
+  assert.match(body, />2025</);
+  // With an empty name, Save (Create Project) is disabled.
+  assert.match(body, /disabled/);
 });
