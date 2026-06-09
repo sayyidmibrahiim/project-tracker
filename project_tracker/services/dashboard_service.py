@@ -9,7 +9,19 @@ from types import MappingProxyType
 from typing import Any
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
+from project_tracker.core.rules import extract_drone_ticket
 from project_tracker.infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardRowDrone:
+    """A drone ticket as shown inline on a Dashboard row (PRD §11.15)."""
+
+    subfolder_name: str | None
+    drone_ticket: str
+    drone_link: str
+    drone_state: str
+    owner: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +40,7 @@ class DashboardProject:
     drone_ticket_count: int
     updated_at: datetime | None
     scanned_at: datetime | None
+    drone_tickets: tuple[DashboardRowDrone, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +103,38 @@ def _dashboard_project_from_cache_row(row: CachedProjectRow) -> DashboardProject
         drone_ticket_count=_drone_ticket_count(row.drone_tickets_json),
         updated_at=row.updated_at,
         scanned_at=row.scanned_at,
+        drone_tickets=_dashboard_drones_from_json(row.drone_tickets_json),
     )
+
+
+def _dashboard_drones_from_json(drone_tickets_json: str) -> tuple[DashboardRowDrone, ...]:
+    """Parse the cached drone_tickets JSON into frontend-safe row drones.
+
+    Robust to malformed JSON and missing keys (mirrors ``_drone_ticket_count``):
+    a bad payload yields an empty tuple rather than raising.
+    """
+    try:
+        parsed: Any = json.loads(drone_tickets_json)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(parsed, list):
+        return ()
+    drones: list[DashboardRowDrone] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        drone_link = str(item.get("drone_link", "") or "")
+        subfolder = item.get("subfolder_name")
+        drones.append(
+            DashboardRowDrone(
+                subfolder_name=str(subfolder) if subfolder else None,
+                drone_ticket=extract_drone_ticket(drone_link),
+                drone_link=drone_link,
+                drone_state=str(item.get("drone_state", "") or ""),
+                owner=str(item.get("owner", "") or ""),
+            )
+        )
+    return tuple(drones)
 
 
 def _dashboard_drone_from_cache_row(row: CachedDroneTicketRow) -> DashboardDroneTicket:

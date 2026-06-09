@@ -7,12 +7,14 @@ import pytest
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import ProjectMetadata
+from project_tracker.core.rules import extract_drone_ticket
 from project_tracker.infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.services.dashboard_service import (
     DashboardData,
     DashboardDroneTicket,
     DashboardProject,
+    DashboardRowDrone,
     DashboardService,
     DashboardSummary,
 )
@@ -81,6 +83,15 @@ def test_list_projects_returns_cache_backed_dashboard_project_dtos(tmp_path: Pat
             drone_ticket_count=1,
             updated_at=None,
             scanned_at=None,
+            drone_tickets=(
+                DashboardRowDrone(
+                    subfolder_name=None,
+                    drone_ticket=extract_drone_ticket("https://drone.example.local/tickets/D-SSIDBI-159"),
+                    drone_link="https://drone.example.local/tickets/D-SSIDBI-159",
+                    drone_state="",
+                    owner="",
+                ),
+            ),
         )
     ]
 

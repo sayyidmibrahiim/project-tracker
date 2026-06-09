@@ -7,6 +7,7 @@
     onYearChange,
     onSearchChange,
     onRefresh,
+    onAddProject = () => {},
   }: {
     currentPage: string;
     selectedYear: string;
@@ -15,7 +16,15 @@
     onYearChange: (year: string) => void;
     onSearchChange: (q: string) => void;
     onRefresh: () => void;
+    onAddProject?: () => void;
   } = $props();
+
+  let spinning = $state(false);
+  function triggerRefresh() {
+    onRefresh();
+    spinning = true;
+    setTimeout(() => (spinning = false), 650);
+  }
 
   const years = ["2026", "2025", "2024", "all"];
   const pageTitles: Record<string, string> = {
@@ -67,8 +76,14 @@
         <option>Pending</option>
         <option>Approved</option>
       </select>
-      <button class="btn-black" disabled title="Project creation deferred">＋ Add Project</button>
+      <button class="btn-black" onclick={() => onAddProject()}>＋ Add Project</button>
     {/if}
-    <button class="btn-refresh" title="Refresh Data" onclick={() => onRefresh()}>↻</button>
+    <button class="btn-refresh" title="Refresh Data" onclick={triggerRefresh}><span class="btn-refresh-icon" class:spinning>↻</span></button>
   </div>
 </header>
+
+<style>
+  .btn-refresh-icon { display:inline-block; }
+  .btn-refresh-icon.spinning { animation: header-refresh-spin 0.65s linear; }
+  @keyframes header-refresh-spin { to { transform: rotate(360deg); } }
+</style>

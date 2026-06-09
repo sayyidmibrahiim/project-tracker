@@ -11,6 +11,9 @@
   import NewProjectForm from "./NewProjectForm.svelte";
   import SubProjectTable from "./SubProjectTable.svelte";
 
+  // Optional cross-page navigation from the Dashboard row menu / header Add Project.
+  let { initialPath = null, startNew = false }: { initialPath?: string | null; startNew?: boolean } = $props();
+
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
   let detailState: LoadState = $state("idle");
@@ -296,6 +299,11 @@
       if (yr.ok && yr.data && yr.data.length > 0) yearOptions = yr.data;
     }
     await loadProjects();
+    if (startNew) {
+      mode = "new";
+    } else if (initialPath) {
+      await selectProject(initialPath);
+    }
   }
 
   onMount(init);

@@ -22,6 +22,8 @@
   let selectedYear = $state("all");
   let searchQuery = $state("");
   let refreshKey = $state(0);
+  let pendingProjectPath: string | null = $state(null);
+  let startNewProject: boolean = $state(false);
 
   // Notification state
   let notifications: NotificationItem[] = $state([]);
@@ -35,8 +37,24 @@
   function navigate(id: string) {
     const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations"];
     if (id in pageShells || validPages.includes(id)) {
+      if (id !== "project-detail") {
+        pendingProjectPath = null;
+        startNewProject = false;
+      }
       currentPage = id as PageId;
     }
+  }
+
+  function openProjectDetails(path: string) {
+    pendingProjectPath = path;
+    startNewProject = false;
+    currentPage = "project-detail";
+  }
+
+  function openNewProjectPage() {
+    startNewProject = true;
+    pendingProjectPath = null;
+    currentPage = "project-detail";
   }
 
   function handleYearChange(year: string) {
@@ -138,9 +156,10 @@
       onYearChange={handleYearChange}
       onSearchChange={handleSearchChange}
       onRefresh={handleRefresh}
+      onAddProject={openNewProjectPage}
     />
     {#if currentPage === "dashboard"}
-      <Dashboard {selectedYear} {searchQuery} key={refreshKey} />
+      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} />
     {:else if currentPage === "report"}
       <Report {selectedYear} {searchQuery} key={refreshKey} />
     {:else if currentPage === "settings"}
@@ -148,7 +167,7 @@
     {:else if currentPage === "second-brain"}
       <SecondBrain />
     {:else if currentPage === "project-detail"}
-      <ProjectDetails />
+      <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} />
     {:else if currentPage === "automations"}
       <Automations />
     {:else}

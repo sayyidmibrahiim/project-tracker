@@ -29,6 +29,8 @@ const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte"
 const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
 const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
 const SUB_PROJECT_TABLE = "../src/lib/components/SubProjectTable.svelte";
+const DASHBOARD = "../src/lib/components/Dashboard.svelte";
+const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
 
 const noop = () => {};
 
@@ -260,4 +262,30 @@ test("SubProjectTable renders an empty state when there are no sub-projects", as
     droneTickets: [],
   });
   assert.match(body, /No sub projects/);
+});
+
+test("Dashboard renders the PRD §11.15 summary table shell and touches no bridge at render", async () => {
+  const body = await renderViaLoader(DASHBOARD, { selectedYear: "2026", searchQuery: "" });
+  assert.match(body, /CR - Project Summary Table/);
+  // Column headers (real PRD §11.15 columns).
+  assert.match(body, /Main Project/);
+  assert.match(body, /Sub Project/);
+  assert.match(body, /Drone Ticket/);
+  assert.match(body, /Drone State/);
+  assert.match(body, /CR State/);
+  // SSR (no $effect/bridge) → no pywebview access at render.
+  assert.doesNotMatch(body, /pywebview/i);
+});
+
+test("DashboardRowMenu renders a closed ⋮ trigger with no menu open at render", async () => {
+  const body = await renderViaLoader(DASHBOARD_ROW_MENU, {
+    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
+    projectState: "UAT_PREPARE",
+    projectName: "Acme-Migration",
+    onOpenDetails: () => {},
+    onChanged: () => {},
+  });
+  assert.match(body, /Row actions/);
+  // Menu items only render once opened (open=false at render).
+  assert.doesNotMatch(body, /Open Project Folder/);
 });

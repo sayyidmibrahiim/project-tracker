@@ -50,6 +50,15 @@ declare global {
 
 // ── Dashboard DTOs — match Python DashboardProject / DashboardSummary / DashboardData ──
 
+/** Mirrors a drone ticket shown inline on a Dashboard row (DashboardRowDrone). */
+export interface DashboardRowDrone {
+  subfolder_name: string | null;
+  drone_ticket: string;
+  drone_link: string;
+  drone_state: string;
+  owner: string;
+}
+
 /** Mirrors project_tracker.services.dashboard_service.DashboardProject (after _to_frontend_safe). */
 export interface DashboardProject {
   project_path: string;
@@ -66,6 +75,7 @@ export interface DashboardProject {
   drone_ticket_count: number;
   updated_at: string | null;
   scanned_at: string | null;
+  drone_tickets: DashboardRowDrone[];
 }
 
 /** Mirrors project_tracker.services.dashboard_service.DashboardSummary. */
