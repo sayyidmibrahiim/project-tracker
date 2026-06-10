@@ -14,6 +14,7 @@ inner methods.
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from dataclasses import replace
 from datetime import timedelta
@@ -34,6 +35,33 @@ def _isolate_event_queue():
     clear_events()
     yield
     clear_events()
+
+
+@pytest.fixture(autouse=True)
+def _purge_webview_imports():
+    """Restore ``sys.modules`` so import-purity tests stay order-independent.
+
+    Importing ``app_web`` / calling ``create_js_api`` may pull ``webview``
+    (pywebview) into ``sys.modules`` on platforms where it is installed. Other
+    tests (test_phase_c_*) assert ``"webview" not in sys.modules``; since this
+    module sorts before them, leaving the import would make the suite fail by
+    collection order. Mirrors the guard in test_bridge_contract_guard.py.
+    """
+    before = set(sys.modules)
+    try:
+        yield
+    finally:
+        added = [name for name in sys.modules if name not in before]
+        for name in added:
+            if name == "webview" or name.startswith("webview."):
+                sys.modules.pop(name, None)
+        sys.modules.pop("project_tracker.app_web", None)
+        pkg = sys.modules.get("project_tracker")
+        if pkg is not None and hasattr(pkg, "app_web"):
+            try:
+                delattr(pkg, "app_web")
+            except AttributeError:
+                pass
 
 
 @pytest.fixture
