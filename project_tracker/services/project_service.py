@@ -12,7 +12,6 @@ from project_tracker.core.rules import (
     should_auto_start_cr,
     should_auto_start_drone,
     validate_prod_ready_to_implemented_transition,
-    validate_t10,
     validate_uat_to_prod_ready_transition,
     validate_windows_folder_name,
 )
@@ -141,8 +140,6 @@ class ProjectService:
         settings: AppSettings,
         current_time,
         threshold_days: int = 10,
-        *,
-        override_t10: bool = False,
     ) -> Path | TransitionGuardResult:
         metadata = self.metadata_store.load(project_path)
         source_state = state_from_project_path(project_path)
@@ -151,18 +148,8 @@ class ProjectService:
         guard_result = validate_uat_to_prod_ready_transition(
             metadata, current_time=current_time, threshold_days=threshold_days
         )
-
-        overridden = False
         if not guard_result.allowed:
-            t10_result = validate_t10(metadata, threshold_days=threshold_days)
-            only_t10_failed = (
-                not t10_result.passed
-                and guard_result.failed_guards == [t10_result.reason or "T-10 rule failed"]
-            )
-            if override_t10 and only_t10_failed:
-                overridden = True
-            else:
-                return guard_result
+            return guard_result
 
         target_dir = year_path_from_project_path(project_path) / ProjectState.PROD_READY.value
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -174,16 +161,12 @@ class ProjectService:
         now = local_now()
         metadata.cr_state_updated_at = now
         metadata.updated_at = now
-        detail = f"{source_state.value} → {ProjectState.PROD_READY.value}"
-        if overridden:
-            detail = f"{detail} (T-10 override)"
         metadata.history.append(
             HistoryEntry(
                 timestamp=now,
                 action="STATE_CHANGE",
-                detail=detail,
+                detail=f"{source_state.value} → {ProjectState.PROD_READY.value}",
                 user=current_user(settings),
-                override=overridden,
             )
         )
         self.metadata_store.save(moved_path, metadata)

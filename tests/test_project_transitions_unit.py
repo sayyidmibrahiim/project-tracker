@@ -108,7 +108,7 @@ def test_within_t10_window_move_succeeds_without_override_flag(tmp_path: Path) -
     now = local_now()
 
     moved_path = service.move_to_prod_ready(
-        project_path, SETTINGS, now, threshold_days=10, override_t10=True
+        project_path, SETTINGS, now, threshold_days=10
     )
 
     assert isinstance(moved_path, Path)

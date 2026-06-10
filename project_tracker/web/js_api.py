@@ -179,9 +179,7 @@ class ProjectServiceProtocol(Protocol):
     def delete_drone(self, project_path: Path, drone_index: int) -> object:
         """Delete Drone ticket and return project DTO."""
 
-    def move_to_prod_ready(
-        self, project_path: Path, *, override_t10: bool = False
-    ) -> object:
+    def move_to_prod_ready(self, project_path: Path) -> object:
         """Move project to PROD_READY and return result."""
 
     def move_to_implemented(self, project_path: Path) -> object:
@@ -825,21 +823,17 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="DRONE_DELETE_FAILED")
 
-    def folder_move_to_prod_ready(
-        self, project_path: str, override_t10: bool = False
-    ) -> dict[str, object]:
+    def folder_move_to_prod_ready(self, project_path: str) -> dict[str, object]:
         """Move project to PROD_READY through service layer.
 
-        ``override_t10`` performs a manual T-10 override when only the T-10
-        guard failed (Req 4.4 / 1.8). It defaults to ``False`` so existing
-        callers are unaffected.
+        T-10 is no longer a blocking guard (it is now a non-blocking H-10
+        reminder), so there is no override path — the move succeeds whenever the
+        remaining structural guards pass.
         """
         try:
             return ok(
                 _to_frontend_safe(
-                    self._project_service.move_to_prod_ready(
-                        Path(project_path), override_t10=override_t10
-                    )
+                    self._project_service.move_to_prod_ready(Path(project_path))
                 )
             )
         except Exception as exc:

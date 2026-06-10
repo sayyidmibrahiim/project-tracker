@@ -937,16 +937,12 @@ def create_js_api(
             self,
             project_path: object,
             service_call: Callable[[AppSettings], object],
-            *,
-            emit_t10: bool = False,
         ) -> object:
             """Execute a transition, map guard blocks, and update cache on success.
 
             - Loads ``AppSettings`` and invokes ``service_call``.
             - A blocked ``TransitionGuardResult`` raises with joined reasons so the
-              JsApi facade returns ``ok=false`` (Req 4.9). When ``emit_t10`` is set
-              and the sole failure is the T-10 guard, a T-10 violation notification
-              is emitted (Req 4.3).
+              JsApi facade returns ``ok=false`` (Req 4.9).
             - On success the Cache_Db is rebuilt before returning (Req 4.11). Any
               exception during the physical move propagates without a cache update,
               leaving the prior state and returning ``ok=false`` (Req 4.12).
@@ -955,16 +951,7 @@ def create_js_api(
             result = service_call(settings)
 
             if isinstance(result, TransitionGuardResult) and not result.allowed:
-                reasons = list(result.failed_guards)
-                only_t10 = len(reasons) == 1 and "T-10" in reasons[0]
-                if emit_t10 and only_t10 and self._notification_service is not None:
-                    self._notification_service.add(
-                        type="T10_VIOLATION",
-                        title="T-10 violation",
-                        message=reasons[0],
-                        project_path=Path(str(project_path)),
-                    )
-                raise ValueError("; ".join(reasons))
+                raise ValueError("; ".join(result.failed_guards))
 
             moved_path = Path(str(result))
             self._rebuild_cache_for(moved_path)
@@ -1019,7 +1006,6 @@ def create_js_api(
                     settings,
                     local_now(),
                     settings.t10_threshold_days,
-                    override_t10=False,
                 )
             elif target == ProjectState.IMPLEMENTED:
                 result = self._project_service.move_to_implemented(
@@ -1054,9 +1040,7 @@ def create_js_api(
                 )
             return {"moved_path": str(moved_path), "to_state": target.value}
 
-        def move_to_prod_ready(
-            self, project_path: Path, *, override_t10: bool = False
-        ) -> object:
+        def move_to_prod_ready(self, project_path: Path) -> object:
             return self._run_transition(
                 project_path,
                 lambda settings: self._project_service.move_to_prod_ready(
@@ -1064,9 +1048,7 @@ def create_js_api(
                     settings,
                     local_now(),
                     settings.t10_threshold_days,
-                    override_t10=override_t10,
                 ),
-                emit_t10=True,
             )
 
         def move_to_implemented(self, project_path: Path) -> object:

@@ -46,9 +46,7 @@ class FakeProjectService:
         self.calls.append(("delete_drone", (project_path, drone_index)))
         return self.result
 
-    def move_to_prod_ready(
-        self, project_path: Path, *, override_t10: bool = False
-    ) -> FakeActionResult:
+    def move_to_prod_ready(self, project_path: Path) -> FakeActionResult:
         self.calls.append(("move_to_prod_ready", (project_path,)))
         return self.result
 
@@ -89,9 +87,7 @@ class ExplodingProjectService(FakeProjectService):
     def delete_drone(self, project_path: Path, drone_index: int) -> FakeActionResult:
         raise RuntimeError("drone delete failed")
 
-    def move_to_prod_ready(
-        self, project_path: Path, *, override_t10: bool = False
-    ) -> FakeActionResult:
+    def move_to_prod_ready(self, project_path: Path) -> FakeActionResult:
         raise RuntimeError("prod ready failed")
 
     def move_to_implemented(self, project_path: Path) -> FakeActionResult:

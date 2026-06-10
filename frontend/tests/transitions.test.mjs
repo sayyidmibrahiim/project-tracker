@@ -146,7 +146,7 @@ test("the bridge call is gated behind ConfirmModal.onConfirm (Req 3.1)", () => {
 
   const confirmPending = extractFunction(SOURCE, "confirmPending");
   assert.ok(confirmPending, "confirmPending should exist");
-  assert.match(confirmPending, /runTransition\(t,\s*false\)/);
+  assert.match(confirmPending, /runTransition\(t\)/);
 
   // The ConfirmModal's confirm handler is wired to confirmPending; the bridge
   // therefore only fires after explicit confirmation.
@@ -154,10 +154,10 @@ test("the bridge call is gated behind ConfirmModal.onConfirm (Req 3.1)", () => {
   // The modal is gated behind the pending transition.
   assert.match(SOURCE, /\{#if pending\}\s*<ConfirmModal/);
 
-  // The two bridge calls (written as `callBridge<…>(…)`) both live in
+  // The single bridge call (written as `callBridge<…>(…)`) lives in
   // runTransition; the only other mention of the symbol is its import.
-  assert.equal(countOccurrences(SOURCE, "callBridge<"), 2, "exactly two bridge calls");
-  assert.equal(countOccurrences(runTransition, "callBridge<"), 2, "both gated in runTransition");
+  assert.equal(countOccurrences(SOURCE, "callBridge<"), 1, "exactly one bridge call");
+  assert.equal(countOccurrences(runTransition, "callBridge<"), 1, "gated in runTransition");
 });
 
 test("cancel only resets pending state — no bridge call, no applied change (Req 3.4)", () => {
@@ -168,14 +168,6 @@ test("cancel only resets pending state — no bridge call, no applied change (Re
   assert.doesNotMatch(cancelConfirm, /onApplied/);
   // The ConfirmModal's cancel handler is wired to cancelConfirm.
   assert.match(SOURCE, /<ConfirmModal[\s\S]*?onCancel=\{cancelConfirm\}/);
-});
-
-test("declining the T-10 override leaves the project unchanged (Req 3.4/3.7)", () => {
-  const cancelOverride = extractFunction(SOURCE, "cancelOverride");
-  assert.ok(cancelOverride, "cancelOverride should exist");
-  assert.match(cancelOverride, /overridePending\s*=\s*null/);
-  assert.doesNotMatch(cancelOverride, /callBridge/);
-  assert.doesNotMatch(cancelOverride, /onApplied/);
 });
 
 test("an ok=false response renders error.message and shows no success (Req 3.7)", () => {

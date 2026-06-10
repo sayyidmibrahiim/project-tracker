@@ -6,9 +6,6 @@
    * Folder_State and routes EVERY transition through `ConfirmModal`. No bridge
    * call is issued until the user explicitly confirms (Req 3.1).
    *
-   * - `folder_move_to_prod_ready` failures whose error indicates a T-10
-   *   violation surface a second, explicit override confirmation path that
-   *   re-calls the method with `override_t10 = true` (Req 4.4 / 4.5).
    * - On `ok=false` the returned `error.message` is shown and the surrounding
    *   UI state is left unchanged — no fake success (Req 3.7).
    * - When the project's Folder_State locks folder moves (IMPLEMENTED), a
@@ -81,8 +78,6 @@
   let successMessage: string = $state("");
   // The transition awaiting the first confirmation, or null when no modal.
   let pending: Transition | null = $state(null);
-  // The transition awaiting a T-10 override confirmation, or null.
-  let overridePending: Transition | null = $state(null);
 
   let available: Transition[] = $derived(TRANSITIONS[projectState] ?? []);
   // Folder moves are locked while a project is IMPLEMENTED (PRD §9.5).
@@ -97,7 +92,6 @@
   function requestTransition(t: Transition) {
     errorMessage = "";
     successMessage = "";
-    overridePending = null;
     pending = t;
     open = false;
   }
@@ -107,36 +101,18 @@
     pending = null;
   }
 
-  function cancelOverride() {
-    // Declining the override leaves the project unchanged; the original
-    // T-10 error message remains visible (Req 3.7).
-    overridePending = null;
-  }
-
-  /** True when an `ok=false` error indicates the T-10 guard blocked the move. */
-  function isT10Failure(t: Transition, message: string): boolean {
-    return t.method === "folder_move_to_prod_ready" && message.includes("T-10");
-  }
-
-  async function runTransition(t: Transition, overrideT10: boolean) {
+  async function runTransition(t: Transition) {
     busy = true;
     errorMessage = "";
     successMessage = "";
 
-    const response =
-      t.method === "folder_move_to_prod_ready"
-        ? await callBridge<{ project_path: string; project_state: string }>(t.method, projectPath, overrideT10)
-        : await callBridge<{ project_path: string; project_state: string }>(t.method, projectPath);
+    const response = await callBridge<{ project_path: string; project_state: string }>(t.method, projectPath);
 
     busy = false;
 
     if (!response.ok) {
-      // Surface the error; leave UI unchanged. For an un-overridden T-10
-      // block, open the explicit override confirmation path (Req 4.4/4.5).
+      // Surface the error; leave UI unchanged (Req 3.7).
       errorMessage = response.error.message;
-      if (!overrideT10 && isT10Failure(t, response.error.message)) {
-        overridePending = t;
-      }
       return;
     }
 
@@ -151,13 +127,7 @@
   async function confirmPending() {
     const t = pending;
     pending = null;
-    if (t) await runTransition(t, false);
-  }
-
-  async function confirmOverride() {
-    const t = overridePending;
-    overridePending = null;
-    if (t) await runTransition(t, true);
+    if (t) await runTransition(t);
   }
 </script>
 
@@ -210,17 +180,6 @@
     reversible={pending.reversible}
     onConfirm={confirmPending}
     onCancel={cancelConfirm}
-  />
-{/if}
-
-{#if overridePending}
-  <ConfirmModal
-    title="Override T-10 and move to Prod Ready"
-    actionLabel="Override T-10 & Move"
-    targetName={projectName}
-    reversible={false}
-    onConfirm={confirmOverride}
-    onCancel={cancelOverride}
   />
 {/if}
 
