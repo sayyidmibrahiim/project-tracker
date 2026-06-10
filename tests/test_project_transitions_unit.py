@@ -3,8 +3,9 @@
 Each test builds a temporary year/state folder tree under ``tmp_path`` with a
 real ``project_data.json`` and exercises a single transition path:
 
-- T-10 guard block leaves the project in UAT_PREPARE with a blocked GuardResult.
-- T-10 manual override performs the move and records an ``override`` history flag.
+- A project starting within the old T-10 window now moves to PROD_READY
+  (T-10 is a non-blocking H-10 reminder, not a hard guard).
+- override_t10 is moot now that T-10 no longer blocks the move.
 - ``move_to_implemented`` guard failure leaves the project in PROD_READY.
 - IMPLEMENTED projects reject POSTPONED/CANCELED transitions.
 - A successful transition is reflected in the Cache_Db after a rebuild.
@@ -51,11 +52,12 @@ def _create_project(
     return project_path
 
 
-def _uat_metadata_t10_fail() -> ProjectMetadata:
-    """Metadata where every UAT→PROD_READY guard passes except T-10.
+def _uat_metadata_within_t10_window() -> ProjectMetadata:
+    """Metadata where every UAT→PROD_READY guard passes.
 
-    ``cr_pending_approval_at`` is later than ``start_datetime - 10 days`` so the
-    T-10 guard is the sole failing guard, enabling override testing.
+    ``cr_pending_approval_at`` is later than ``start_datetime - 10 days``, i.e.
+    the project starts within the old T-10 window. T-10 is no longer a hard
+    guard (it is a non-blocking H-10 reminder), so the move must now succeed.
     """
     now = local_now()
     return ProjectMetadata(
@@ -64,7 +66,7 @@ def _uat_metadata_t10_fail() -> ProjectMetadata:
         end_datetime=now + timedelta(days=6),
         cr_link="https://cr.test/?CRNumber=CR123",
         cr_state=CRState.APPROVED,
-        cr_pending_approval_at=now,  # > (start - 10d) → T-10 fails
+        cr_pending_approval_at=now,  # within old T-10 window; no longer blocks
     )
 
 
@@ -81,28 +83,26 @@ def _uat_metadata_all_pass() -> ProjectMetadata:
     )
 
 
-def test_t10_block_leaves_project_in_uat_prepare(tmp_path: Path) -> None:
-    """T-10 failure blocks the move and returns a blocked GuardResult (Req 4.3)."""
+def test_within_t10_window_no_longer_blocks_move_to_prod_ready(tmp_path: Path) -> None:
+    """T-10 is now a non-blocking H-10 reminder; the move succeeds (Req 4.3)."""
     project_path = _create_project(
-        tmp_path, ProjectState.UAT_PREPARE, _uat_metadata_t10_fail()
+        tmp_path, ProjectState.UAT_PREPARE, _uat_metadata_within_t10_window()
     )
     service = ProjectService(MetadataStore())
     now = local_now()
 
-    result = service.move_to_prod_ready(project_path, SETTINGS, now, threshold_days=10)
+    moved_path = service.move_to_prod_ready(project_path, SETTINGS, now, threshold_days=10)
 
-    assert isinstance(result, TransitionGuardResult)
-    assert result.allowed is False
-    assert any("T-10" in guard for guard in result.failed_guards)
-    # Project remains in UAT_PREPARE; PROD_READY folder was never created.
-    assert project_path.exists()
-    assert not (tmp_path / YEAR / ProjectState.PROD_READY.value / PROJECT_NAME).exists()
+    # The move now succeeds: PROD_READY folder is created, source is gone.
+    assert isinstance(moved_path, Path)
+    assert moved_path == tmp_path / YEAR / ProjectState.PROD_READY.value / PROJECT_NAME
+    assert not project_path.exists()
 
 
-def test_t10_manual_override_moves_and_flags_history(tmp_path: Path) -> None:
-    """A manual T-10 override performs the move and records the override flag (Req 4.4)."""
+def test_within_t10_window_move_succeeds_without_override_flag(tmp_path: Path) -> None:
+    """With T-10 removed, override_t10 is moot; move succeeds and is not flagged (Req 4.4)."""
     project_path = _create_project(
-        tmp_path, ProjectState.UAT_PREPARE, _uat_metadata_t10_fail()
+        tmp_path, ProjectState.UAT_PREPARE, _uat_metadata_within_t10_window()
     )
     service = ProjectService(MetadataStore())
     now = local_now()
@@ -118,8 +118,9 @@ def test_t10_manual_override_moves_and_flags_history(tmp_path: Path) -> None:
     metadata = MetadataStore().load(moved_path)
     last = metadata.history[-1]
     assert last.action == "STATE_CHANGE"
-    assert last.override is True
-    assert "T-10 override" in last.detail
+    # No T-10 failure means the override path is never taken.
+    assert last.override is False
+    assert "T-10 override" not in last.detail
     assert last.user == "Tester"
 
 

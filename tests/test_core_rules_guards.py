@@ -187,13 +187,15 @@ def test_uat_to_prod_ready_cr_not_approved_fails() -> None:
     assert "CR state must be APPROVED" in result.failed_guards
 
 
-def test_uat_to_prod_ready_missing_t10_proof_fails() -> None:
+def test_uat_to_prod_ready_missing_t10_proof_no_longer_blocks() -> None:
+    # T-10 is now a non-blocking H-10 reminder; missing T-10 proof must not
+    # block the UAT->PROD_READY guard. (standalone validate_t10 still flags it.)
     metadata = _prod_ready_metadata(cr_pending_approval_at=None)
 
     result = validate_uat_to_prod_ready_transition(metadata, current_time=NOW)
 
-    assert result.allowed is False
-    assert any("cannot prove T-10" in guard for guard in result.failed_guards)
+    assert result.allowed is True
+    assert all("T-10" not in guard for guard in result.failed_guards)
 
 
 def test_uat_to_prod_ready_drone_ticket_blank_link_fails() -> None:

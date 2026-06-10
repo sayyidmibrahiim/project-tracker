@@ -6,6 +6,7 @@ from project_tracker.core.rules import (
     compute_h10,
     h10_reminder_due,
     validate_cr_approved_requires_drones,
+    validate_uat_to_prod_ready_transition,
 )
 
 H10_TZ = timezone(timedelta(hours=7))
@@ -102,3 +103,19 @@ def test_h10_due_exactly_at_h10_boundary():
     assert h10_reminder_due(
         _h10_md(start, CRState.PENDING_APPROVAL), now=now, reminder_days=10
     ) is True
+
+
+def test_prod_ready_guard_no_longer_fails_on_t10():
+    # Start in 3 days (< 10 threshold), CR APPROVED, links + dates valid.
+    # Previously T-10 made this fail; now it must be allowed.
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    md = ProjectMetadata(
+        project_name="X",
+        start_datetime=now + timedelta(days=3),
+        end_datetime=now + timedelta(days=5),
+        cr_link="https://cr/123",
+        cr_state=CRState.APPROVED,
+    )
+    result = validate_uat_to_prod_ready_transition(md, current_time=now, threshold_days=10)
+    assert result.allowed is True
+    assert all("T-10" not in g for g in result.failed_guards)

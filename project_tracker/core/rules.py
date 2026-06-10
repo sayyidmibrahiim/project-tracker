@@ -209,11 +209,6 @@ def validate_uat_to_prod_ready_transition(
         if ticket.drone_state != DroneState.APPROVED:
             failed_guards.append(f"{_drone_ticket_label(ticket, index)} must be APPROVED")
 
-    if metadata.start_datetime is None or start_datetime_is_aware:
-        t10_result = validate_t10(metadata, threshold_days=threshold_days)
-        if not t10_result.passed:
-            failed_guards.append(t10_result.reason or "T-10 rule failed")
-
     return TransitionGuardResult(allowed=not failed_guards, failed_guards=failed_guards)
 
 
