@@ -518,3 +518,77 @@ def test_h10_rearms_when_condition_resolves(h10_api, h10_project):
     # Reload re-arms by clearing the dedup stamp.
     h10_api.dashboard_data()
     assert store.read(proj_dir).h10_notified_at is None
+
+
+@pytest.fixture
+def h10_not_due_project():
+    """Project NOT past H-10 (start far in the future), CR PENDING_APPROVAL.
+
+    With reminder_days=10 and start = now + 60 days, H-10 = now + 50 days, so
+    the cutoff has NOT passed -> h10_reminder_due False. Locks the due-gate.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        proj_dir = root / "2024" / "UAT_PREPARE" / "not-due-proj"
+        proj_dir.mkdir(parents=True)
+
+        start = local_now() + timedelta(days=60)
+        end = start + timedelta(days=2)
+        metadata = ProjectMetadata(
+            project_name="not-due-proj",
+            cr_link="https://cr.example.com/CR-811",
+            cr_state=CRState.PENDING_APPROVAL,
+            start_datetime=start,
+            end_datetime=end,
+        )
+        store = MetadataStore()
+        store.write(proj_dir, metadata)
+
+        settings = SettingsStore(config_dir=root / "config")
+        settings.write(replace(settings.read(), root_folder=root))
+
+        db_path = root / "cache.db"
+        cache = CacheDb(db_path)
+        cache.initialize()
+        rebuild_year_cache(cache, root / "2024", store)
+
+        yield {
+            "root": root,
+            "project_path": proj_dir,
+            "metadata_store": store,
+            "settings_store": settings,
+            "db_path": db_path,
+        }
+
+
+def test_h10_not_due_emits_nothing_and_leaves_stamp_none(h10_not_due_project):
+    """A project before its H-10 cutoff fires no reminder and gets no stamp."""
+    from project_tracker import app_web
+
+    api = app_web.create_js_api(
+        db_path=h10_not_due_project["db_path"],
+        settings_store=h10_not_due_project["settings_store"],
+    )
+    store = h10_not_due_project["metadata_store"]
+    proj_dir = h10_not_due_project["project_path"]
+
+    response = api.dashboard_data()
+    assert response["ok"] is True
+    assert _h10_undismissed(api) == []
+    assert store.read(proj_dir).h10_notified_at is None
+
+
+def test_dashboard_data_ok_when_h10_eval_raises(h10_api, h10_project, monkeypatch):
+    """A failing H-10 evaluation must never blank the dashboard read."""
+
+    def _boom(_paths):
+        raise RuntimeError("metadata write blew up")
+
+    # Force the adapter's evaluator to raise; the facade must still return ok.
+    monkeypatch.setattr(
+        h10_api._project_service, "_evaluate_h10_reminders", _boom
+    )
+
+    response = h10_api.dashboard_data()
+    assert response["ok"] is True
+    assert response["error"] is None

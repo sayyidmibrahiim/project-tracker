@@ -509,28 +509,37 @@ class JsApi:
         """Return dashboard rows plus summary."""
         try:
             data = self._dashboard_service.get_dashboard(year)
-            self._evaluate_h10_reminders_for(data)
-            return ok(_to_frontend_safe(data))
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_DATA_FAILED")
+        # H-10 reminder evaluation is a best-effort side effect that writes
+        # metadata stamps; it runs AFTER the read succeeds and is isolated so a
+        # reminder write failure can never blank the dashboard.
+        self._evaluate_h10_reminders_for(data)
+        return ok(_to_frontend_safe(data))
 
     def _evaluate_h10_reminders_for(self, data: object) -> None:
         """Run H-10 reminder evaluation over the visible dashboard projects.
 
         Delegates to the project-service adapter, which owns metadata and the
-        notification service. No-op when the adapter does not expose the hook
-        (e.g. lightweight test doubles), so dashboard reads never fail because
-        of reminder evaluation.
+        notification service. Best-effort: a no-op when the adapter does not
+        expose the hook (e.g. lightweight test doubles), and any exception
+        raised during evaluation (including metadata write failures) is
+        swallowed so a dashboard read never fails because of reminder
+        evaluation. The broad ``except`` is intentional — reminder bookkeeping
+        must never take down the primary screen.
         """
         evaluator = getattr(self._project_service, "_evaluate_h10_reminders", None)
         if evaluator is None:
             return
-        paths = [
-            project.project_path
-            for project in getattr(data, "projects", ())
-            if getattr(project, "project_path", None) is not None
-        ]
-        evaluator(paths)
+        try:
+            paths = [
+                project.project_path
+                for project in getattr(data, "projects", ())
+                if getattr(project, "project_path", None) is not None
+            ]
+            evaluator(paths)
+        except Exception:  # noqa: BLE001 - best-effort; never break dashboard load
+            pass
 
     def notification_list(self, undismissed_only: bool = False) -> dict[str, object]:
         """Return notifications."""

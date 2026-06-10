@@ -604,35 +604,38 @@ def create_js_api(
             settings = self._settings_store.read()
             now = local_now()
             for path in project_paths:
-                metadata = self._metadata_store.read(path)
-                if metadata is None:
-                    continue
-                due = h10_reminder_due(
-                    metadata, now=now, reminder_days=settings.h10_reminder_days
-                )
-                if due and metadata.h10_notified_at is None:
-                    self._notification_service.add(
-                        type="H10_REMINDER",
-                        title="H-10 cutoff passed",
-                        message=(
-                            f"{path.name}: H-10 cutoff passed — CR/Drone not yet "
-                            "APPROVED. Change start date or request management approval."
-                        ),
-                        project_path=path,
+                try:
+                    metadata = self._metadata_store.read(path)
+                    if metadata is None:
+                        continue
+                    due = h10_reminder_due(
+                        metadata, now=now, reminder_days=settings.h10_reminder_days
                     )
-                    metadata.history.append(
-                        HistoryEntry(
-                            timestamp=now,
-                            action="H10_REMINDER",
-                            detail="H-10 cutoff passed; CR/Drone not yet APPROVED",
-                            user=current_user(settings),
+                    if due and metadata.h10_notified_at is None:
+                        self._notification_service.add(
+                            type="H10_REMINDER",
+                            title="H-10 cutoff passed",
+                            message=(
+                                f"{path.name}: H-10 cutoff passed — CR/Drone not yet "
+                                "APPROVED. Change start date or request management approval."
+                            ),
+                            project_path=path,
                         )
-                    )
-                    metadata.h10_notified_at = now
-                    self._metadata_store.write(path, metadata)
-                elif not due and metadata.h10_notified_at is not None:
-                    metadata.h10_notified_at = None
-                    self._metadata_store.write(path, metadata)
+                        metadata.history.append(
+                            HistoryEntry(
+                                timestamp=now,
+                                action="H10_REMINDER",
+                                detail="H-10 cutoff passed; CR/Drone not yet APPROVED",
+                                user=current_user(settings),
+                            )
+                        )
+                        metadata.h10_notified_at = now
+                        self._metadata_store.write(path, metadata)
+                    elif not due and metadata.h10_notified_at is not None:
+                        metadata.h10_notified_at = None
+                        self._metadata_store.write(path, metadata)
+                except Exception:  # noqa: BLE001 - one bad project must not skip the batch
+                    continue
 
         # ── wired read methods ──
 
