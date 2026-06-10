@@ -123,3 +123,36 @@ def test_apply_auto_move_no_target_is_noop(adapter, temp_project_approved_uat):
     assert result is None
     assert proj_dir.is_dir(), "Folder must not move when there is no target"
     assert drain_events() == []
+
+
+def test_apply_auto_move_blocked_guard_returns_banner_and_does_not_move(
+    adapter, temp_project_approved_uat
+):
+    """A blocked structural guard returns a banner reason and the folder stays put."""
+    store = temp_project_approved_uat["metadata_store"]
+    proj_dir = temp_project_approved_uat["project_path"]
+    root = temp_project_approved_uat["root"]
+
+    # CR APPROVED -> resolve_auto_move returns PROD_READY, but blanking the
+    # cr_link and dropping the dates makes the prod-ready structural guard fail.
+    metadata = store.read(proj_dir)
+    metadata.cr_state = CRState.APPROVED
+    metadata.cr_link = ""
+    metadata.start_datetime = None
+    metadata.end_datetime = None
+    metadata.drone_tickets = []
+    store.write(proj_dir, metadata)
+
+    result = adapter._apply_auto_move(proj_dir)
+
+    assert result is not None
+    assert "banner" in result
+    assert result["banner"], "Banner reason must be a non-empty string"
+
+    # Folder did NOT move: still in UAT_PREPARE, nothing in PROD_READY.
+    assert proj_dir.is_dir(), "Project must remain in UAT_PREPARE when blocked"
+    new_path = root / "2024" / ProjectState.PROD_READY.value / proj_dir.name
+    assert not new_path.is_dir(), "Project must not appear in PROD_READY when blocked"
+
+    # No AUTO_MOVE event pushed.
+    assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
