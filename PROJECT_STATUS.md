@@ -31,6 +31,46 @@ native folder picker (manual-path fallback). Linux gates green: svelte-check 0/0
 vite build clean, frontend node tests 87 passed, pytest 1700 passed, py_compile
 clean.
 
+Dashboard auto-move + gap-closure increment (2026-06-10, PRD §11.10/§11.11,
+spec in docs/superpowers/specs/2026-06-10-dashboard-auto-move-design.md, plan in
+docs/superpowers/plans/2026-06-10-dashboard-auto-move.md). **Supersedes the
+prior "metadata-only, no auto-move" deviation noted above.** Inline CR/Drone
+state changes now drive real folder transitions:
+- Pure `resolve_auto_move(cr_state, drone_states, current_folder)` in
+  `core/state_machine.py` decides the target Folder_State (no-op on
+  target==current, terminal IMPLEMENTED, or illegal transition); orchestration
+  lives in the `_apply_auto_move` adapter helper in `app_web.py`, which routes to
+  the existing tested `ProjectService` move methods, rebuilds the cache, pushes
+  an `AUTO_MOVE` EventQueue event (R3, picked up by the 1.5s poll), and emits a
+  notification. On a blocked structural guard it returns a non-blocking banner;
+  the state change still persists.
+- **T-10 reclassified** from a hard prod-ready guard to a non-blocking **H-10
+  reminder**: `compute_h10`/`h10_reminder_due` in `core/rules.py`,
+  `h10_reminder_days` setting (default 10) + `h10_notified_at` dedup stamp on
+  `ProjectMetadata`. Evaluated best-effort on dashboard load (`_evaluate_h10_reminders`,
+  isolated so a reminder write can never blank the dashboard), fires once, re-arms
+  when the condition resolves. The old T-10 block was removed from
+  `validate_uat_to_prod_ready_transition` (structural guards remain).
+- **G1 guard**: CR cannot become APPROVED while any drone is not APPROVED
+  (`validate_cr_approved_requires_drones`), enforced in `update_cr_state`; makes
+  the PROD_READY auto-move deterministic. **R4**: CR→FINISHED cascade to
+  IMPLEMENTED is blocked (with a surfaced reason) when any drone has no legal path
+  to FINISHED (`drones_blocking_finish`), instead of silently skipping.
+- History entries now appended on inline CR state, drone state, and CR link
+  changes (previously missing).
+- Frontend (`Dashboard.svelte`): A4 extracted CR/drone identifiers beside link
+  cells, C2 semantic state colour chips, C4 per-cell saving spinner, B4 long-name
+  ellipsis+tooltip, B3 Add-Year empty-state (prop wiring pending — see follow-up).
+  G1 rejection surfaces via the existing actionError banner.
+- Known deferred (tracked follow-ups, not blockers): dead `override_t10`/`emit_t10`
+  plumbing in `project_service.py`/`app_web.py` (unreachable after T-10 removal)
+  to be removed; `onAddYear` not yet wired from `App.svelte` to `<Dashboard>` (B3
+  button inert until then; signature needs an adapter wrapper).
+- Linux gates green: svelte-check 0/0, vite build clean, frontend node tests 92
+  passed, pytest 1744 passed, py_compile clean. Windows manual gate (real
+  `shutil.move`, `os.startfile`, WebView2 render, visual chips/spinner) still
+  required — user will verify on the Windows office laptop.
+
 Automations parity slice (from `master-prompt.md`, 2026-06-09): added
 `docs/automations-parity-matrix.md` (PRD §16 vs PyQt prototype vs current Svelte
 audit) and implemented the smallest high-value gap from it. The Automations tab
