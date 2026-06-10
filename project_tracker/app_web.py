@@ -1002,6 +1002,16 @@ def create_js_api(
             if target is None:
                 return None
 
+            if target == ProjectState.IMPLEMENTED:
+                from project_tracker.core.state_machine import drones_blocking_finish
+
+                blocked = drones_blocking_finish(drone_states)
+                if blocked:
+                    return {"banner": (
+                        f"{blocked} drone(s) cannot auto-finish (illegal state). "
+                        "Move to IMPLEMENTED blocked."
+                    )}
+
             settings = self._settings_store.read()
             if target == ProjectState.PROD_READY:
                 result = self._project_service.move_to_prod_ready(

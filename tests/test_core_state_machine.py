@@ -3,6 +3,7 @@ import pytest
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidTransitionError
 from project_tracker.core.state_machine import (
+    drones_blocking_finish,
     reopen_project_state,
     resolve_auto_move,
     target_project_state_for_cr_state,
@@ -223,3 +224,20 @@ def test_resolve_auto_move_noop_cr_state_with_no_mapping() -> None:
     assert resolve_auto_move(
         CRState.IN_PROGRESS, [], ProjectState.PROD_READY
     ) is None
+
+
+def test_drones_blocking_finish_in_progress_ok() -> None:
+    assert drones_blocking_finish([DroneState.IN_PROGRESS, DroneState.FINISHED]) == 0
+
+
+def test_drones_blocking_finish_counts_illegal() -> None:
+    assert drones_blocking_finish([DroneState.UAT, DroneState.PENDING_APPROVAL]) == 2
+
+
+def test_drones_blocking_finish_empty() -> None:
+    assert drones_blocking_finish([]) == 0
+
+
+def test_drones_blocking_finish_approved_and_canceled_block() -> None:
+    # APPROVED and CANCELED have no legal path to FINISHED -> both block
+    assert drones_blocking_finish([DroneState.APPROVED, DroneState.CANCELED]) == 2

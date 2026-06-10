@@ -162,6 +162,23 @@ def resolve_auto_move(
     return target
 
 
+def drones_blocking_finish(drone_states: list[DroneState]) -> int:
+    """Count drones whose current state has no legal path to FINISHED.
+
+    Only IN_PROGRESS -> FINISHED is legal; FINISHED is already done. Any other
+    state (UAT, PENDING_APPROVAL, APPROVED, CANCELED) blocks the CR->FINISHED
+    cascade to IMPLEMENTED.
+    """
+    blocking = 0
+    for state in drone_states:
+        if state == DroneState.FINISHED:
+            continue
+        if state == DroneState.IN_PROGRESS:
+            continue
+        blocking += 1
+    return blocking
+
+
 def can_resume_postponed(target_state: ProjectState) -> bool:
     return target_state in POSTPONED_RESUME_TARGETS
 

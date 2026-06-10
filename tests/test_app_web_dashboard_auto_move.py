@@ -592,3 +592,73 @@ def test_dashboard_data_ok_when_h10_eval_raises(h10_api, h10_project, monkeypatc
     response = h10_api.dashboard_data()
     assert response["ok"] is True
     assert response["error"] is None
+
+
+# ── Task 9 — R4: surface drones that cannot auto-finish (CR FINISHED cascade) ──
+
+
+@pytest.fixture
+def temp_project_prod_ready_cr_finished():
+    """Project in PROD_READY, CR FINISHED, ONE drone in UAT (cannot finish).
+
+    resolve_auto_move(FINISHED, [...], PROD_READY) -> IMPLEMENTED (it keys on
+    cr_state + folder, not drones). The UAT drone has no legal path to FINISHED,
+    so the R4 pre-check in _apply_auto_move must block the IMPLEMENTED move.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        proj_dir = root / "2024" / "PROD_READY" / "r4-proj"
+        proj_dir.mkdir(parents=True)
+
+        metadata = ProjectMetadata(
+            project_name="r4-proj",
+            cr_link="https://cr.example.com/CR-900",
+            cr_state=CRState.FINISHED,
+            drone_tickets=[
+                DroneTicket(
+                    subfolder_name="drone-a",
+                    drone_link="https://drone.example.com/D-9",
+                    drone_state=DroneState.UAT,
+                )
+            ],
+        )
+        store = MetadataStore()
+        store.write(proj_dir, metadata)
+
+        settings = SettingsStore(config_dir=root / "config")
+        settings.write(replace(settings.read(), root_folder=root))
+
+        yield {
+            "root": root,
+            "project_path": proj_dir,
+            "metadata_store": store,
+            "settings_store": settings,
+        }
+
+
+def test_apply_auto_move_blocks_implemented_when_drone_cannot_finish(
+    temp_project_prod_ready_cr_finished,
+):
+    """R4: CR FINISHED with a drone that cannot auto-finish blocks IMPLEMENTED."""
+    from project_tracker import app_web
+
+    fixture = temp_project_prod_ready_cr_finished
+    proj_dir = fixture["project_path"]
+    root = fixture["root"]
+
+    api = app_web.create_js_api(settings_store=fixture["settings_store"])
+    adapter = api._project_service
+
+    result = adapter._apply_auto_move(proj_dir)
+
+    assert result is not None, "Expected a banner dict, not a no-op"
+    assert "banner" in result
+    assert "cannot auto-finish" in result["banner"]
+
+    # Folder did NOT move: still in PROD_READY, nothing in IMPLEMENTED.
+    assert proj_dir.is_dir(), "Project must remain in PROD_READY when R4 blocks"
+    new_path = root / "2024" / ProjectState.IMPLEMENTED.value / proj_dir.name
+    assert not new_path.is_dir(), "Project must not appear in IMPLEMENTED when blocked"
+
+    # No AUTO_MOVE event pushed.
+    assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
