@@ -152,6 +152,12 @@
     return null;
   }
 
+  // Bumped by the Dashboard empty-state "Add Year" button; opens Header's dialog.
+  let openAddYearToken = $state(0);
+  function openAddYear() {
+    openAddYearToken++;
+  }
+
   async function checkRoot() {
     if (!isPywebviewReady()) return;
     const r = await callBridge<Record<string, unknown>>("settings_get");
@@ -200,9 +206,10 @@
       onRefresh={handleRefresh}
       onAddProject={openNewProjectPage}
       onAddYear={addYear}
+      {openAddYearToken}
     />
     {#if currentPage === "dashboard"}
-      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} />
+      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
     {:else if currentPage === "report"}
       <Report {selectedYear} {searchQuery} key={refreshKey} />
     {:else if currentPage === "settings"}

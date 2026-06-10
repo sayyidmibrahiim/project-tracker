@@ -12,6 +12,7 @@
     onRefresh,
     onAddProject = () => {},
     onAddYear = async () => null,
+    openAddYearToken = 0,
   }: {
     currentPage: string;
     selectedYear: string;
@@ -23,6 +24,8 @@
     onRefresh: () => void;
     onAddProject?: () => void;
     onAddYear?: (year: string) => Promise<string | null>;
+    /** Bumping this token (e.g. from the Dashboard empty state) opens the Add-Year dialog. */
+    openAddYearToken?: number;
   } = $props();
 
   // ── Add Year (PRD §11.7) ──
@@ -32,6 +35,17 @@
   let addYearError = $state("");
   let addYearBusy = $state(false);
   let addYearWarn = $derived(Number(addYearValue) > currentYear + 2);
+
+  // Open the dialog when an external trigger (Dashboard empty-state) bumps the token.
+  let lastAddYearToken = 0;
+  $effect(() => {
+    if (openAddYearToken > lastAddYearToken) {
+      lastAddYearToken = openAddYearToken;
+      addYearError = "";
+      addYearValue = String(currentYear + 1);
+      addYearOpen = true;
+    }
+  });
 
   function toggleAddYear() {
     addYearError = "";
