@@ -184,3 +184,144 @@ def test_apply_auto_move_blocked_guard_returns_banner_and_does_not_move(
 
     # No AUTO_MOVE event pushed.
     assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
+
+
+# ── Task 7 — wiring G1 + history + auto-move into the inline updates ──
+
+
+from project_tracker.core.enums import DroneState  # noqa: E402
+from project_tracker.core.models import DroneTicket  # noqa: E402
+
+
+@pytest.fixture
+def temp_project_pending_uat():
+    """Project in UAT_PREPARE, CR PENDING_APPROVAL, move-ready dates.
+
+    No drones by default; tests mutate metadata as needed. Mirrors
+    ``temp_project_approved_uat`` but leaves CR short of APPROVED so the
+    inline transition itself can be exercised.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        proj_dir = root / "2024" / "UAT_PREPARE" / "pending-proj"
+        proj_dir.mkdir(parents=True)
+
+        start = local_now() + timedelta(days=1)
+        end = start + timedelta(days=2)
+        metadata = ProjectMetadata(
+            project_name="pending-proj",
+            cr_link="https://cr.example.com/CR-700",
+            cr_state=CRState.PENDING_APPROVAL,
+            start_datetime=start,
+            end_datetime=end,
+        )
+        store = MetadataStore()
+        store.write(proj_dir, metadata)
+
+        settings = SettingsStore(config_dir=root / "config")
+        settings.write(replace(settings.read(), root_folder=root))
+
+        yield {
+            "root": root,
+            "project_path": proj_dir,
+            "metadata_store": store,
+            "settings_store": settings,
+        }
+
+
+@pytest.fixture
+def adapter_pending(temp_project_pending_uat):
+    """Reach the inner _ProjectServiceAdapter for the pending-CR project."""
+    from project_tracker import app_web
+
+    api = app_web.create_js_api(
+        settings_store=temp_project_pending_uat["settings_store"]
+    )
+    return api._project_service
+
+
+def test_g1_blocks_cr_approved_with_unapproved_drone(
+    adapter_pending, temp_project_pending_uat
+):
+    """G1: CR cannot go APPROVED while a drone is not APPROVED; no move."""
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+    root = temp_project_pending_uat["root"]
+
+    metadata = store.read(proj_dir)
+    metadata.drone_tickets = [
+        DroneTicket(
+            subfolder_name="drone-a",
+            drone_link="https://drone.example.com/D-1",
+            drone_state=DroneState.UAT,
+        )
+    ]
+    store.write(proj_dir, metadata)
+
+    with pytest.raises(ValueError) as exc:
+        adapter_pending.update_cr_state(proj_dir, CRState.APPROVED.value)
+    assert "drone" in str(exc.value).lower()
+
+    # Folder did NOT move and CR state was not persisted as APPROVED.
+    assert proj_dir.is_dir(), "Project must remain in UAT_PREPARE when G1 blocks"
+    new_path = root / "2024" / ProjectState.PROD_READY.value / proj_dir.name
+    assert not new_path.is_dir()
+    assert store.read(proj_dir).cr_state == CRState.PENDING_APPROVAL
+
+
+def test_cr_state_change_appends_history(adapter_pending, temp_project_pending_uat):
+    """A no-move transition appends a CR_STATE_CHANGE history entry."""
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+
+    # Start from PENDING_SUBMISSION so the transition to PENDING_APPROVAL is a
+    # genuine (non-moving) state change and stamps cr_pending_approval_at.
+    metadata = store.read(proj_dir)
+    metadata.cr_state = CRState.PENDING_SUBMISSION
+    metadata.cr_pending_approval_at = None
+    store.write(proj_dir, metadata)
+
+    adapter_pending.update_cr_state(proj_dir, CRState.PENDING_APPROVAL.value)
+
+    metadata = store.read(proj_dir)
+    assert any(h.action == "CR_STATE_CHANGE" for h in metadata.history)
+    assert metadata.cr_pending_approval_at is not None
+    # Folder did not move (PENDING_APPROVAL has no auto-move target).
+    assert proj_dir.is_dir()
+
+
+def test_cr_link_paste_appends_history(adapter_pending, temp_project_pending_uat):
+    """update_cr_link appends a CR_LINK history entry."""
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+
+    adapter_pending.update_cr_link(proj_dir, "https://cr.example.com/CR-999")
+
+    metadata = store.read(proj_dir)
+    assert any(h.action == "CR_LINK" for h in metadata.history)
+    assert metadata.cr_link == "https://cr.example.com/CR-999"
+
+
+def test_cr_approved_no_drones_auto_moves_and_history(
+    adapter_pending, temp_project_pending_uat
+):
+    """CR PENDING_APPROVAL -> APPROVED with no drones moves to PROD_READY.
+
+    End-to-end proof that update_cr_state now calls _apply_auto_move.
+    """
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+    root = temp_project_pending_uat["root"]
+
+    adapter_pending.update_cr_state(proj_dir, CRState.APPROVED.value)
+
+    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    assert new_path.is_dir(), f"Project not moved to PROD_READY: {new_path}"
+    assert not proj_dir.is_dir(), "Old UAT_PREPARE folder still exists"
+
+    # History persisted at the moved location.
+    metadata = store.read(new_path)
+    assert any(h.action == "CR_STATE_CHANGE" for h in metadata.history)
+
+    # AUTO_MOVE event pushed by _apply_auto_move.
+    assert any(e["type"] == "AUTO_MOVE" for e in drain_events())

@@ -116,24 +116,35 @@ def test_pending_submission_to_pending_approval(js_api_pending, temp_project_pen
 
 
 def test_pending_submission_to_postponed(js_api_pending, temp_project_pending_submission):
-    """PENDING_SUBMISSION -> POSTPONED is allowed."""
+    """PENDING_SUBMISSION -> POSTPONED is allowed and auto-moves the folder.
+
+    Task 7 wires _apply_auto_move into update_cr_state, so a CR state whose
+    target folder differs from the current folder now physically moves the
+    project (UAT_PREPARE -> POSTPONED).
+    """
     path = str(temp_project_pending_submission["project_path"])
+    root = temp_project_pending_submission["root"]
     result = js_api_pending.cr_update_state(path, "POSTPONED")
     assert result["ok"] is True
 
     store = temp_project_pending_submission["metadata_store"]
-    metadata = store.read(temp_project_pending_submission["project_path"])
+    moved_path = root / "2024" / "POSTPONED" / "test-cr-state"
+    assert moved_path.is_dir()
+    metadata = store.read(moved_path)
     assert metadata.cr_state == CRState.POSTPONED
 
 
 def test_pending_submission_to_canceled(js_api_pending, temp_project_pending_submission):
-    """PENDING_SUBMISSION -> CANCELED is allowed."""
+    """PENDING_SUBMISSION -> CANCELED is allowed and auto-moves the folder."""
     path = str(temp_project_pending_submission["project_path"])
+    root = temp_project_pending_submission["root"]
     result = js_api_pending.cr_update_state(path, "CANCELED")
     assert result["ok"] is True
 
     store = temp_project_pending_submission["metadata_store"]
-    metadata = store.read(temp_project_pending_submission["project_path"])
+    moved_path = root / "2024" / "CANCELED" / "test-cr-state"
+    assert moved_path.is_dir()
+    metadata = store.read(moved_path)
     assert metadata.cr_state == CRState.CANCELED
 
 
@@ -184,10 +195,15 @@ def test_invalid_cr_state_value_fails(js_api_pending, temp_project_pending_submi
 
 
 def test_no_folder_move_on_cr_state_change(js_api_pending, temp_project_pending_submission):
-    """CR state change must NOT trigger a folder move."""
+    """A CR state with no folder target must NOT trigger a folder move.
+
+    Task 7 auto-moves only when the target CR state maps to a different folder
+    (e.g. POSTPONED/CANCELED/APPROVED). PENDING_APPROVAL has no folder target,
+    so the project stays put in UAT_PREPARE.
+    """
     path = str(temp_project_pending_submission["project_path"])
     proj_dir = temp_project_pending_submission["project_path"]
-    js_api_pending.cr_update_state(path, "CANCELED")
+    js_api_pending.cr_update_state(path, "PENDING APPROVAL")
 
     # Project folder must still exist at original path
     assert proj_dir.exists()

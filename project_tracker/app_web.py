@@ -628,12 +628,23 @@ def create_js_api(
 
         def update_cr_link(self, project_path: Path, cr_link: str) -> object:
             """Update CR link in metadata and persist."""
+            from project_tracker.core.models import HistoryEntry
+            from project_tracker.core.rules import current_user
+
             path = Path(project_path)
             metadata = self._metadata_store.read(path)
             if metadata is None:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
             metadata.cr_link = cr_link
             metadata.updated_at = local_now()
+            metadata.history.append(
+                HistoryEntry(
+                    timestamp=metadata.updated_at,
+                    action="CR_LINK",
+                    detail="CR link updated",
+                    user=current_user(self._settings_store.read()),
+                )
+            )
             self._metadata_store.write(path, metadata)
             project_state = ProjectState(path.parent.name)
             cr_number = extract_cr_number(cr_link)
@@ -686,16 +697,36 @@ def create_js_api(
                 ticket.owner = str(data["owner"])
             if "subfolder_name" in data:
                 ticket.subfolder_name = str(data["subfolder_name"]) or None
+            now = local_now()
+            state_changed = False
             if "drone_state" in data:
                 from project_tracker.core.enums import DroneState
+                from project_tracker.core.models import HistoryEntry
+                from project_tracker.core.rules import current_user
                 from project_tracker.core.state_machine import validate_drone_state_change_allowed
 
                 target = DroneState(str(data["drone_state"]))
                 validate_drone_state_change_allowed(ticket.drone_link, ticket.drone_state, target)
+                old_state = ticket.drone_state
                 ticket.drone_state = target
-                ticket.drone_state_updated_at = local_now()
-            metadata.updated_at = local_now()
+                ticket.drone_state_updated_at = now
+                label = ticket.subfolder_name or f"ticket {drone_index + 1}"
+                metadata.history.append(
+                    HistoryEntry(
+                        timestamp=now,
+                        action="DRONE_STATE_CHANGE",
+                        detail=f"Drone {label}: {old_state.value} → {target.value}",
+                        user=current_user(self._settings_store.read()),
+                    )
+                )
+                state_changed = True
+            metadata.updated_at = now
             self._metadata_store.write(path, metadata)
+            if state_changed:
+                # A drone reaching APPROVED can let a pending CR-APPROVED move
+                # land; resolve_auto_move keys on metadata.cr_state so drone-only
+                # changes won't over-trigger.
+                self._apply_auto_move(path)
             return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
 
         def delete_drone(self, project_path: Path, drone_index: int) -> object:
@@ -714,7 +745,18 @@ def create_js_api(
         # ── wired mutation: guarded CR state (metadata-only, no folder move) ──
 
         def update_cr_state(self, project_path: Path, cr_state: str) -> object:
-            """Update CR state through state-machine guard. No folder move."""
+            """Update CR state through state-machine guard, then auto-move.
+
+            Runs the G1 guard before approving (CR cannot be APPROVED while any
+            drone is not APPROVED), appends a history entry, persists, and then
+            asks ``_apply_auto_move`` whether the folder should move (e.g. a CR
+            reaching APPROVED lands the project in PROD_READY).
+            """
+            from project_tracker.core.models import HistoryEntry
+            from project_tracker.core.rules import (
+                current_user,
+                validate_cr_approved_requires_drones,
+            )
             from project_tracker.core.state_machine import validate_cr_transition
 
             path = Path(project_path)
@@ -723,17 +765,42 @@ def create_js_api(
                 raise FileNotFoundError(f"Project metadata not found: {path}")
             target = CRState(cr_state)
             validate_cr_transition(metadata.cr_state, target)
+            if target == CRState.APPROVED:
+                g1 = validate_cr_approved_requires_drones(metadata.drone_tickets)
+                if not g1.allowed:
+                    raise ValueError("; ".join(g1.failed_guards))
             now = local_now()
+            settings = self._settings_store.read()
+            old = metadata.cr_state
+            # Capture project_state while ``path`` is still valid; _apply_auto_move
+            # may physically move the folder out from under it.
+            project_state = ProjectState(path.parent.name)
             metadata.cr_state = target
             metadata.cr_state_updated_at = now
             metadata.updated_at = now
+            if (
+                target == CRState.PENDING_APPROVAL
+                and metadata.cr_pending_approval_at is None
+            ):
+                metadata.cr_pending_approval_at = now
+            metadata.history.append(
+                HistoryEntry(
+                    timestamp=now,
+                    action="CR_STATE_CHANGE",
+                    detail=f"CR {old.value} → {target.value}",
+                    user=current_user(settings),
+                )
+            )
             self._metadata_store.write(path, metadata)
-            project_state = ProjectState(path.parent.name)
-            return {
+            response = {
                 "project_path": str(path),
                 "project_state": project_state.value,
                 "cr_state": target.value,
             }
+            banner = self._apply_auto_move(path)
+            if banner is not None:
+                response["banner"] = banner["banner"]
+            return response
 
         # ── wired mutation: update_project (metadata-only) ──
 
