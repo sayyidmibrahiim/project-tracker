@@ -2,6 +2,7 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import type { DashboardProject, DashboardSummary, DashboardRowDrone } from "../types";
   import { BridgeErrorCode } from "../types";
+  import { stateChipClass } from "../dashboardChips";
   import ConfirmModal from "./ConfirmModal.svelte";
   import DashboardRowMenu from "./DashboardRowMenu.svelte";
 
@@ -12,12 +13,14 @@
     refreshToken = 0,
     onOpenProjectDetails,
     onAddProject,
+    onAddYear,
   }: {
     selectedYear: string;
     searchQuery: string;
     refreshToken?: number;
     onOpenProjectDetails?: (path: string) => void;
     onAddProject?: () => void;
+    onAddYear?: () => void;
     [key: string]: unknown;
   } = $props();
 
@@ -287,7 +290,10 @@
           <div class="table-empty">
             <p class="empty-title">No projects found</p>
             <p class="empty-sub">Add a project or adjust filters to see results.</p>
-            <button class="dash-empty-cta" type="button" onclick={() => onAddProject?.()}>＋ Add Project</button>
+            <div class="dash-empty-actions">
+              {#if onAddYear}<button class="dash-empty-cta secondary" type="button" onclick={() => onAddYear?.()}>＋ Add Year</button>{/if}
+              <button class="dash-empty-cta" type="button" onclick={() => onAddProject?.()}>＋ Add Project</button>
+            </div>
           </div>
         {:else}
           {#each filteredProjects as p, idx}
@@ -298,8 +304,8 @@
 
               <!-- Main Project (click → open folder) -->
               <div class="table-cell cell-top">
-                <div>
-                  <button class="dash-name-btn" type="button" title="Open project folder" onclick={() => openFolder(p.project_path)}>{#each hlSegments(p.project_name || "Untitled") as seg}{#if seg.hit}<mark class="dash-hl">{seg.text}</mark>{:else}{seg.text}{/if}{/each}</button>
+                <div class="dash-name-wrap">
+                  <button class="dash-name-btn dash-truncate" type="button" title={p.project_name || "Untitled"} onclick={() => openFolder(p.project_path)}>{#each hlSegments(p.project_name || "Untitled") as seg}{#if seg.hit}<mark class="dash-hl">{seg.text}</mark>{:else}{seg.text}{/if}{/each}</button>
                   <div class="project-folder">project folder · {p.year || "—"}</div>
                 </div>
               </div>
@@ -311,7 +317,7 @@
                     <div class="stack-line"><span class="muted-text">—</span></div>
                   {:else}
                     {#each subs as sp}
-                      <div class="stack-line"><button class="dash-sub-btn" type="button" title="Open sub-project folder" onclick={() => openSubfolder(p.project_path, sp)}>{sp}</button></div>
+                      <div class="stack-line"><button class="dash-sub-btn dash-truncate" type="button" title={sp} onclick={() => openSubfolder(p.project_path, sp)}>{sp}</button></div>
                     {/each}
                   {/if}
                 </div>
@@ -342,6 +348,8 @@
                           onblur={(e) => saveDroneLink(p, di, (e.currentTarget as HTMLInputElement).value)}
                           disabled={savingKey === `${p.project_path}:dronelink:${di}`}
                         />
+                        {#if savingKey === `${p.project_path}:dronelink:${di}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                        {#if d.drone_ticket}<span class="dash-id-label" title={d.drone_ticket}>{d.drone_ticket}</span>{/if}
                         {#if d.drone_link}<a class="dash-open" href={d.drone_link} target="_blank" rel="noopener noreferrer" title="Open in browser">↗</a>{/if}
                       </div>
                     {/each}
@@ -357,10 +365,11 @@
                   {:else}
                     {#each drones as d, di}
                       <div class="stack-line">
-                        <select class="dash-state-select" value={d.drone_state} onchange={(e) => onDroneStateChange(p, di, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:dronestate:${di}`}>
+                        <select class="dash-state-select {stateChipClass(d.drone_state)}" value={d.drone_state} onchange={(e) => onDroneStateChange(p, di, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:dronestate:${di}`}>
                           {#each DRONE_STATE_OPTIONS as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
                           {#if !DRONE_STATE_OPTIONS.includes(d.drone_state) && d.drone_state}<option value={d.drone_state}>{d.drone_state}</option>{/if}
                         </select>
+                        {#if savingKey === `${p.project_path}:dronestate:${di}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
                       </div>
                     {/each}
                   {/if}
@@ -379,16 +388,21 @@
                     onblur={(e) => saveCrLink(p, (e.currentTarget as HTMLInputElement).value)}
                     disabled={savingKey === `${p.project_path}:crlink`}
                   />
+                  {#if savingKey === `${p.project_path}:crlink`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                  {#if p.cr_number}<span class="dash-id-label" title={p.cr_number}>{p.cr_number}</span>{/if}
                   {#if p.cr_link}<a class="dash-open" href={p.cr_link} target="_blank" rel="noopener noreferrer" title="Open in browser">↗</a>{/if}
                 </div>
               </div>
 
               <!-- CR State (inline dropdown + guard + confirm) -->
               <div class="table-cell">
-                <select class="dash-state-select" value={p.cr_state} onchange={(e) => onCrStateChange(p, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:crstate`}>
-                  {#each CR_STATE_OPTIONS as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
-                  {#if !CR_STATE_OPTIONS.includes(p.cr_state) && p.cr_state}<option value={p.cr_state}>{p.cr_state}</option>{/if}
-                </select>
+                <div class="dash-link-cell">
+                  <select class="dash-state-select {stateChipClass(p.cr_state)}" value={p.cr_state} onchange={(e) => onCrStateChange(p, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:crstate`}>
+                    {#each CR_STATE_OPTIONS as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
+                    {#if !CR_STATE_OPTIONS.includes(p.cr_state) && p.cr_state}<option value={p.cr_state}>{p.cr_state}</option>{/if}
+                  </select>
+                  {#if savingKey === `${p.project_path}:crstate`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                </div>
               </div>
 
               <!-- Actions -->
@@ -439,4 +453,23 @@
   @keyframes dash-shimmer { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
   .dash-empty-cta { margin-top:10px; height:30px; padding:0 16px; border:1px solid var(--color-dbs-red); border-radius:5px; background:var(--color-dbs-red); color:#fff; font-size:11px; font-weight:850; cursor:pointer; }
   .dash-empty-cta:hover { background:var(--color-dbs-red-hover); }
+  .dash-empty-actions { display:flex; gap:8px; justify-content:center; }
+  .dash-empty-cta.secondary { background:#fff; color:var(--color-dbs-red); }
+  .dash-empty-cta.secondary:hover { background:var(--color-soft-pink-surface); }
+
+  /* B4 — long name ellipsis (cell stays single-line, hover title shows full) */
+  .dash-name-wrap { min-width:0; }
+  .dash-truncate { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* A4 — extracted CR/drone identifier shown beside the link cell */
+  .dash-id-label { flex:0 0 auto; font-size:9px; font-weight:850; color:var(--color-muted); background:var(--color-workspace-panel); border-radius:3px; padding:1px 4px; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* C2 — semantic state colour chips on the inline state selects */
+  .dash-state-select.chip-approved { border-color:#1f9d57; color:#1f7a44; background:#eafaf0; }
+  .dash-state-select.chip-pending { border-color:#d39e00; color:#9a7400; background:#fff8e6; }
+  .dash-state-select.chip-negative { border-color:var(--color-dbs-red); color:var(--color-dbs-red); background:var(--color-soft-pink-surface); }
+
+  /* C4 — per-cell saving spinner */
+  .dash-cell-spin { flex:0 0 auto; width:12px; height:12px; border:2px solid var(--color-input-border, #D7DCE2); border-top-color:var(--color-dbs-red); border-radius:50%; display:inline-block; animation:dash-cell-spin 0.6s linear infinite; }
+  @keyframes dash-cell-spin { to { transform:rotate(360deg); } }
 </style>
