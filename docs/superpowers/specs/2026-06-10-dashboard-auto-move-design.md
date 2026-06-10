@@ -46,12 +46,12 @@ resolve_auto_move(cr_state, drone_states, current_folder) -> ProjectState | None
 Returns the target folder state, or `None` for no-op. Pure; no I/O. Reuses
 `target_project_state_for_cr_state()`.
 
-| CR set to | Drone precondition | Source folder | Target | Notes |
-| --- | --- | --- | --- | --- |
-| APPROVED | all drones APPROVED (G1 guarantees) or none | UAT_PREPARE | PROD_READY | structural guards apply (links, dates) |
-| FINISHED | cascade drones → FINISHED first | PROD_READY | IMPLEMENTED | only legal drone paths cascade |
-| POSTPONED | — | UAT_PREPARE / PROD_READY | POSTPONED | exit; no deployment guard |
-| CANCELED | — | any non-terminal | CANCELED | exit; no deployment guard |
+| CR set to | Drone precondition                          | Source folder            | Target      | Notes                                  |
+| --------- | ------------------------------------------- | ------------------------ | ----------- | -------------------------------------- |
+| APPROVED  | all drones APPROVED (G1 guarantees) or none | UAT_PREPARE              | PROD_READY  | structural guards apply (links, dates) |
+| FINISHED  | cascade drones → FINISHED first             | PROD_READY               | IMPLEMENTED | only legal drone paths cascade         |
+| POSTPONED | —                                           | UAT_PREPARE / PROD_READY | POSTPONED   | exit; no deployment guard              |
+| CANCELED  | —                                           | any non-terminal         | CANCELED    | exit; no deployment guard              |
 
 No-op when: target == current folder, folder is IMPLEMENTED (terminal/locked), or the
 source→target project-state transition is illegal (`PROJECT_STATE_TRANSITIONS`).
