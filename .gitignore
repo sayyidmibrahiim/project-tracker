@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 node_modules/
 web/static/
+
+# graphify knowledge graph (rebuildable, AST-only)
+graphify-out/
