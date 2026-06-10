@@ -232,6 +232,24 @@ def validate_prod_ready_to_implemented_transition(
     return TransitionGuardResult(allowed=not failed_guards, failed_guards=failed_guards)
 
 
+def validate_cr_approved_requires_drones(
+    drone_tickets: list[DroneTicket],
+) -> TransitionGuardResult:
+    """G1: CR cannot become APPROVED while any drone is not APPROVED.
+
+    No drones -> allowed. This keeps the auto-move to PROD_READY deterministic:
+    when CR reaches APPROVED, every drone is already APPROVED.
+    """
+    not_approved = [t for t in drone_tickets if t.drone_state != DroneState.APPROVED]
+    if not not_approved:
+        return TransitionGuardResult(allowed=True, failed_guards=[])
+    count = len(not_approved)
+    return TransitionGuardResult(
+        allowed=False,
+        failed_guards=[f"CR cannot be APPROVED — {count} drone(s) not yet APPROVED."],
+    )
+
+
 def current_user(settings: AppSettings) -> str:
     display_name = settings.display_name.strip()
     if display_name:
