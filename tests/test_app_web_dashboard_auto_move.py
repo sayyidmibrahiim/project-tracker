@@ -409,3 +409,112 @@ def test_update_drone_field_only_edit_does_not_move(
     assert response["project_path"] == str(proj_dir)
     assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
     assert store.read(proj_dir).drone_tickets[0].owner == "x"
+
+
+# ── Task 8 — H-10 reminder evaluation on dashboard load ──
+
+
+from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache  # noqa: E402
+
+
+def _h10_undismissed(api) -> list[object]:
+    """Undismissed H10_REMINDER notifications currently held by the api."""
+    return [
+        n
+        for n in api._notification_service.get_undismissed()
+        if n.type == "H10_REMINDER"
+    ]
+
+
+@pytest.fixture
+def h10_project():
+    """Project past H-10 (start within reminder window), CR PENDING_APPROVAL.
+
+    With reminder_days=10 and start = now + 3 days, H-10 = now - 7 days, so the
+    cutoff has already passed and CR is not APPROVED -> h10_reminder_due True.
+    The cache is rebuilt into a dedicated db_path so the JsApi facade lists the
+    project (and thus passes its path to ``_evaluate_h10_reminders``).
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        proj_dir = root / "2024" / "UAT_PREPARE" / "h10-proj"
+        proj_dir.mkdir(parents=True)
+
+        start = local_now() + timedelta(days=3)
+        end = start + timedelta(days=2)
+        metadata = ProjectMetadata(
+            project_name="h10-proj",
+            cr_link="https://cr.example.com/CR-810",
+            cr_state=CRState.PENDING_APPROVAL,
+            start_datetime=start,
+            end_datetime=end,
+        )
+        store = MetadataStore()
+        store.write(proj_dir, metadata)
+
+        settings = SettingsStore(config_dir=root / "config")
+        settings.write(replace(settings.read(), root_folder=root))
+
+        db_path = root / "cache.db"
+        cache = CacheDb(db_path)
+        cache.initialize()
+        rebuild_year_cache(cache, root / "2024", store)
+
+        yield {
+            "root": root,
+            "project_path": proj_dir,
+            "metadata_store": store,
+            "settings_store": settings,
+            "db_path": db_path,
+        }
+
+
+@pytest.fixture
+def h10_api(h10_project):
+    """JsApi facade wired to the H-10 project's settings + populated cache."""
+    from project_tracker import app_web
+
+    return app_web.create_js_api(
+        db_path=h10_project["db_path"],
+        settings_store=h10_project["settings_store"],
+    )
+
+
+def test_h10_fires_once_and_dedups(h10_api, h10_project):
+    """One H10_REMINDER on first dashboard load; none added on reload (dedup)."""
+    store = h10_project["metadata_store"]
+    proj_dir = h10_project["project_path"]
+
+    response = h10_api.dashboard_data()
+    assert response["ok"] is True
+    assert len(_h10_undismissed(h10_api)) == 1
+
+    # Dedup stamp persisted to metadata.
+    metadata = store.read(proj_dir)
+    assert metadata.h10_notified_at is not None
+    assert any(h.action == "H10_REMINDER" for h in metadata.history)
+
+    # Second load: still exactly one (no duplicate notification).
+    h10_api.dashboard_data()
+    assert len(_h10_undismissed(h10_api)) == 1
+
+
+def test_h10_rearms_when_condition_resolves(h10_api, h10_project):
+    """Stamp clears once CR reaches APPROVED so a future lapse can re-fire."""
+    store = h10_project["metadata_store"]
+    proj_dir = h10_project["project_path"]
+
+    # First load fires + stamps.
+    h10_api.dashboard_data()
+    assert store.read(proj_dir).h10_notified_at is not None
+
+    # Resolve the condition: CR APPROVED with no drones -> h10_reminder_due False.
+    # Written directly to metadata (no transition) so the folder does not move.
+    metadata = store.read(proj_dir)
+    metadata.cr_state = CRState.APPROVED
+    metadata.drone_tickets = []
+    store.write(proj_dir, metadata)
+
+    # Reload re-arms by clearing the dedup stamp.
+    h10_api.dashboard_data()
+    assert store.read(proj_dir).h10_notified_at is None

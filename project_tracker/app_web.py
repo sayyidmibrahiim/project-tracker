@@ -585,6 +585,55 @@ def create_js_api(
         def list_projects(self, year: str | None = None) -> object:
             return self._dashboard.list_projects(year)
 
+        def _evaluate_h10_reminders(self, project_paths: list[Path]) -> None:
+            """Emit/dedup/re-arm H-10 reminders for the visible projects.
+
+            Called on dashboard load. For each project:
+            - if past H-10 with CR/Drone not APPROVED and no prior stamp, emit one
+              notification, append a history entry, and stamp ``h10_notified_at``;
+            - if the condition has resolved but a stamp remains, clear it (re-arm);
+            - otherwise leave the project untouched.
+
+            Settings are read once for the whole batch.
+            """
+            from project_tracker.core.models import HistoryEntry
+            from project_tracker.core.rules import current_user, h10_reminder_due
+
+            if self._notification_service is None:
+                return
+            settings = self._settings_store.read()
+            now = local_now()
+            for path in project_paths:
+                metadata = self._metadata_store.read(path)
+                if metadata is None:
+                    continue
+                due = h10_reminder_due(
+                    metadata, now=now, reminder_days=settings.h10_reminder_days
+                )
+                if due and metadata.h10_notified_at is None:
+                    self._notification_service.add(
+                        type="H10_REMINDER",
+                        title="H-10 cutoff passed",
+                        message=(
+                            f"{path.name}: H-10 cutoff passed — CR/Drone not yet "
+                            "APPROVED. Change start date or request management approval."
+                        ),
+                        project_path=path,
+                    )
+                    metadata.history.append(
+                        HistoryEntry(
+                            timestamp=now,
+                            action="H10_REMINDER",
+                            detail="H-10 cutoff passed; CR/Drone not yet APPROVED",
+                            user=current_user(settings),
+                        )
+                    )
+                    metadata.h10_notified_at = now
+                    self._metadata_store.write(path, metadata)
+                elif not due and metadata.h10_notified_at is not None:
+                    metadata.h10_notified_at = None
+                    self._metadata_store.write(path, metadata)
+
         # ── wired read methods ──
 
         def get_project(self, project_path: Path) -> object:

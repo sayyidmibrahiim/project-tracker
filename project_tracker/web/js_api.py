@@ -508,9 +508,29 @@ class JsApi:
     def dashboard_data(self, year: str | None = None) -> dict[str, object]:
         """Return dashboard rows plus summary."""
         try:
-            return ok(_to_frontend_safe(self._dashboard_service.get_dashboard(year)))
+            data = self._dashboard_service.get_dashboard(year)
+            self._evaluate_h10_reminders_for(data)
+            return ok(_to_frontend_safe(data))
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_DATA_FAILED")
+
+    def _evaluate_h10_reminders_for(self, data: object) -> None:
+        """Run H-10 reminder evaluation over the visible dashboard projects.
+
+        Delegates to the project-service adapter, which owns metadata and the
+        notification service. No-op when the adapter does not expose the hook
+        (e.g. lightweight test doubles), so dashboard reads never fail because
+        of reminder evaluation.
+        """
+        evaluator = getattr(self._project_service, "_evaluate_h10_reminders", None)
+        if evaluator is None:
+            return
+        paths = [
+            project.project_path
+            for project in getattr(data, "projects", ())
+            if getattr(project, "project_path", None) is not None
+        ]
+        evaluator(paths)
 
     def notification_list(self, undismissed_only: bool = False) -> dict[str, object]:
         """Return notifications."""
