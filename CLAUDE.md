@@ -2,6 +2,16 @@ CLAUDE.md
 
 This file provides operational guidance to Claude Code when working in this repository.
 
+Graphify Knowledge Graph (token reduction)
+
+This repo has a graphify knowledge graph at graphify-out/ (gitignored, rebuildable, AST-only — no API cost). Use it to reduce token usage. Does not override PRD.md.
+
+- For codebase questions, run `graphify query "<question>"` instead of grepping/reading raw files. Use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts. Returns a scoped subgraph, usually much smaller than raw grep/read.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review when query/path/explain do not surface enough.
+- Read raw files only to modify/debug specific code, or when the graph lacks detail.
+- After modifying code, run `rtk graphify update .` to refresh the graph (AST-only, no API cost).
+- Graph excludes .venv/ and node_modules/ via .gitignore. redesign_ui/ legacy PyQt6 is included as reference; treat it as legacy per Current Project Mode.
+
 Highest Priority Rule
 
 PRD.md v3.1 is the product and architecture source of truth.
