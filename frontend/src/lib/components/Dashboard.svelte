@@ -20,6 +20,9 @@
     refreshToken?: number;
     onOpenProjectDetails?: (path: string) => void;
     onAddProject?: () => void;
+    // Optional. Parent must adapt its Add-Year flow to a bare () => void here
+    // (the parent's addYear is (year) => Promise<string|null>, so wire a
+    // wrapper that prompts for the year — do not bind addYear directly).
     onAddYear?: () => void;
     [key: string]: unknown;
   } = $props();
