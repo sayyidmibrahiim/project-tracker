@@ -9,7 +9,7 @@ This repo has a graphify knowledge graph at graphify-out/ (gitignored, rebuildab
 - For codebase questions, run `graphify query "<question>"` instead of grepping/reading raw files. Use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts. Returns a scoped subgraph, usually much smaller than raw grep/read.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review when query/path/explain do not surface enough.
 - Read raw files only to modify/debug specific code, or when the graph lacks detail.
-- After modifying code, run `rtk graphify update .` to refresh the graph (AST-only, no API cost).
+- After modifying code OR documentation, run `rtk graphify update .` to refresh the graph (AST-only, no API cost). Do this after every implementation phase, not just at session end.
 - Graph excludes .venv/ and node_modules/ via .gitignore. redesign_ui/ legacy PyQt6 is included as reference; treat it as legacy per Current Project Mode.
 
 Highest Priority Rule
@@ -488,11 +488,12 @@ After coding a phase:
 1. Run relevant tests.
 2. Run frontend build when applicable.
 3. Use verification skill/checklist when available.
-4. Update PROJECT_STATUS.md.
-5. Report changed files.
-6. Report commands run.
-7. Report what was not tested.
-8. Report remaining risks.
+4. Run `rtk graphify update .` to refresh the knowledge graph.
+5. Update PROJECT_STATUS.md.
+6. Report changed files.
+7. Report commands run.
+8. Report what was not tested.
+9. Report remaining risks.
 
 Testing Notes
 
