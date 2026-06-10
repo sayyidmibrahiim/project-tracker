@@ -4,6 +4,7 @@ from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidTransitionError
 from project_tracker.core.state_machine import (
     reopen_project_state,
+    resolve_auto_move,
     target_project_state_for_cr_state,
     valid_next_cr_states,
     valid_next_drone_states,
@@ -168,3 +169,57 @@ def test_target_project_state_for_cr_state_maps_folder_moving_states() -> None:
 )
 def test_target_project_state_for_cr_state_returns_none_for_non_folder_moving_states(cr_state: CRState) -> None:
     assert target_project_state_for_cr_state(cr_state) is None
+
+
+def test_resolve_auto_move_approved_uat_to_prod_ready() -> None:
+    assert resolve_auto_move(
+        CRState.APPROVED, [DroneState.APPROVED], ProjectState.UAT_PREPARE
+    ) == ProjectState.PROD_READY
+
+
+def test_resolve_auto_move_approved_no_drones() -> None:
+    assert resolve_auto_move(
+        CRState.APPROVED, [], ProjectState.UAT_PREPARE
+    ) == ProjectState.PROD_READY
+
+
+def test_resolve_auto_move_finished_prod_ready_to_implemented() -> None:
+    assert resolve_auto_move(
+        CRState.FINISHED, [DroneState.FINISHED], ProjectState.PROD_READY
+    ) == ProjectState.IMPLEMENTED
+
+
+def test_resolve_auto_move_postponed_from_uat() -> None:
+    assert resolve_auto_move(
+        CRState.POSTPONED, [], ProjectState.UAT_PREPARE
+    ) == ProjectState.POSTPONED
+
+
+def test_resolve_auto_move_canceled_from_prod_ready() -> None:
+    assert resolve_auto_move(
+        CRState.CANCELED, [], ProjectState.PROD_READY
+    ) == ProjectState.CANCELED
+
+
+def test_resolve_auto_move_noop_target_equals_current() -> None:
+    assert resolve_auto_move(
+        CRState.APPROVED, [], ProjectState.PROD_READY
+    ) is None
+
+
+def test_resolve_auto_move_noop_terminal_implemented() -> None:
+    assert resolve_auto_move(
+        CRState.CANCELED, [], ProjectState.IMPLEMENTED
+    ) is None
+
+
+def test_resolve_auto_move_noop_illegal_transition() -> None:
+    assert resolve_auto_move(
+        CRState.FINISHED, [], ProjectState.UAT_PREPARE
+    ) is None
+
+
+def test_resolve_auto_move_noop_cr_state_with_no_mapping() -> None:
+    assert resolve_auto_move(
+        CRState.IN_PROGRESS, [], ProjectState.PROD_READY
+    ) is None

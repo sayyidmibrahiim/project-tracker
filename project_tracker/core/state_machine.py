@@ -139,6 +139,29 @@ def target_project_state_for_cr_state(cr_state: CRState) -> ProjectState | None:
     return None
 
 
+def resolve_auto_move(
+    cr_state: CRState,
+    drone_states: list[DroneState],
+    current_folder: ProjectState,
+) -> ProjectState | None:
+    """Decide the target folder state for an inline CR state change.
+
+    Pure; no I/O. Returns the target ProjectState, or None for a no-op.
+    Drone preconditions (G1, FINISHED cascade) are enforced by callers /
+    structural guards, not here — this only decides the target folder.
+    """
+    target = target_project_state_for_cr_state(cr_state)
+    if target is None:
+        return None
+    if current_folder == ProjectState.IMPLEMENTED:
+        return None
+    if target == current_folder:
+        return None
+    if not can_transition_project_state(current_folder, target):
+        return None
+    return target
+
+
 def can_resume_postponed(target_state: ProjectState) -> bool:
     return target_state in POSTPONED_RESUME_TARGETS
 
