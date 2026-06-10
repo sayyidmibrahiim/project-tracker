@@ -141,6 +141,7 @@ class ProjectMetadata:
     history: list[HistoryEntry] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    h10_notified_at: datetime | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
@@ -158,6 +159,7 @@ class ProjectMetadata:
             history=[HistoryEntry.from_dict(item) for item in data.get("history", [])],
             created_at=datetime_from_json(data.get("created_at")),
             updated_at=datetime_from_json(data.get("updated_at")),
+            h10_notified_at=datetime_from_json(data.get("h10_notified_at")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -176,6 +178,7 @@ class ProjectMetadata:
             "history": [entry.to_dict() for entry in self.history],
             "created_at": datetime_to_json(self.created_at),
             "updated_at": datetime_to_json(self.updated_at),
+            "h10_notified_at": datetime_to_json(self.h10_notified_at),
         }
 
 
@@ -467,6 +470,7 @@ class AppSettings:
     language: Language = Language.ENGLISH
     datetime_format: str = "ddd, dd MMM yyyy HH:mm"
     t10_threshold_days: int = 10
+    h10_reminder_days: int = 10
     auto_refresh_interval: str = "off"
     theme: Theme = Theme.DARK
     startup_behavior: str = "current_year_dashboard"
@@ -488,6 +492,7 @@ class AppSettings:
             language=Language(data.get("language", Language.ENGLISH.value)),
             datetime_format=str(data.get("datetime_format", "ddd, dd MMM yyyy HH:mm")),
             t10_threshold_days=int(data.get("t10_threshold_days", 10)),
+            h10_reminder_days=int(data.get("h10_reminder_days", 10)),
             auto_refresh_interval=str(data.get("auto_refresh_interval", "off")),
             theme=Theme(data.get("theme", Theme.DARK.value)),
             startup_behavior=str(data.get("startup_behavior", "current_year_dashboard")),
@@ -506,6 +511,7 @@ class AppSettings:
             "language": self.language.value,
             "datetime_format": self.datetime_format,
             "t10_threshold_days": self.t10_threshold_days,
+            "h10_reminder_days": self.h10_reminder_days,
             "auto_refresh_interval": self.auto_refresh_interval,
             "theme": self.theme.value,
             "startup_behavior": self.startup_behavior,

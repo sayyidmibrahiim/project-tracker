@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from project_tracker.core.models import DroneTicket, ProjectMetadata, datetime_from_json, datetime_to_json
+from project_tracker.core.models import AppSettings, DroneTicket, ProjectMetadata, datetime_from_json, datetime_to_json
 
 
 def test_project_metadata_does_not_serialize_project_state() -> None:
@@ -57,3 +57,21 @@ def test_timezone_aware_datetime_round_trips() -> None:
     parsed = datetime_from_json(serialized)
 
     assert parsed == original
+
+
+def test_metadata_h10_notified_at_roundtrip() -> None:
+    md = ProjectMetadata(project_name="X")
+    assert md.h10_notified_at is None
+    data = md.to_dict()
+    assert "h10_notified_at" in data
+    restored = ProjectMetadata.from_dict(data)
+    assert restored.h10_notified_at is None
+
+
+def test_settings_h10_reminder_days_default_and_roundtrip() -> None:
+    s = AppSettings()
+    assert s.h10_reminder_days == 10
+    data = s.to_dict()
+    assert data["h10_reminder_days"] == 10
+    restored = AppSettings.from_dict({**data, "h10_reminder_days": 7})
+    assert restored.h10_reminder_days == 7
