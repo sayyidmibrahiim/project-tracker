@@ -36,6 +36,7 @@ spec in docs/superpowers/specs/2026-06-10-dashboard-auto-move-design.md, plan in
 docs/superpowers/plans/2026-06-10-dashboard-auto-move.md). **Supersedes the
 prior "metadata-only, no auto-move" deviation noted above.** Inline CR/Drone
 state changes now drive real folder transitions:
+
 - Pure `resolve_auto_move(cr_state, drone_states, current_folder)` in
   `core/state_machine.py` decides the target Folder_State (no-op on
   target==current, terminal IMPLEMENTED, or illegal transition); orchestration
