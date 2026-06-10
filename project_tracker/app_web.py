@@ -847,6 +847,71 @@ def create_js_api(
                 "project_state": ProjectState(moved_path.parent.name).value,
             }
 
+        def _apply_auto_move(self, project_path: Path) -> dict[str, object] | None:
+            """Move the folder after an inline state persist (Req auto-move).
+
+            Reads metadata, asks the pure ``resolve_auto_move`` evaluator for a
+            target Folder_State, and routes to the matching tested
+            ``ProjectService`` move method. On a successful move the Cache_Db is
+            rebuilt, an ``AUTO_MOVE`` event is pushed, and a notification is
+            emitted. Returns ``{"banner": str}`` when a structural guard blocks
+            the move, or ``None`` when no move is needed / the move succeeded.
+            """
+            from project_tracker.core.state_machine import resolve_auto_move
+            from project_tracker.web.event_queue import push_event
+
+            path = Path(project_path)
+            metadata = self._metadata_store.read(path)
+            if metadata is None:
+                return None
+            current_folder = ProjectState(path.parent.name)
+            drone_states = [t.drone_state for t in metadata.drone_tickets]
+            target = resolve_auto_move(metadata.cr_state, drone_states, current_folder)
+            if target is None:
+                return None
+
+            settings = self._settings_store.read()
+            if target == ProjectState.PROD_READY:
+                result = self._project_service.move_to_prod_ready(
+                    path,
+                    settings,
+                    local_now(),
+                    settings.t10_threshold_days,
+                    override_t10=False,
+                )
+            elif target == ProjectState.IMPLEMENTED:
+                result = self._project_service.move_to_implemented(
+                    path, settings, local_now()
+                )
+            elif target == ProjectState.POSTPONED:
+                result = self._project_service.postpone_project(path, settings)
+            elif target == ProjectState.CANCELED:
+                result = self._project_service.cancel_project(path, settings)
+            else:
+                return None
+
+            if isinstance(result, TransitionGuardResult) and not result.allowed:
+                return {"banner": "; ".join(result.failed_guards)}
+
+            moved_path = Path(str(result))
+            self._rebuild_cache_for(moved_path)
+            push_event(
+                "AUTO_MOVE",
+                {
+                    "project_path": str(moved_path),
+                    "from_state": current_folder.value,
+                    "to_state": target.value,
+                },
+            )
+            if self._notification_service is not None:
+                self._notification_service.add(
+                    type="AUTO_MOVE",
+                    title="Project moved",
+                    message=f"{path.name}: {current_folder.value} → {target.value}",
+                    project_path=moved_path,
+                )
+            return None
+
         def move_to_prod_ready(
             self, project_path: Path, *, override_t10: bool = False
         ) -> object:
