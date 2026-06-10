@@ -1,6 +1,14 @@
-from project_tracker.core.enums import DroneState
-from project_tracker.core.models import DroneTicket
-from project_tracker.core.rules import validate_cr_approved_requires_drones
+from datetime import datetime, timedelta, timezone
+
+from project_tracker.core.enums import CRState, DroneState
+from project_tracker.core.models import DroneTicket, ProjectMetadata
+from project_tracker.core.rules import (
+    compute_h10,
+    h10_reminder_due,
+    validate_cr_approved_requires_drones,
+)
+
+H10_TZ = timezone(timedelta(hours=7))
 
 
 def _drone(state: DroneState) -> DroneTicket:
@@ -34,3 +42,54 @@ def test_g1_multiple_not_approved_counts():
     )
     assert result.allowed is False
     assert "2 drone" in result.failed_guards[0]
+
+
+def _h10_md(start, cr_state, drones=None):
+    return ProjectMetadata(
+        project_name="X",
+        start_datetime=start,
+        cr_state=cr_state,
+        drone_tickets=drones or [],
+    )
+
+
+def test_compute_h10_none_when_no_start():
+    assert compute_h10(_h10_md(None, CRState.PENDING_APPROVAL), reminder_days=10) is None
+
+
+def test_compute_h10_subtracts_days():
+    start = datetime(2026, 6, 20, 9, 0, tzinfo=H10_TZ)
+    assert compute_h10(_h10_md(start, CRState.PENDING_APPROVAL), reminder_days=10) == datetime(
+        2026, 6, 10, 9, 0, tzinfo=H10_TZ
+    )
+
+
+def test_h10_due_when_past_and_cr_not_approved():
+    start = datetime(2026, 6, 15, 9, 0, tzinfo=H10_TZ)  # H-10 = Jun 5
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    assert h10_reminder_due(_h10_md(start, CRState.PENDING_APPROVAL), now=now, reminder_days=10) is True
+
+
+def test_h10_not_due_before_h10():
+    start = datetime(2026, 6, 30, 9, 0, tzinfo=H10_TZ)  # H-10 = Jun 20
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    assert h10_reminder_due(_h10_md(start, CRState.PENDING_APPROVAL), now=now, reminder_days=10) is False
+
+
+def test_h10_not_due_when_cr_and_drones_approved():
+    start = datetime(2026, 6, 15, 9, 0, tzinfo=H10_TZ)
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    md = _h10_md(start, CRState.APPROVED, [DroneTicket(drone_link="x", drone_state=DroneState.APPROVED)])
+    assert h10_reminder_due(md, now=now, reminder_days=10) is False
+
+
+def test_h10_due_when_cr_approved_but_drone_not():
+    start = datetime(2026, 6, 15, 9, 0, tzinfo=H10_TZ)
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    md = _h10_md(start, CRState.APPROVED, [DroneTicket(drone_link="x", drone_state=DroneState.UAT)])
+    assert h10_reminder_due(md, now=now, reminder_days=10) is True
+
+
+def test_h10_not_due_when_no_start():
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
+    assert h10_reminder_due(_h10_md(None, CRState.PENDING_APPROVAL), now=now, reminder_days=10) is False

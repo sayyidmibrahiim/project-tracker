@@ -250,6 +250,31 @@ def validate_cr_approved_requires_drones(
     )
 
 
+def compute_h10(metadata: ProjectMetadata, *, reminder_days: int) -> datetime | None:
+    """H-10 = start_datetime - reminder_days. None when no start date."""
+    if metadata.start_datetime is None:
+        return None
+    return metadata.start_datetime - timedelta(days=reminder_days)
+
+
+def h10_reminder_due(
+    metadata: ProjectMetadata, *, now: datetime, reminder_days: int
+) -> bool:
+    """True when now >= H-10 AND (CR != APPROVED OR any drone != APPROVED).
+
+    Never blocks a transition; callers use this only to decide whether to
+    emit a reminder notification. Dedup is the caller's responsibility.
+    """
+    h10 = compute_h10(metadata, reminder_days=reminder_days)
+    if h10 is None or now < h10:
+        return False
+    cr_not_approved = metadata.cr_state != CRState.APPROVED
+    any_drone_not_approved = any(
+        t.drone_state != DroneState.APPROVED for t in metadata.drone_tickets
+    )
+    return cr_not_approved or any_drone_not_approved
+
+
 def current_user(settings: AppSettings) -> str:
     display_name = settings.display_name.strip()
     if display_name:
