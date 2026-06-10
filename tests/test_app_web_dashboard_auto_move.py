@@ -662,3 +662,44 @@ def test_apply_auto_move_blocks_implemented_when_drone_cannot_finish(
 
     # No AUTO_MOVE event pushed.
     assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
+
+
+def test_apply_auto_move_implemented_succeeds_when_all_drones_finished(
+    temp_project_prod_ready_cr_finished,
+):
+    """R4 happy path: CR FINISHED + every drone FINISHED moves to IMPLEMENTED.
+
+    Mutates the Task 9 fixture's lone drone from UAT to FINISHED. With the
+    drone in a terminal FINISHED state the R4 pre-check passes (0 drones
+    blocking finish) AND the prod-ready -> implemented structural guard passes
+    (cr_state FINISHED, every drone FINISHED), so the folder actually moves.
+    Guards against an inverted R4 condition silently blocking valid moves.
+    """
+    from project_tracker import app_web
+
+    fixture = temp_project_prod_ready_cr_finished
+    store = fixture["metadata_store"]
+    proj_dir = fixture["project_path"]
+    root = fixture["root"]
+
+    # Drive the lone UAT drone to a terminal FINISHED state.
+    metadata = store.read(proj_dir)
+    metadata.drone_tickets[0].drone_state = DroneState.FINISHED
+    store.write(proj_dir, metadata)
+
+    api = app_web.create_js_api(settings_store=fixture["settings_store"])
+    adapter = api._project_service
+
+    result = adapter._apply_auto_move(proj_dir)
+
+    assert result is not None
+    assert "banner" not in result
+    assert result["to_state"] == ProjectState.IMPLEMENTED.value
+
+    new_path = root / "2024" / ProjectState.IMPLEMENTED.value / proj_dir.name
+    assert result["moved_path"] == str(new_path)
+    assert new_path.is_dir(), f"Project not found in IMPLEMENTED: {new_path}"
+    assert not proj_dir.is_dir(), "Old PROD_READY folder still exists"
+
+    # AUTO_MOVE event pushed for the completed move.
+    assert any(e["type"] == "AUTO_MOVE" for e in drain_events())
