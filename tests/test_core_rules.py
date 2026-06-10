@@ -93,3 +93,12 @@ def test_h10_due_when_cr_approved_but_drone_not():
 def test_h10_not_due_when_no_start():
     now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)
     assert h10_reminder_due(_h10_md(None, CRState.PENDING_APPROVAL), now=now, reminder_days=10) is False
+
+
+def test_h10_due_exactly_at_h10_boundary():
+    # now == H-10 is inclusive ("now >= H-10") -> due
+    start = datetime(2026, 6, 20, 9, 0, tzinfo=H10_TZ)
+    now = datetime(2026, 6, 10, 9, 0, tzinfo=H10_TZ)  # exactly H-10
+    assert h10_reminder_due(
+        _h10_md(start, CRState.PENDING_APPROVAL), now=now, reminder_days=10
+    ) is True
