@@ -722,12 +722,15 @@ def create_js_api(
                 state_changed = True
             metadata.updated_at = now
             self._metadata_store.write(path, metadata)
+            response = {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
             if state_changed:
                 # A drone reaching APPROVED can let a pending CR-APPROVED move
                 # land; resolve_auto_move keys on metadata.cr_state so drone-only
                 # changes won't over-trigger.
-                self._apply_auto_move(path)
-            return {"project_path": str(path), "drone_ticket_count": len(metadata.drone_tickets)}
+                result = self._apply_auto_move(path)
+                if result is not None and "moved_path" in result:
+                    response["project_path"] = result["moved_path"]
+            return response
 
         def delete_drone(self, project_path: Path, drone_index: int) -> object:
             """Remove drone ticket at index."""
@@ -797,9 +800,13 @@ def create_js_api(
                 "project_state": project_state.value,
                 "cr_state": target.value,
             }
-            banner = self._apply_auto_move(path)
-            if banner is not None:
-                response["banner"] = banner["banner"]
+            result = self._apply_auto_move(path)
+            if result is not None:
+                if "banner" in result:
+                    response["banner"] = result["banner"]
+                elif "moved_path" in result:
+                    response["project_path"] = result["moved_path"]
+                    response["project_state"] = result["to_state"]
             return response
 
         # ── wired mutation: update_project (metadata-only) ──
@@ -921,8 +928,14 @@ def create_js_api(
             target Folder_State, and routes to the matching tested
             ``ProjectService`` move method. On a successful move the Cache_Db is
             rebuilt, an ``AUTO_MOVE`` event is pushed, and a notification is
-            emitted. Returns ``{"banner": str}`` when a structural guard blocks
-            the move, or ``None`` when no move is needed / the move succeeded.
+            emitted.
+
+            Returns:
+            - ``None`` when no move is needed (callers leave their response as-is).
+            - ``{"banner": str}`` when a structural guard blocks the move.
+            - ``{"moved_path": str, "to_state": str}`` on a successful move, so
+              callers can refresh their response with the new on-disk location
+              instead of returning the stale pre-move path.
             """
             from project_tracker.core.state_machine import resolve_auto_move
             from project_tracker.web.event_queue import push_event
@@ -977,7 +990,7 @@ def create_js_api(
                     message=f"{path.name}: {current_folder.value} → {target.value}",
                     project_path=moved_path,
                 )
-            return None
+            return {"moved_path": str(moved_path), "to_state": target.value}
 
         def move_to_prod_ready(
             self, project_path: Path, *, override_t10: bool = False

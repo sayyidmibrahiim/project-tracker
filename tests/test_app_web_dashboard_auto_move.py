@@ -113,11 +113,16 @@ def test_apply_auto_move_moves_folder_to_prod_ready(adapter, temp_project_approv
 
     result = adapter._apply_auto_move(proj_dir)
 
-    # No structural-guard block: helper returns None on a successful move.
-    assert result is None, f"Expected None on successful move, got {result}"
-
     old_path = proj_dir
     new_path = root / "2024" / ProjectState.PROD_READY.value / "auto-move-proj"
+
+    # Success contract: helper reports the moved path + target state so callers
+    # can refresh their response instead of returning the stale pre-move path.
+    assert result is not None, "Expected a success dict on a completed move"
+    assert "banner" not in result
+    assert result["moved_path"] == str(new_path)
+    assert result["to_state"] == ProjectState.PROD_READY.value
+
     assert new_path.is_dir(), f"Project not found in PROD_READY: {new_path}"
     assert not old_path.is_dir(), f"Old UAT_PREPARE folder still exists: {old_path}"
 
@@ -325,3 +330,82 @@ def test_cr_approved_no_drones_auto_moves_and_history(
 
     # AUTO_MOVE event pushed by _apply_auto_move.
     assert any(e["type"] == "AUTO_MOVE" for e in drain_events())
+
+
+# ── Task 7 follow-up — drone-triggered auto-move via update_drone ──
+
+
+def test_update_drone_approved_lands_pending_cr_move(
+    adapter_pending, temp_project_pending_uat
+):
+    """A drone reaching APPROVED lands a pending CR-APPROVED move to PROD_READY.
+
+    Setup: CR already APPROVED persisted in metadata while ONE drone is still
+    PENDING_APPROVAL. The project did not move when CR was set (G1 in
+    update_cr_state blocks CR APPROVED while a drone is unapproved). Approving
+    that drone via update_drone runs _apply_auto_move: resolve_auto_move keys on
+    cr_state==APPROVED + UAT_PREPARE -> PROD_READY, and the prod-ready structural
+    guard now passes (all drones APPROVED, dates + cr_link valid).
+    """
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+    root = temp_project_pending_uat["root"]
+
+    metadata = store.read(proj_dir)
+    metadata.cr_state = CRState.APPROVED
+    metadata.drone_tickets = [
+        DroneTicket(
+            subfolder_name="drone-a",
+            drone_link="https://drone.example.com/D-1",
+            drone_state=DroneState.PENDING_APPROVAL,
+        )
+    ]
+    store.write(proj_dir, metadata)
+
+    response = adapter_pending.update_drone(
+        proj_dir, 0, {"drone_state": DroneState.APPROVED.value}
+    )
+
+    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    assert new_path.is_dir(), f"Project not moved to PROD_READY: {new_path}"
+    assert not proj_dir.is_dir(), "Old UAT_PREPARE folder still exists"
+
+    # Response reports the new on-disk location, not the stale pre-move path.
+    assert response["project_path"] == str(new_path)
+
+    # History persisted at the moved location includes the drone state change.
+    moved_meta = store.read(new_path)
+    assert any(h.action == "DRONE_STATE_CHANGE" for h in moved_meta.history)
+    assert moved_meta.drone_tickets[0].drone_state == DroneState.APPROVED
+
+    assert any(e["type"] == "AUTO_MOVE" for e in drain_events())
+
+
+def test_update_drone_field_only_edit_does_not_move(
+    adapter_pending, temp_project_pending_uat
+):
+    """A drone field-only edit (no drone_state) does not auto-move the folder."""
+    store = temp_project_pending_uat["metadata_store"]
+    proj_dir = temp_project_pending_uat["project_path"]
+    root = temp_project_pending_uat["root"]
+
+    metadata = store.read(proj_dir)
+    metadata.cr_state = CRState.APPROVED
+    metadata.drone_tickets = [
+        DroneTicket(
+            subfolder_name="drone-a",
+            drone_link="https://drone.example.com/D-1",
+            drone_state=DroneState.PENDING_APPROVAL,
+        )
+    ]
+    store.write(proj_dir, metadata)
+
+    response = adapter_pending.update_drone(proj_dir, 0, {"owner": "x"})
+
+    # No state change -> state_changed gate stays closed -> no auto-move.
+    assert proj_dir.is_dir(), "Folder must not move on a field-only edit"
+    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    assert not new_path.is_dir(), "Project must not appear in PROD_READY"
+    assert response["project_path"] == str(proj_dir)
+    assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
+    assert store.read(proj_dir).drone_tickets[0].owner == "x"
