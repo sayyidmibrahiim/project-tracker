@@ -111,6 +111,26 @@ auto-move engine. Proceeding per user instruction, not §11.13.
   manual gate (real folder move on reopen, WebView2 font render, visual aesthetic)
   still required.
 
+Sidebar + Header Notion refine (2026-06-11, follow-up to the redesign above).
+Extends the Notion language to the two cross-screen chrome elements, per user
+direction ("layout/position juga, bukan cuma warna"). Decisions: **dark sidebar
+retained** (brand rail, pairs with red header) but refined; **red header band
+retained** (brand accent) but flattened.
+
+- Header (`styles.css` `.app-header` + controls, `Header.svelte` add-year popover):
+  flat red band (1px border, light `--shadow-header`, no heavy drop shadow),
+  translucent-white pill controls (year/search/filter/refresh) on the band, white
+  primary "Add Project" button (red ink), 28px control rhythm, datetime as a
+  translucent pill, Fira Sans title. Add-year popover restyled to a light paper
+  card with `--shadow-panel`.
+- Sidebar (`styles.css` `.sidebar` + nav + notif): widened to 224px, Notion-style
+  rounded full-pill nav (removed the left-border-bar active style; active = soft
+  red-tinted pill, hover = faint white), Fira Sans brand with a larger rounded
+  brand chip, refined dark notification panel (subtle translucent surface + cards,
+  dropped the bright `--shadow-notif`), lighter muted palette.
+- Gates: svelte-check 0/0, vite build clean, frontend node tests 99 passed, graph
+  refreshed. Windows manual gate (WebView2 render of the new chrome) still required.
+
 Automations parity slice (from `master-prompt.md`, 2026-06-09): added
 `docs/automations-parity-matrix.md` (PRD §16 vs PyQt prototype vs current Svelte
 audit) and implemented the smallest high-value gap from it. The Automations tab
