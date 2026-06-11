@@ -72,6 +72,45 @@ state changes now drive real folder transitions:
   `shutil.move`, `os.startfile`, WebView2 render, visual chips/spinner) still
   required — user will verify on the Windows office laptop.
 
+Dashboard + Project Details Notion redesign + ⋮-trim + reopen-via-dropdown
+(2026-06-11, plan in ~/.claude/plans/curious-petting-donut.md). User-directed
+simplification of the per-row action surface plus a full Notion-like visual pass
+on both screens. **PRD conflict flagged and superseded by user instruction:** PRD
+§11.13 lists Move/Postpone/Cancel/Reopen in the ⋮ menu; the user removed them
+because folder transitions are already driven by the CR/Drone dropdowns + the
+auto-move engine. Proceeding per user instruction, not §11.13.
+
+- **Reopen via CR dropdown** (`Dashboard.svelte`): REOPEN is an action, not a CR
+  state (PRD §9.1; `validate_cr_transition` rejects it as a target). The CR
+  dropdown now offers a `REOPEN` option **only** when `cr_state` is POSTPONED or
+  CANCELED (`crOptionsFor` + `REOPENABLE` set). Selecting it routes to the
+  existing `folder_reopen` bridge (NOT `cr_update_state`) behind the ConfirmModal
+  ("Reopen project?", reversible). Backend unchanged — `folder_reopen` →
+  `reopen_project` → `_run_transition` already validates POSTPONED/CANCELED-only
+  (`REOPEN_ALLOWED_FOLDER_STATES`), moves the folder to UAT_PREPARE, sets
+  CR→PENDING SUBMISSION, writes history, and rebuilds the cache; the frontend
+  `loadDashboard()` reflects the move. New tests: `frontend/tests/dashboard-reopen.test.mjs`.
+- **⋮ menu trimmed** (`DashboardRowMenu.svelte`): now **Project Details + Delete**
+  only. Removed the embedded `ProjectTransitions` block + import and the "Open
+  Project Folder" item/handler (the project-name click already opens the folder).
+  `ProjectTransitions.svelte` is retained — still used by Project Details (inline
+  variant) for manual moves. `components.test.mjs` updated with a source-structure
+  assertion that the menu carries only Details + Delete.
+- **Notion-like redesign** (`styles.css` tokens + `Dashboard.svelte` and
+  `ProjectDetails.svelte` style blocks): near-white paper workspace, white cards,
+  hairline borders (`--color-hairline`), soft `--shadow-card`, sticky quiet table
+  header, row hover tint, borderless-until-hover inline cells, and Notion-style
+  soft-tag state chips (tinted bg + readable ink via `--tag-*` tokens) replacing
+  the bold filled blocks. DBS red retained as accent (header band, active filter
+  tab, selected-row left marker, primary buttons).
+- **Display font bundled locally** (no CDN): Fira Sans (SIL OFL) Regular/SemiBold/
+  Bold converted to woff2 and vendored at `frontend/src/assets/fonts/`, wired via
+  `@font-face` + `--font-display`, applied to page title and section headers.
+- Linux gates green: svelte-check 0/0, vite build clean (fonts emitted), frontend
+  node tests 99 passed, targeted pytest 71 passed (backend untouched). Windows
+  manual gate (real folder move on reopen, WebView2 font render, visual aesthetic)
+  still required.
+
 Automations parity slice (from `master-prompt.md`, 2026-06-09): added
 `docs/automations-parity-matrix.md` (PRD §16 vs PyQt prototype vs current Svelte
 audit) and implemented the smallest high-value gap from it. The Automations tab
