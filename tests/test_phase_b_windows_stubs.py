@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Off-Windows dev-stub behavior; on the Windows target these clients run live.",
+)
 
 
 def test_outlook_client_imports_without_windows_dependencies() -> None:

@@ -86,7 +86,7 @@ class NotificationService:
             "title": notification.title,
             "message": notification.message,
             "timestamp": notification.timestamp.isoformat(),
-            "project_path": str(notification.project_path) if notification.project_path else None,
+            "project_path": notification.project_path.as_posix() if notification.project_path else None,
             "dismissed": notification.dismissed,
         }
 

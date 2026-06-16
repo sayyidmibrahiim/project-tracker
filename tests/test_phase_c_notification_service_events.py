@@ -51,7 +51,7 @@ def test_notification_event_payload_contains_frontend_safe_fields(tmp_path):
         "title": "Heads up",
         "message": "Check project",
         "timestamp": notification.timestamp.isoformat(),
-        "project_path": str(project_path),
+        "project_path": project_path.as_posix(),
         "dismissed": False,
     }
 

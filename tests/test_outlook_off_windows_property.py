@@ -42,6 +42,11 @@ from typing import Any, Callable
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Validates off-Windows guarded dev path; on the Windows target native automation runs live.",
+)
+
 from project_tracker.infrastructure import outlook_client, teams_client
 from project_tracker.infrastructure.outlook_client import (
     create_draft_email,

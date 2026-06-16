@@ -98,5 +98,5 @@ def _csv_value(value: object) -> object:
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, Path):
-        return str(value)
+        return value.as_posix()
     return value

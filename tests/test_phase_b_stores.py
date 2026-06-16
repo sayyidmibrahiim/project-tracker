@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,8 @@ from project_tracker.infrastructure.filesystem import ensure_year_structure, sca
 from project_tracker.infrastructure.link_bank_store import LinkBank, LinkBankStore
 from project_tracker.infrastructure.metadata_store import METADATA_FILE, MetadataStore
 from project_tracker.infrastructure.settings_store import SETTINGS_FILE, SettingsStore
+
+import pytest
 
 
 def test_metadata_store_missing_project_data_returns_default_with_folder_name(tmp_path: Path) -> None:
@@ -144,6 +147,10 @@ def test_send_to_recycle_bin_uses_send2trash_with_string_path(tmp_path: Path, mo
     assert calls == [str(target)]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Off-Windows dev log path; on the Windows target open_folder calls os.startfile live.",
+)
 def test_open_folder_logs_dev_message_on_linux(tmp_path: Path, capsys) -> None:
     target = tmp_path / "PROJECT"
 
