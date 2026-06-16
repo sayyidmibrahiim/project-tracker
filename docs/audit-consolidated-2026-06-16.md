@@ -17,31 +17,31 @@
 
 ### New Crash Bugs Found
 
-| # | Temuan | Evidence |
-|---|---|---|
-| P0-7 🆕🆕🆕 | `open_folder`/`create_subproject` set to `None` di adapter → **JsApi CRASH** saat dipanggil | app_web.py L1159-1160 |
-| P0-8 🆕🆕🆕 | `.spec` missing 4 hidden imports → PyInstaller runtime crash | project_tracker_dbs.spec L61-68 |
+| #           | Temuan                                                                                      | Evidence                        |
+| ----------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
+| P0-7 🆕🆕🆕 | `open_folder`/`create_subproject` set to `None` di adapter → **JsApi CRASH** saat dipanggil | app_web.py L1159-1160           |
+| P0-8 🆕🆕🆕 | `.spec` missing 4 hidden imports → PyInstaller runtime crash                                | project_tracker_dbs.spec L61-68 |
 
 ### New Logic Bugs Found
 
-| # | Temuan | Evidence |
-|---|---|---|
-| P1-13 🆕🆕🆕 | `notes` field di ProjectMetadata NOT in `to_dict()`/`from_dict()` — data path broken | models.py L138, L166-182 |
-| P1-14 🆕🆕🆕 | `drone_state` condition hanya check drone pertama — multi-drone logic bug | rules.py L321-333 |
-| P1-15 🆕🆕🆕 | Activity History ditulis tapi NEVER served ke frontend | project-details-parity-matrix.md |
-| P1-16 🆕🆕🆕 | `outlook_service.py` = 80 lines entirely dead code | Never imported anywhere |
+| #            | Temuan                                                                               | Evidence                         |
+| ------------ | ------------------------------------------------------------------------------------ | -------------------------------- |
+| P1-13 🆕🆕🆕 | `notes` field di ProjectMetadata NOT in `to_dict()`/`from_dict()` — data path broken | models.py L138, L166-182         |
+| P1-14 🆕🆕🆕 | `drone_state` condition hanya check drone pertama — multi-drone logic bug            | rules.py L321-333                |
+| P1-15 🆕🆕🆕 | Activity History ditulis tapi NEVER served ke frontend                               | project-details-parity-matrix.md |
+| P1-16 🆕🆕🆕 | `outlook_service.py` = 80 lines entirely dead code                                   | Never imported anywhere          |
 
 ### New Technical Risks
 
-| # | Temuan | Evidence |
-|---|---|---|
-| P2-25 🆕🆕🆕 | `_NotesServiceAdapter.update_notes` = non-atomic write | app_web.py L1297-1305 |
-| P2-26 🆕🆕🆕 | `notification_dismiss_all` Protocol mismatch — service lacks method | js_api.py L584-603 |
-| P2-27 🆕🆕🆕 | 6 of 8 Rules Engine action handlers = no-op stubs | automation_service.py |
-| P2-28 🆕🆕🆕 | `Signal` class copy-pasted 4× across services | 4 files |
-| P2-29 🆕🆕🆕 | Download email iterates ALL inbox items O(n) per poll | download_email_service.py L132 |
-| P2-30 🆕🆕🆕 | `scan_warnings` table exists but never written/read | cache_db.py |
-| P2-31 🆕🆕🆕 | project_service ~250 lines duplicated transition boilerplate | project_service.py |
+| #            | Temuan                                                                    | Evidence                         |
+| ------------ | ------------------------------------------------------------------------- | -------------------------------- |
+| P2-25 🆕🆕🆕 | `_NotesServiceAdapter.update_notes` = non-atomic write                    | app_web.py L1297-1305            |
+| P2-26 🆕🆕🆕 | `notification_dismiss_all` Protocol mismatch — service lacks method       | js_api.py L584-603               |
+| P2-27 🆕🆕🆕 | 6 of 8 Rules Engine action handlers = no-op stubs                         | automation_service.py            |
+| P2-28 🆕🆕🆕 | `Signal` class copy-pasted 4× across services                             | 4 files                          |
+| P2-29 🆕🆕🆕 | Download email iterates ALL inbox items O(n) per poll                     | download_email_service.py L132   |
+| P2-30 🆕🆕🆕 | `scan_warnings` table exists but never written/read                       | cache_db.py                      |
+| P2-31 🆕🆕🆕 | project_service ~250 lines duplicated transition boilerplate              | project_service.py               |
 | P2-32 🆕🆕🆕 | `second_brain._items()` uses `dict["key"]` tanpa `.get()` → KeyError risk | second_brain_service.py L134-148 |
 
 ---
@@ -59,13 +59,13 @@
 > [!CAUTION]
 > `pip install .` = CRASH. PyQt6 listed (~200MB waste). 3 runtime deps missing. No `[build-system]`.
 
-| Dependency | `requirements.txt` | `pyproject.toml` |
-|---|---|---|
-| pywebview | `>=6.2.1` ✅ | **MISSING** ❌ |
-| PyQt6 | Tidak ada | `>=6.6.0` 🗑️ |
-| python-dateutil | `>=2.9.0` | **MISSING** ❌ |
-| APScheduler | `>=3.10,<4` | **MISSING** ❌ |
-| `[build-system]` | — | **MISSING** ❌ |
+| Dependency       | `requirements.txt` | `pyproject.toml` |
+| ---------------- | ------------------ | ---------------- |
+| pywebview        | `>=6.2.1` ✅       | **MISSING** ❌   |
+| PyQt6            | Tidak ada          | `>=6.6.0` 🗑️     |
+| python-dateutil  | `>=2.9.0`          | **MISSING** ❌   |
+| APScheduler      | `>=3.10,<4`        | **MISSING** ❌   |
+| `[build-system]` | —                  | **MISSING** ❌   |
 
 **Effort:** 30 menit
 
@@ -87,11 +87,11 @@
 
 #### P0-4. Entry Point Inkonsisten di 3 Tempat
 
-| Sumber | Entry Point |
-|---|---|
-| PRD §24.1 | `app_web.py` (root) — **WRONG** |
+| Sumber        | Entry Point                         |
+| ------------- | ----------------------------------- |
+| PRD §24.1     | `app_web.py` (root) — **WRONG**     |
 | WINDOWS_SETUP | `python -m project_tracker.main` ✅ |
-| .spec file | `project_tracker/main.py` ✅ |
+| .spec file    | `project_tracker/main.py` ✅        |
 
 **Effort:** 1 jam
 
@@ -131,12 +131,12 @@ Lines 118, 132, 146 di [scheduler_service.py](file:///d:/Ibrahim/Projects/projec
 > [!CAUTION]
 > PyInstaller `.spec` file missing 4 hidden imports yang lazy-loaded at runtime.
 
-| Missing Import | Where Used | Consequence |
-|---|---|---|
-| `pythoncom` | outlook_client.py (COM init) | Outlook features crash |
+| Missing Import    | Where Used                       | Consequence            |
+| ----------------- | -------------------------------- | ---------------------- |
+| `pythoncom`       | outlook_client.py (COM init)     | Outlook features crash |
 | `win32com.client` | outlook_client.py (COM dispatch) | Outlook features crash |
-| `pyperclip` | teams_client.py (clipboard) | Teams preview crash |
-| `pyautogui` | teams_client.py (auto-send) | Teams send crash |
+| `pyperclip`       | teams_client.py (clipboard)      | Teams preview crash    |
+| `pyautogui`       | teams_client.py (auto-send)      | Teams send crash       |
 
 **Evidence:** [project_tracker_dbs.spec](file:///d:/Ibrahim/Projects/project_tracker/project_tracker_dbs.spec) L61-68
 **Effort:** 15 menit
@@ -149,13 +149,13 @@ Lines 118, 132, 146 di [scheduler_service.py](file:///d:/Ibrahim/Projects/projec
 
 #### P1-1. PRD Bohong di 6+ Tempat
 
-| Keputusan | PRD | Realita |
-|---|---|---|
-| T-10 Rule | Hard block (§9.6) | H-10 reminder |
-| ⋮ Menu | 8 items (§11.13) | Details + Delete |
-| marked.js | Dependency (§3.3) | Custom renderer |
-| pywebview | `>=5.0` (§3.3) | `>=6.2.1` |
-| Tailwind | `3.4` (§3.3) | `v4.1.0` |
+| Keputusan   | PRD                       | Realita                   |
+| ----------- | ------------------------- | ------------------------- |
+| T-10 Rule   | Hard block (§9.6)         | H-10 reminder             |
+| ⋮ Menu      | 8 items (§11.13)          | Details + Delete          |
+| marked.js   | Dependency (§3.3)         | Custom renderer           |
+| pywebview   | `>=5.0` (§3.3)            | `>=6.2.1`                 |
+| Tailwind    | `3.4` (§3.3)              | `v4.1.0`                  |
 | Entry point | `app_web.py` root (§24.1) | `project_tracker/main.py` |
 
 **Effort:** 1-2 jam
@@ -275,7 +275,7 @@ Kalau project punya 3 drones dan yang pertama APPROVED tapi sisanya belum → co
 > [!WARNING]
 > History entries are appended to `project_data.json` on every state change. Tapi `project_get` response **DOES NOT include** the `history` field.
 
-**Evidence:** [project-details-parity-matrix.md](file:///d:/Ibrahim/Projects/project_tracker/docs/project-details-parity-matrix.md): *"gap (backend-gated) — needs a serialized history field on project_get"*
+**Evidence:** [project-details-parity-matrix.md](file:///d:/Ibrahim/Projects/project_tracker/docs/project-details-parity-matrix.md): _"gap (backend-gated) — needs a serialized history field on project_get"_
 
 Frontend `ProjectDetails.svelte` has Activity History UI but data = always empty.
 
@@ -299,18 +299,23 @@ Worse: `outlook_service.py` does `mail.Save()` (creates draft in drafts folder) 
 ---
 
 #### P2-1. God Module `app_web.py` = 1,708 lines
+
 12 inline adapters. `_ProjectServiceAdapter` alone = **600 lines** nested class. Contains business logic (H-10 evaluation, auto-move, G1 guard) that should be in service layer.
 
 #### P2-2. Teams Auto-Send: No Window Focus Check
+
 `pyautogui.press('enter')` tanpa cek foreground window.
 
 #### P2-3. Second Brain `rglob("*")` Unbounded
+
 No cache, no depth limit, no skip. Each page load = full recursive walk.
 
 #### P2-4. SQLite Individual INSERTs
+
 `rebuild_year_cache` inserts one-by-one, not `executemany`.
 
 #### P2-5. Dual Event Channel — No Dedup
+
 `event_queue.py` L17-32: `push_event` unconditionally adds. Zero dedup strategy.
 
 #### P2-6. No Backup/Recovery Strategy
@@ -334,9 +339,11 @@ No cache, no depth limit, no skip. Each page load = full recursive walk.
 #### P2-16. Notes Undo/Redo NOT IMPLEMENTED (PRD §12.12)
 
 #### P2-17. PROD_READY `edit_files: false` — PRD says "Partial"
+
 [folderLocks.ts](file:///d:/Ibrahim/Projects/project_tracker/frontend/src/lib/folderLocks.ts): Fully disables file editing. PRD §9.5 says "Partial" = evidence editing allowed.
 
 #### P2-18. Downloaded Emails In-Memory Only
+
 `download_email_service.py` L45: `# HACK: store in memory, no persistence`
 
 #### P2-19. Duplicate `_apply_auto_move()` di 2 file
@@ -373,6 +380,7 @@ Every other write in codebase uses atomic temp-file-then-replace pattern. This i
 #### P2-27. 🆕🆕🆕 6 of 8 Rules Engine Action Handlers = No-Op Stubs
 
 `automation_service.py`: Only `send_email` and `create_notification` do real work. These 6 are stubs returning `_noop()`:
+
 - `download_email`, `save_attachment`, `update_cr_state`, `update_drone_state`, `append_history`, `run_script`
 
 **Means:** Rules Engine UI lets you configure 8 action types but 6 **silently do nothing**.
@@ -434,74 +442,74 @@ P3-6. E2E/UI test automation
 
 ## 📊 Dead Code Inventory (Full)
 
-| File/Code | Lines | Status |
-|---|---|---|
-| `app_web.py` → `AppAPI` class | 305 | Dead — never used |
-| `services/outlook_service.py` | 80 | Dead — never imported |
-| `infrastructure/watchdog_service.py` | 50 | Dead — Observer never started, never imported |
-| `scheduler_service.py` → 2× `_create_scheduler_safe` | 26 | Dead — Python uses 3rd definition |
-| `cache_db.py` → `scan_warnings` table | ~20 | Ghost — never read/written |
-| `js_api.py` → module-level `poll_events` | 6 | Dead — duplicate of instance method |
-| `metadata_store.py` → `data.pop("project_state")` | 1 | Dead — removes key never present |
-| `models.py` → `DownloadEmailJob.dismissed` field | 1 | Dead — never read/modified |
-| `models.py` → `EmailFlags.last_cr_link_when_sent` | 1 | Dead — never set by any service |
-| `models.py` → `ProjectMetadata.notes` field | 1 | Dead — not serialized, legacy |
-| `Signal` class × 4 copies | 32 | Duplicate — should be 1 shared |
-| Legacy HTML in frontend/ | ~500 | Dead — not used by Vite |
-| **TOTAL** | **~1,023** | |
+| File/Code                                            | Lines      | Status                                        |
+| ---------------------------------------------------- | ---------- | --------------------------------------------- |
+| `app_web.py` → `AppAPI` class                        | 305        | Dead — never used                             |
+| `services/outlook_service.py`                        | 80         | Dead — never imported                         |
+| `infrastructure/watchdog_service.py`                 | 50         | Dead — Observer never started, never imported |
+| `scheduler_service.py` → 2× `_create_scheduler_safe` | 26         | Dead — Python uses 3rd definition             |
+| `cache_db.py` → `scan_warnings` table                | ~20        | Ghost — never read/written                    |
+| `js_api.py` → module-level `poll_events`             | 6          | Dead — duplicate of instance method           |
+| `metadata_store.py` → `data.pop("project_state")`    | 1          | Dead — removes key never present              |
+| `models.py` → `DownloadEmailJob.dismissed` field     | 1          | Dead — never read/modified                    |
+| `models.py` → `EmailFlags.last_cr_link_when_sent`    | 1          | Dead — never set by any service               |
+| `models.py` → `ProjectMetadata.notes` field          | 1          | Dead — not serialized, legacy                 |
+| `Signal` class × 4 copies                            | 32         | Duplicate — should be 1 shared                |
+| Legacy HTML in frontend/                             | ~500       | Dead — not used by Vite                       |
+| **TOTAL**                                            | **~1,023** |                                               |
 
 ---
 
 ## 📊 TODO/HACK/FIXME Inventory (Full)
 
-| File | Line | Comment |
-|---|---|---|
-| app_web.py | 423 | `TODO: extract adapters` |
-| app_web.py | 1650 | `TODO: remove dead AppAPI` |
-| scheduler_service.py | 115 | `TODO: clean up triple definition` |
-| download_email_service.py | 45 | `HACK: in-memory, no persistence` |
-| Dashboard.svelte | 245 | `TODO: wire onAddYear` |
-| ProjectDetails.svelte | 89 | `TODO: datetime editor` |
-| ProjectDetails.svelte | 412 | `TODO: implementation_plan editor` |
-| SecondBrain.svelte | 890 | `TODO: backlinks panel` |
-| Report.svelte | 12 | `TODO: analysis panels` |
-| Settings.svelte | 8 | `TODO: Help Center` |
+| File                      | Line | Comment                            |
+| ------------------------- | ---- | ---------------------------------- |
+| app_web.py                | 423  | `TODO: extract adapters`           |
+| app_web.py                | 1650 | `TODO: remove dead AppAPI`         |
+| scheduler_service.py      | 115  | `TODO: clean up triple definition` |
+| download_email_service.py | 45   | `HACK: in-memory, no persistence`  |
+| Dashboard.svelte          | 245  | `TODO: wire onAddYear`             |
+| ProjectDetails.svelte     | 89   | `TODO: datetime editor`            |
+| ProjectDetails.svelte     | 412  | `TODO: implementation_plan editor` |
+| SecondBrain.svelte        | 890  | `TODO: backlinks panel`            |
+| Report.svelte             | 12   | `TODO: analysis panels`            |
+| Settings.svelte           | 8    | `TODO: Help Center`                |
 
 ---
 
 ## 📊 Performa
 
-| Operation | Speed | Issue? |
-|---|---|---|
-| Cold start | ~2-4s | Minor (app_web.py 78KB import) |
-| Dashboard load | ~50-100ms | ✅ drone JSON parsed 2× (P2-33 minor) |
-| State change | ~200-500ms | ✅ |
-| Second Brain scan | 1-10s | ⚠️ P2-3 rglob unbounded |
-| Outlook inbox scan | **10-60s on large inbox** | 🔴 P2-29 O(n) full iteration |
-| Notes save | <100ms | ⚠️ P2-25 non-atomic |
+| Operation          | Speed                     | Issue?                                |
+| ------------------ | ------------------------- | ------------------------------------- |
+| Cold start         | ~2-4s                     | Minor (app_web.py 78KB import)        |
+| Dashboard load     | ~50-100ms                 | ✅ drone JSON parsed 2× (P2-33 minor) |
+| State change       | ~200-500ms                | ✅                                    |
+| Second Brain scan  | 1-10s                     | ⚠️ P2-3 rglob unbounded               |
+| Outlook inbox scan | **10-60s on large inbox** | 🔴 P2-29 O(n) full iteration          |
+| Notes save         | <100ms                    | ⚠️ P2-25 non-atomic                   |
 
 ---
 
 ## ✅ Hal yang Sudah Benar
 
-| Area | Status |
-|---|---|
-| Frontend stack (Svelte 5 + Vite 6 + Tailwind v4 + TS 5.8) | ✅ Excellent |
-| State machine (pure Python, no I/O, guards) | ✅ |
-| Bridge pattern (76 methods, Protocol DI, ok/fail, 30s timeout) | ✅ |
-| Bridge contract test coverage | ✅ |
-| SQLite config (WAL, NORMAL sync) | ✅ |
-| COM threading (CoInitialize/CoUninitialize per thread) | ✅ |
-| Atomic JSON writes (except notes — P2-25) | ✅ |
-| Draft-first email (Outlook Display not Send) | ✅ |
-| Teams default (auto_send=false, strict identity check) | ✅ |
-| Folder name validation (reserved names, invalid chars) | ✅ |
-| XSS protection (escape HTML first in custom renderer) | ✅ |
-| Pin/favorite persistence (sidecar JSON) | ✅ (v2 was wrong) |
-| Notification persistence (SQLite) | ✅ (v2 was wrong) |
-| 1,700+ backend tests | ✅ (on correct platform) |
-| `assert_within` path traversal guard | ✅ |
-| History append-only | ✅ |
+| Area                                                           | Status                   |
+| -------------------------------------------------------------- | ------------------------ |
+| Frontend stack (Svelte 5 + Vite 6 + Tailwind v4 + TS 5.8)      | ✅ Excellent             |
+| State machine (pure Python, no I/O, guards)                    | ✅                       |
+| Bridge pattern (76 methods, Protocol DI, ok/fail, 30s timeout) | ✅                       |
+| Bridge contract test coverage                                  | ✅                       |
+| SQLite config (WAL, NORMAL sync)                               | ✅                       |
+| COM threading (CoInitialize/CoUninitialize per thread)         | ✅                       |
+| Atomic JSON writes (except notes — P2-25)                      | ✅                       |
+| Draft-first email (Outlook Display not Send)                   | ✅                       |
+| Teams default (auto_send=false, strict identity check)         | ✅                       |
+| Folder name validation (reserved names, invalid chars)         | ✅                       |
+| XSS protection (escape HTML first in custom renderer)          | ✅                       |
+| Pin/favorite persistence (sidecar JSON)                        | ✅ (v2 was wrong)        |
+| Notification persistence (SQLite)                              | ✅ (v2 was wrong)        |
+| 1,700+ backend tests                                           | ✅ (on correct platform) |
+| `assert_within` path traversal guard                           | ✅                       |
+| History append-only                                            | ✅                       |
 
 ---
 
@@ -510,6 +518,7 @@ P3-6. E2E/UI test automation
 ### Q1. Tujuan akhir?
 
 **Rekomendasi: Tool pribadi, build dengan kualitas distributable.**
+
 - `run_script` action = personal power-user tool
 - Code quality sudah distributable-grade (1,700+ tests, Protocol DI)
 - Decision: pribadi untuk prioritas fitur, keep quality tinggi
@@ -526,7 +535,7 @@ P3-6. E2E/UI test automation
 MVP-1 (Ship this):
 ├── Fix ALL P0 (8 items) — especially P0-7 crash bug!
 ├── Dashboard ✅ (~90%)
-├── Project Details + DateTime Editor (P1-6!) 
+├── Project Details + DateTime Editor (P1-6!)
 │   + implementation_plan editor (P1-12)
 │   + Activity History serve to frontend (P1-15!)
 ├── Report (table + KPI + CSV — skip analysis panels)
@@ -557,6 +566,7 @@ MVP-2 (Later):
 ### Q4. Fix P0 sekarang?
 
 **Rekomendasi: Ya.** Urutan:
+
 1. P0-3 (commit!)
 2. P0-7 (crash bug — wire `open_folder`/`create_subproject`)
 3. P0-1 + P0-6 (pyproject + sqlalchemy)
@@ -576,7 +586,7 @@ MVP-2 (Later):
 ```
 SQLite = local database:
 - project_index: REBUILDABLE ✅
-- drone_tickets: REBUILDABLE ✅  
+- drone_tickets: REBUILDABLE ✅
 - scan_warnings: GHOST TABLE (delete or wire up)
 - notifications: SOURCE OF TRUTH
 - automation_rule_logs: SOURCE OF TRUTH
@@ -588,16 +598,16 @@ Include cache.db in backup/export-all.
 
 ## Summary
 
-| Priority | Count |
-|---|---|
-| 🔴 P0 — Crash/Data Loss | **8** |
-| 🟠 P1 — Logic Bugs/Design | **16** |
-| 🟡 P2 — Technical Risks | **25** |
-| 🟢 P3 — Post-release | **6** |
-| **TOTAL** | **55** |
-| Dead code identified | **~1,023 lines** |
-| TODO/HACK markers | **10** |
-| Files 100% dead | **3** (outlook_service.py, watchdog_service.py, AppAPI class) |
+| Priority                  | Count                                                         |
+| ------------------------- | ------------------------------------------------------------- |
+| 🔴 P0 — Crash/Data Loss   | **8**                                                         |
+| 🟠 P1 — Logic Bugs/Design | **16**                                                        |
+| 🟡 P2 — Technical Risks   | **25**                                                        |
+| 🟢 P3 — Post-release      | **6**                                                         |
+| **TOTAL**                 | **55**                                                        |
+| Dead code identified      | **~1,023 lines**                                              |
+| TODO/HACK markers         | **10**                                                        |
+| Files 100% dead           | **3** (outlook_service.py, watchdog_service.py, AppAPI class) |
 
 ---
 
@@ -610,12 +620,12 @@ Include cache.db in backup/export-all.
 
 ## A1. Existing Codebase Context (Verified)
 
-| Question | Answer | Evidence |
-|---|---|---|
-| APScheduler background jobs sudah jalan? | **Ya** — `BackgroundScheduler` + `SQLAlchemyJobStore`, auto IN-PROGRESS check setiap 60 detik | scheduler_service.py, auto_transition_service.py |
-| UI placement? | **Tab di halaman Automations** (top-level sidebar page). Bukan modal, bukan halaman terpisah. | Automations.svelte → AutomationsOutlook.svelte (263 lines) |
-| Threading pattern? | Daemon threads, scheduler punya thread pool, event polling 1.5s dari frontend | poll_events, event_queue.py |
-| Watchdog? | **Dead code** — file exists tapi never imported/started | watchdog_service.py |
+| Question                                 | Answer                                                                                        | Evidence                                                   |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| APScheduler background jobs sudah jalan? | **Ya** — `BackgroundScheduler` + `SQLAlchemyJobStore`, auto IN-PROGRESS check setiap 60 detik | scheduler_service.py, auto_transition_service.py           |
+| UI placement?                            | **Tab di halaman Automations** (top-level sidebar page). Bukan modal, bukan halaman terpisah. | Automations.svelte → AutomationsOutlook.svelte (263 lines) |
+| Threading pattern?                       | Daemon threads, scheduler punya thread pool, event polling 1.5s dari frontend                 | poll_events, event_queue.py                                |
+| Watchdog?                                | **Dead code** — file exists tapi never imported/started                                       | watchdog_service.py                                        |
 
 ---
 
@@ -637,6 +647,7 @@ pywebview js_api call (separate thread)
 ```
 
 **Kenapa pattern ini wajib:**
+
 - pywebview docs eksplisit: js_api methods run di separate threads
 - APScheduler jobs run di own executor threads
 - COM STA = harus diakses dari thread yang sama dia di-create
@@ -764,6 +775,7 @@ outlook_execution_logs (
 ```
 
 **Auto-send 3 options (bukan toggle):**
+
 - `Off` = rule jalan tapi tidak ada action
 - `Draft` = buat draft di Outlook, user review dulu **(default, paling aman)**
 - `Send ⚠️` = kirim otomatis, warning label permanen
@@ -772,25 +784,25 @@ outlook_execution_logs (
 
 **Jinja2 variables:**
 
-| Variable | Value |
-|---|---|
-| `{{sender_name}}` | Nama pengirim |
-| `{{sender_email}}` | Email address pengirim |
-| `{{subject}}` | Subject email |
-| `{{received_date}}` | Tanggal terima |
-| `{{body_preview}}` | 200 karakter pertama body |
+| Variable            | Value                     |
+| ------------------- | ------------------------- |
+| `{{sender_name}}`   | Nama pengirim             |
+| `{{sender_email}}`  | Email address pengirim    |
+| `{{subject}}`       | Subject email             |
+| `{{received_date}}` | Tanggal terima            |
+| `{{body_preview}}`  | 200 karakter pertama body |
 
 ---
 
 ## A6. User Decisions (Confirmed)
 
-| # | Parameter | Keputusan User |
-|---|---|---|
-| 1 | Scan interval | **3 menit**, configurable di Settings |
-| 2 | Incremental scan? | **Ya**, hanya email setelah `last_scan_timestamp` |
-| 3 | Max age email yang di-scan | **2 hari** terakhir (configurable) |
-| 4 | Body format | **Bisa pilih Plain / HTML** + opsi browse file HTML |
-| 5 | Log retention | **7 hari** auto-cleanup |
+| #   | Parameter                  | Keputusan User                                      |
+| --- | -------------------------- | --------------------------------------------------- |
+| 1   | Scan interval              | **3 menit**, configurable di Settings               |
+| 2   | Incremental scan?          | **Ya**, hanya email setelah `last_scan_timestamp`   |
+| 3   | Max age email yang di-scan | **2 hari** terakhir (configurable)                  |
+| 4   | Body format                | **Bisa pilih Plain / HTML** + opsi browse file HTML |
+| 5   | Log retention              | **7 hari** auto-cleanup                             |
 
 ---
 
@@ -898,12 +910,12 @@ if getattr(sys, 'frozen', False):
 
 ## B4. Outlook Version Compatibility
 
-| Scenario | Recommendation |
-|---|---|
-| Satu versi Outlook | `EnsureDispatch("Outlook.Application")` — fastest |
-| Multiple versi (365/2019/2016) | `dynamic.Dispatch("Outlook.Application")` — always safe |
-| Setelah Outlook patch break cache | Delete `%TEMP%\gen_py\3.x\{CLSID}` folder |
-| New Outlook (Win11 app) | COM via `Outlook.Application` ProgID mungkin unavailable — test! |
+| Scenario                          | Recommendation                                                   |
+| --------------------------------- | ---------------------------------------------------------------- |
+| Satu versi Outlook                | `EnsureDispatch("Outlook.Application")` — fastest                |
+| Multiple versi (365/2019/2016)    | `dynamic.Dispatch("Outlook.Application")` — always safe          |
+| Setelah Outlook patch break cache | Delete `%TEMP%\gen_py\3.x\{CLSID}` folder                        |
+| New Outlook (Win11 app)           | COM via `Outlook.Application` ProgID mungkin unavailable — test! |
 
 **Guard untuk version-specific properties:**
 
@@ -920,14 +932,14 @@ except AttributeError:
 
 **Ranked by effectiveness:**
 
-| # | Solution | Cost | Effectiveness |
-|---|---|---|---|
-| 1 | `--onedir` mode (bukan `--onefile`) | Free | ⭐⭐⭐⭐ |
-| 2 | Code-signing certificate (OV/EV) | $300-500/yr | ⭐⭐⭐⭐⭐ |
-| 3 | Submit ke Microsoft MAPS / Defender | Free | ⭐⭐⭐ (Defender only) |
-| 4 | Rebuild PyInstaller bootloader from source | Free | ⭐⭐⭐ |
-| 5 | Wrap dengan Inno Setup installer | Free | ⭐⭐⭐ |
-| 6 | `--noupx` / `upx=False` | Free | ⭐⭐ (harus default) |
+| #   | Solution                                   | Cost        | Effectiveness          |
+| --- | ------------------------------------------ | ----------- | ---------------------- |
+| 1   | `--onedir` mode (bukan `--onefile`)        | Free        | ⭐⭐⭐⭐               |
+| 2   | Code-signing certificate (OV/EV)           | $300-500/yr | ⭐⭐⭐⭐⭐             |
+| 3   | Submit ke Microsoft MAPS / Defender        | Free        | ⭐⭐⭐ (Defender only) |
+| 4   | Rebuild PyInstaller bootloader from source | Free        | ⭐⭐⭐                 |
+| 5   | Wrap dengan Inno Setup installer           | Free        | ⭐⭐⭐                 |
+| 6   | `--noupx` / `upx=False`                    | Free        | ⭐⭐ (harus default)   |
 
 > [!IMPORTANT]
 > **UPX HARUS dimatikan.** UPX compression = malware packer pattern = false positive trigger.
