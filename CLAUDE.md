@@ -2,14 +2,14 @@ CLAUDE.md
 
 This file provides operational guidance to Claude Code when working in this repository.
 
-Graphify Knowledge Graph (token reduction)
+Graphify Knowledge Graph (token reduction, optional)
 
-This repo has a graphify knowledge graph at graphify-out/ (gitignored, rebuildable, AST-only — no API cost). Use it to reduce token usage. Does not override PRD.md.
+This repo can optionally use a graphify knowledge graph at graphify-out/ (gitignored, rebuildable, AST-only — no API cost) to reduce token usage. The graph is NOT included in this Windows copy and must be rebuilt locally if the `graphify` CLI is installed. If `graphify` is not installed, skip this section and read source files directly. Does not override PRD.md.
 
-- For codebase questions, run `graphify query "<question>"` instead of grepping/reading raw files. Use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts. Returns a scoped subgraph, usually much smaller than raw grep/read.
+- If graphify-out/ exists: for codebase questions, run `graphify query "<question>"` instead of grepping/reading raw files. Use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts. Returns a scoped subgraph, usually much smaller than raw grep/read.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review when query/path/explain do not surface enough.
-- Read raw files only to modify/debug specific code, or when the graph lacks detail.
-- After modifying code OR documentation, run `rtk graphify update .` to refresh the graph (AST-only, no API cost). Do this after every implementation phase, not just at session end.
+- Read raw files only to modify/debug specific code, when the graph lacks detail, or when graphify is not installed.
+- To build or refresh the graph after modifying code or documentation, run `graphify update .` (AST-only, no API cost). Only if the `graphify` CLI is available on this machine.
 - Graph excludes .venv/ and node_modules/ via .gitignore. redesign_ui/ legacy PyQt6 is included as reference; treat it as legacy per Current Project Mode.
 
 Highest Priority Rule
@@ -125,11 +125,14 @@ Use prompts.chat tools only when explicitly useful for reusable prompts or reusa
 
 Do not upload private project code, secrets, credentials, proprietary content, or internal business data to external prompt libraries unless the user explicitly approves.
 
-RTK
+RTK (optional, only if installed)
 
-Always prefix shell commands with rtk, including each command in && chains.
+RTK is a Linux-oriented token-optimization CLI proxy. It is NOT required on Windows and may not be installed on this machine.
 
-RTK is a token-optimization wrapper, not a correctness tool. Still run normal verification.
+- If the `rtk` command is available, you may prefix shell commands with `rtk` (including each command in && chains) to reduce token usage.
+- If `rtk` is NOT installed, run all commands directly WITHOUT the `rtk` prefix. Do not attempt to install it just to satisfy these instructions.
+- RTK is a token-optimization wrapper, not a correctness tool. Still run normal verification.
+- All command examples in this file that show a leading `rtk` are optional: drop the `rtk` prefix if the tool is absent.
 
 Skill Routing Rules
 
@@ -288,48 +291,60 @@ If available, use project execution skills as follows:
 
 Commands
 
-Claude Code shells do not inherit the active venv. Use the full venv path.
+This is a Windows machine. Use Windows paths (backslashes) and the Windows venv interpreter. Claude Code shells do not inherit the active venv; use the full venv path or activate it first. See WINDOWS_SETUP.md for first-time bootstrap (create venv, install deps, build frontend).
+
+One-time setup (PowerShell, from repository root):
+
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+npm --prefix frontend install
+npm --prefix frontend run build
 
 Python tests:
 
-rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -v
-rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/ -q
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+.\.venv\Scripts\python.exe -m pytest tests/ -q
 
 Targeted Python test example:
 
-rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python -m pytest tests/test_phase_b_stores.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_phase_b_stores.py -v
 
-Frontend commands, once frontend/package.json exists:
+Frontend commands:
 
-rtk npm --prefix frontend install
-rtk npm --prefix frontend run build
+npm --prefix frontend install
+npm --prefix frontend run build
 
-Run pywebview app only when the current phase supports it:
+Run the desktop app (pywebview, from repository root):
 
-rtk /home/sayyidmibrahim/Development/projects/project_tracker_dbs/.venv/bin/python main.py
+.\.venv\Scripts\python.exe -m project_tracker.main
 
-Package for Windows transfer from repository root:
+The production frontend is served from web/static/ (built by `npm --prefix frontend run build`). A prebuilt web/static/ is included in this copy, so the app runs immediately after installing Python deps. Rebuild it whenever frontend source changes.
 
-rtk zip -r project*tracker_dbs_v$(date +%Y%m%d).zip . --exclude ".venv/*" "**pycache**/_" "_.pyc" ".git/\_" "node_modules/\*"
+Package for Windows release with PyInstaller (allowed on this machine):
 
-Do not run PyInstaller on Linux. Windows packaging must be done on Windows.
+.\.venv\Scripts\python.exe scripts\package.py
+
+PyInstaller now runs on this Windows machine. The legacy "do not run PyInstaller on Linux" rule no longer applies here, since this is the Windows target.
 
 Environment Boundaries
 
-Component Linux dev Windows target
-Core logic, filesystem, JSON Unit tests allowed Full app
-SQLite cache/index Unit tests allowed Full app
-Svelte/Vite frontend build Allowed Allowed
-pywebview shell preview Allowed when guarded Full app
-PyQt6 UI shell Reference only Deprecated
-Outlook COM Stub/skip only Real integration
-Teams/pyautogui Stub/skip only Real integration
-send2trash, os.startfile Stub/skip only Real integration
-PyInstaller Forbidden Allowed
+This is now the Windows target machine, so all integrations are LIVE and fully testable. The Windows-only code paths that were stubbed/skipped during Linux development now run for real.
 
-Windows-only imports must be lazy and guarded with sys.platform == "win32".
+Component — status on this Windows machine:
 
-Outlook, Teams, delete, and file-open services must instantiate without crashing on Linux.
+- Core logic, filesystem, JSON — Full app + unit tests
+- SQLite cache/index — Full app + unit tests
+- Svelte/Vite frontend build — Full build
+- pywebview shell — Full app (real WebView2 rendering)
+- PyQt6 UI shell — Reference only / deprecated (do not develop)
+- Outlook COM — Real integration (live)
+- Teams / pyautogui — Real integration (live)
+- send2trash, os.startfile — Real integration (live)
+- PyInstaller — Allowed (Windows packaging runs here)
+
+Windows-only imports are still guarded with sys.platform == "win32" by design; keep those guards intact for cross-platform correctness even though they now resolve true.
+
+The "must instantiate without crashing on Linux" rule was a Linux-dev safety constraint. Keep the guarded/lazy-import structure (do not rip it out), but on this machine these services are expected to actually work, not stub out.
 
 Do not add dependencies without explicit user confirmation, except dependencies already approved in PRD.md v3.1.
 
@@ -488,7 +503,7 @@ After coding a phase:
 1. Run relevant tests.
 2. Run frontend build when applicable.
 3. Use verification skill/checklist when available.
-4. Run `rtk graphify update .` to refresh the knowledge graph.
+4. If the `graphify` CLI is installed, run `graphify update .` to refresh the knowledge graph (skip if not installed).
 5. Update PROJECT_STATUS.md.
 6. Report changed files.
 7. Report commands run.
@@ -497,7 +512,7 @@ After coding a phase:
 
 Testing Notes
 
-Linux tests may verify:
+Automated tests (run on this Windows machine) verify:
 
 - core domain rules
 - state machine guards
@@ -507,7 +522,7 @@ Linux tests may verify:
 - bridge response formatting
 - guarded imports
 
-Windows manual verification is required for:
+Windows live verification (now runnable here, previously only on the Windows target):
 
 - Outlook COM
 - Teams automation
@@ -518,7 +533,7 @@ Windows manual verification is required for:
 - packaging
 - installer behavior
 
-No test may open blocking dialogs or require manual clicks.
+No automated test may open blocking dialogs or require manual clicks.
 
 Current First Safe Workflow
 
@@ -537,154 +552,24 @@ For the current migration, the first safe task is:
 
 Do not start production code implementation before Phase 0 is approved.
 
-<!-- rtk-instructions v2 -->
+<!-- rtk-note (windows) -->
 
-# RTK (Rust Token Killer) - Token-Optimized Commands
+# RTK (optional, Linux tooling)
 
-## Golden Rule
+RTK (Rust Token Killer) is a Linux-oriented token-optimization CLI. The full RTK command reference that previously lived here has been removed because RTK is typically not installed on Windows.
 
-**Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
+- If `rtk` IS installed on this machine, you may prefix commands with it to reduce token usage (see the RTK section above). It passes commands through unchanged when it has no dedicated filter, so it is safe.
+- If `rtk` is NOT installed (the normal Windows case), run every command directly without the `rtk` prefix. Do not install RTK solely to follow these instructions.
 
-**Important**: Even in command chains with `&&`, use `rtk`:
+<!-- /rtk-note -->
 
-```bash
-# ❌ Wrong
-git add . && git commit -m "msg" && git push
+## graphify
 
-# ✅ Correct
-rtk git add . && rtk git commit -m "msg" && rtk git push
-```
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
-## RTK Commands by Workflow
+Rules:
 
-### Build & Compile (80-90% savings)
-
-```bash
-rtk cargo build         # Cargo build output
-rtk cargo check         # Cargo check output
-rtk cargo clippy        # Clippy warnings grouped by file (80%)
-rtk tsc                 # TypeScript errors grouped by file/code (83%)
-rtk lint                # ESLint/Biome violations grouped (84%)
-rtk prettier --check    # Files needing format only (70%)
-rtk next build          # Next.js build with route metrics (87%)
-```
-
-### Test (60-99% savings)
-
-```bash
-rtk cargo test          # Cargo test failures only (90%)
-rtk go test             # Go test failures only (90%)
-rtk jest                # Jest failures only (99.5%)
-rtk vitest              # Vitest failures only (99.5%)
-rtk playwright test     # Playwright failures only (94%)
-rtk pytest              # Python test failures only (90%)
-rtk rake test           # Ruby test failures only (90%)
-rtk rspec               # RSpec test failures only (60%)
-rtk test <cmd>          # Generic test wrapper - failures only
-```
-
-### Git (59-80% savings)
-
-```bash
-rtk git status          # Compact status
-rtk git log             # Compact log (works with all git flags)
-rtk git diff            # Compact diff (80%)
-rtk git show            # Compact show (80%)
-rtk git add             # Ultra-compact confirmations (59%)
-rtk git commit          # Ultra-compact confirmations (59%)
-rtk git push            # Ultra-compact confirmations
-rtk git pull            # Ultra-compact confirmations
-rtk git branch          # Compact branch list
-rtk git fetch           # Compact fetch
-rtk git stash           # Compact stash
-rtk git worktree        # Compact worktree
-```
-
-Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
-
-### GitHub (26-87% savings)
-
-```bash
-rtk gh pr view <num>    # Compact PR view (87%)
-rtk gh pr checks        # Compact PR checks (79%)
-rtk gh run list         # Compact workflow runs (82%)
-rtk gh issue list       # Compact issue list (80%)
-rtk gh api              # Compact API responses (26%)
-```
-
-### JavaScript/TypeScript Tooling (70-90% savings)
-
-```bash
-rtk pnpm list           # Compact dependency tree (70%)
-rtk pnpm outdated       # Compact outdated packages (80%)
-rtk pnpm install        # Compact install output (90%)
-rtk npm run <script>    # Compact npm script output
-rtk npx <cmd>           # Compact npx command output
-rtk prisma              # Prisma without ASCII art (88%)
-```
-
-### Files & Search (60-75% savings)
-
-```bash
-rtk ls <path>           # Tree format, compact (65%)
-rtk read <file>         # Code reading with filtering (60%)
-rtk grep <pattern>      # Search grouped by file (75%). Format flags (-c, -l, -L, -o, -Z) run raw.
-rtk find <pattern>      # Find grouped by directory (70%)
-```
-
-### Analysis & Debug (70-90% savings)
-
-```bash
-rtk err <cmd>           # Filter errors only from any command
-rtk log <file>          # Deduplicated logs with counts
-rtk json <file>         # JSON structure without values
-rtk deps                # Dependency overview
-rtk env                 # Environment variables compact
-rtk summary <cmd>       # Smart summary of command output
-rtk diff                # Ultra-compact diffs
-```
-
-### Infrastructure (85% savings)
-
-```bash
-rtk docker ps           # Compact container list
-rtk docker images       # Compact image list
-rtk docker logs <c>     # Deduplicated logs
-rtk kubectl get         # Compact resource list
-rtk kubectl logs        # Deduplicated pod logs
-```
-
-### Network (65-70% savings)
-
-```bash
-rtk curl <url>          # Compact HTTP responses (70%)
-rtk wget <url>          # Compact download output (65%)
-```
-
-### Meta Commands
-
-```bash
-rtk gain                # View token savings statistics
-rtk gain --history      # View command history with savings
-rtk discover            # Analyze Claude Code sessions for missed RTK usage
-rtk proxy <cmd>         # Run command without filtering (for debugging)
-rtk init                # Add RTK instructions to CLAUDE.md
-rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
-```
-
-## Token Savings Overview
-
-| Category         | Commands                       | Typical Savings |
-| ---------------- | ------------------------------ | --------------- |
-| Tests            | vitest, playwright, cargo test | 90-99%          |
-| Build            | next, tsc, lint, prettier      | 70-87%          |
-| Git              | status, log, diff, add, commit | 59-80%          |
-| GitHub           | gh pr, gh run, gh issue        | 26-87%          |
-| Package Managers | pnpm, npm, npx                 | 70-90%          |
-| Files            | ls, read, grep, find           | 60-75%          |
-| Infrastructure   | docker, kubectl                | 85%             |
-| Network          | curl, wget                     | 65-70%          |
-
-Overall average: **60-90% token reduction** on common development operations.
-
-<!-- /rtk-instructions -->
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
