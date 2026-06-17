@@ -250,6 +250,21 @@ clean; frontend node tests 66 passed (incl. 2 new Automations tests); pytest 169
 passed; `py_compile` clean for `project_tracker/app_web.py` and
 `project_tracker/web/js_api.py`. Backend was not modified (frontend + docs only).
 
+## 2026-06-17 — Cleanup MVP-1 Phase 0
+
+Status: in progress
+
+Baseline:
+
+- Backend tests: PASS — `1724 passed, 20 skipped in 108.00s`.
+- Frontend build: PASS — `npm --prefix frontend run build` completed, Vite built in 4.35s.
+- Working tree: existing frontend changes preserved; generated probe/log files removed; root `project_data.json` inspected and ignored pending user decision.
+- Graphify orientation: ran `graphify query "working tree hygiene project_data root junk artifacts"`; output skewed by minified Tailwind god-node, so exact status/file inspection used for Phase 0.
+
+Next:
+
+- Phase 1 crash bugs.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
