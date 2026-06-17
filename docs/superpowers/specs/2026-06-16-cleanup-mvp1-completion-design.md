@@ -117,3 +117,26 @@ Dikerjakan phase-by-phase, verifikasi tiap phase (test + build). Tidak sekali ja
 - P0-6 mungkin stale → re-verify, jangan tambah dep yang tak perlu.
 - Working tree punya uncommitted frontend work → commit hati-hati, jangan overwrite kerjaan user.
 - Windows-live integration (Outlook/Teams/packaging) hanya bisa diverifikasi manual.
+
+## Working Rules (user-specified)
+
+### R1. Git = hanya untuk delegate agent
+
+Git local ada hanya supaya Claude Code delegate agents bisa kerja (worktree). Bukan untuk upload. Edit file langsung, jangan bikin commit/branch ritual. Commit hanya kalau delegate agent butuh, atau user minta. Maksimalkan rtk + caveman untuk hemat token.
+
+### R2. Tiap phase selesai → JALANKAN APP + checklist + live monitoring
+
+Setelah tiap phase / perubahan code signifikan:
+
+1. Jalankan app (`python -m project_tracker.main`).
+2. Berikan checklist user-facing fitur untuk di-test manual.
+3. **WAJIB: live monitoring** — saat user test app, monitor stderr/stdout, tangkap error/exception/traceback yang user tidak lihat dari UI. User hanya cek user flow dan fitur; AI tangkap backend error.
+4. Laporkan temuan dari monitoring bersamaan dengan feedback user.
+
+### R3. R2 permanent — cross-session
+
+Aturan R2 berlaku di semua sesi (baru maupun lanjutan). Simpan di memory. Juga: user bisa interrupt mid-phase dengan request baru — tangani inline, jangan tolak karena "sedang di tengah phase".
+
+### R4. No conflict — inline only
+
+Seluruh project harus inline (tidak ada conflict). Kecuali file tracking pengerjaan (PROJECT_STATUS.md). Jangan bikin file yang conflict dengan kode existing tanpa merge. Edit in-place.
