@@ -265,6 +265,29 @@ Next:
 
 - Phase 1 crash bugs.
 
+## 2026-06-18 — Cleanup MVP-1 Phase 1 crash bugs
+
+Status: completed / verified on Windows dev machine.
+
+- P0-7: `project_open_folder` and `subproject_create` are wired through `create_js_api()` and covered by regression tests.
+- P0-5: `_create_scheduler_safe()` deduped to a single definition.
+- P0-6: SQLAlchemy finding verified stale; no `SQLAlchemyJobStore` / `apscheduler.jobstores.sqlalchemy` import remains; no dependency added.
+- P0-8: PyInstaller spec includes lazy Windows hidden imports (`pythoncom`, `win32com.client`, `pyperclip`, `pyautogui`) and disables UPX.
+- Static-serving preflight fix: pywebview serves built Svelte `web/static/index.html` via absolute path; `/index.html` returns 200 in live HTTP probe.
+
+Verification:
+
+- `npm --prefix frontend run build` — PASS.
+- `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
+- `.\.venv\Scripts\python.exe -m py_compile project_tracker\app_web.py project_tracker\web\js_api.py` — PASS.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_phase_d_app_web_project_details_read_wiring.py::test_project_open_folder_wired_and_returns_ok tests/test_phase_d_app_web_project_details_read_wiring.py::test_subproject_create_wired_and_creates_folder -q` — PASS (`2 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests/test_scheduler_entries_unit.py -q` — PASS (`12 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests/test_phase_d_app_web_svelte_static_serving.py -q` — PASS (`6 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests/ -q` — PASS (`1725 passed, 20 skipped`).
+- `.\.venv\Scripts\python.exe -m project_tracker.main` live HTTP probe — PASS (`/index.html` 200, built app HTML present, JS asset 200).
+
+Next: Phase 2 dependency & entry-point reconciliation.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
