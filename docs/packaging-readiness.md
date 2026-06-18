@@ -21,9 +21,12 @@ only after the Windows manual RC test passes
   PyInstaller entry script.
 - **Frontend output**: `vite build` writes to `web/static/` and is served by the
   pywebview HTTP server. This folder MUST be bundled as data in any package.
-- **Packaging tool already declared**: `pyinstaller>=6.0.0` is present in both
-  `requirements.txt` and `pyproject.toml` dependencies. No new dependency is
-  required to package.
+- **Packaging/runtime deps declared consistently**: `requirements.txt` and
+  `pyproject.toml` both declare the approved runtime dependency set:
+  `pywebview`, `pywin32`, `pyinstaller`, `pyautogui`, `pyperclip`,
+  `send2trash`, `watchdog`, `python-dateutil`, and `APScheduler`. `PyQt6` is
+  intentionally absent from production dependency metadata because the PyQt6 UI
+  is reference-only legacy.
 - **PyInstaller spec is authored** (`project_tracker_dbs.spec`) at the repo root.
   It bundles `web/static/` and `assets/` as data, excludes `PyQt6`, declares
   guarded Windows hidden imports (`webview`, `apscheduler`, `dateutil`,
@@ -36,8 +39,8 @@ only after the Windows manual RC test passes
   PyInstaller, and imports PyInstaller lazily only on Windows. The refuse path is
   Linux-runnable and exercised by automated checks.
 - **Windows runtime deps present**: `pywin32`, `pyautogui`, `pyperclip`,
-  `send2trash`, `watchdog`, `APScheduler` are declared. WebView2 Runtime is an OS
-  prerequisite, not a pip dependency.
+  `send2trash`, `watchdog`, `APScheduler`, `python-dateutil`, and `pywebview`
+  are declared. WebView2 Runtime is an OS prerequisite, not a pip dependency.
 
 ## Missing pieces (blockers/gaps for packaging)
 
@@ -53,13 +56,9 @@ only after the Windows manual RC test passes
    Windows: a missing/empty `web/static/` at build time (frontend not built) would
    produce a blank window. Build the frontend first so the spec's pre-build
    directory check passes.
-3. **Dependency manifest drift (report-only; do NOT change without approval).**
-   `pyproject.toml` `[project.dependencies]` is out of sync with
-   `requirements.txt`:
-   - `pyproject.toml` is MISSING: `pywebview`, `APScheduler`, `python-dateutil`.
-   - `pyproject.toml` still LISTS legacy `PyQt6` (reference-only per CLAUDE.md).
-   - For packaging, `requirements.txt` is the more accurate runtime manifest.
-     This drift should be reconciled in a dedicated, approved slice, not here.
+3. **Dependency manifest drift is resolved (2026-06-18 Phase 2).**
+   `pyproject.toml` and `requirements.txt` now declare the same approved runtime
+   dependency names. `PyQt6` is not a production runtime dependency.
 4. **WebView2 Runtime availability** on target machines must be confirmed
    (Evergreen runtime install or fixed-version bundling decision).
 5. **Settings/data path strategy** for a packaged build must be confirmed (where
@@ -84,9 +83,9 @@ dependency — out of scope.
 - Missing `web/static/` in the bundle → blank window at runtime.
 - Windows-only imports (Outlook COM, pyautogui) must remain lazy/guarded so the
   packaged app starts even when those subsystems are unavailable.
-- `pyproject.toml`/`requirements.txt` drift could cause a packaged build to miss
-  `pywebview`/`APScheduler` if the build resolves deps from `pyproject.toml`.
-  Build from `requirements.txt` or reconcile first (approved slice).
+- Dependency drift is now guarded by
+  `tests/test_phase_2_dependency_entrypoint_reconciliation.py`; keep it green
+  if either `requirements.txt` or `pyproject.toml` changes.
 - Path handling: Windows settings paths must not be normalized to POSIX.
 - Secrets/machine-specific paths must not be bundled.
 
@@ -94,10 +93,11 @@ dependency — out of scope.
 
 > Packaging session (Windows only). Preconditions: Windows manual RC test in
 > `docs/windows-manual-test-checklist.md` passed; `npm --prefix frontend run
-build` done so `web/static/` exists. Tasks: (1) Decide whether to reconcile
-> `pyproject.toml` deps with `requirements.txt` in a separate approved slice
-> first. (2) Use the existing authored spec (`project_tracker_dbs.spec`) and entry
-> point (`scripts/package.py`) for entry `project_tracker/main.py`; review that it
+build` done so `web/static/` exists. Tasks: (1) Confirm
+> `tests/test_phase_2_dependency_entrypoint_reconciliation.py` is green so
+> dependency metadata and entry points are still aligned. (2) Use the existing
+> authored spec (`project_tracker_dbs.spec`) and entry point
+> (`scripts/package.py`) for entry `project_tracker/main.py`; review that it
 > bundles `web/static/` as data and keeps Windows-only imports lazy. (3) Build a
 > one-folder build first, launch it, confirm WebView2 window + Svelte UI load.
 > (4) Confirm settings/cache/data land in intended Windows app-data locations and
