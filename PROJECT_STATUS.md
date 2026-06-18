@@ -344,6 +344,29 @@ Verification:
 
 Next: Phase 4 cleanup queue.
 
+## 2026-06-18 — Cleanup MVP-1 Phase 4 Project Details datetime + plan editor
+
+Status: completed / automated verification green on Windows dev machine; live manual UI check pending.
+
+- P1-6: Project Details metadata editor now includes `datetime-local` controls for `start_datetime` and `end_datetime`.
+- P1-12: `implementation_plan` remains editable in the same metadata editor and is saved with the datetime fields through `project_update`.
+- `project_get` now returns `implementation_plan` and serialized `history`, allowing the Activity History card to render real history rows instead of the stale deferred placeholder.
+- Datetime draft conversion preserves local wall-clock input and sends timezone-aware ISO strings with the OS local offset.
+- Added regression coverage for `project_update` persistence of start/end datetime + implementation plan, plus a frontend source guard for the Project Details editor wiring.
+
+Verification:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_phase_g_project_create_update.py::test_project_update_persists_start_end_datetime_and_plan -q` — RED first (`KeyError: 'implementation_plan'`), then PASS (`1 passed`).
+- `npm --prefix frontend test -- --test-name-pattern "ProjectDetails source includes datetime-local"` — RED first, then PASS (`100 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests\test_phase_g_project_create_update.py tests\test_phase_d_app_web_project_details_read_wiring.py -q` — PASS (`32 passed`).
+- `.\.venv\Scripts\python.exe -m py_compile project_tracker\app_web.py` — PASS.
+- `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
+- `npm --prefix frontend run build` — PASS (`vite build` completed in 5.89s).
+- `npm --prefix frontend test` — PASS (`100 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests\ -q` — PASS (`1733 passed, 20 skipped`).
+
+Next: run live app monitor + manual Phase 4 checklist, then Phase 5 dead-code purge queue.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
