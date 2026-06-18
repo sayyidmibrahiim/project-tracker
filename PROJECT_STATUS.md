@@ -373,6 +373,30 @@ Verification:
 
 Next: run live app monitor + manual Phase 4 checklist, then Phase 5 dead-code purge queue.
 
+## 2026-06-18 — Approved cleanup: legacy artifacts + dead AppAPI
+
+Status: completed / automated verification green on Windows dev machine; one locked ignored runtime log remains until its owning process releases the handle.
+
+- Removed approved old static HTML frontend files under `frontend/*.html` and the old `frontend/assets/tailwind.min.js` artifact. Production frontend remains Svelte + TypeScript + Vite.
+- Removed approved duplicate historical snapshots: `PRD_old.md` and `PROJECT_STATUS_old.md`.
+- Confirmed stale release zip deletions for `project_tracker_dbs_v20260601.zip` and `project_tracker_dbs_windows_test.zip`.
+- Removed the dead `AppAPI` legacy bridge class from `project_tracker/app_web.py`; runtime still uses `create_js_api()` and `JsApi`.
+- Added `.phase4_*.log` to `.gitignore`; `.phase4_as_is_parity_runtime.log` was still locked by another process and is now ignored until deletable.
+- Updated migration/status notes to stop referencing removed duplicate docs.
+
+Verification:
+
+- `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
+- `npm --prefix frontend test` — PASS (`110 passed`).
+- `npm --prefix frontend run build` — PASS (`vite build` completed in 3.09s).
+- `.\.venv\Scripts\python.exe -m py_compile project_tracker\app_web.py project_tracker\web\js_api.py project_tracker\main.py` — PASS.
+- `.\.venv\Scripts\python.exe -m pytest tests\test_app_web_dashboard_auto_move.py tests\test_phase_d_app_web_svelte_static_serving.py tests\test_bridge_contract_guard.py -q` — PASS (`25 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests\test_phase_2_dependency_entrypoint_reconciliation.py -q` — PASS (`6 passed`).
+- `.\.venv\Scripts\python.exe -m pytest tests\ -q` — PASS (`1736 passed, 20 skipped`).
+- `graphify update .` — PASS (`4675 nodes`, `10899 edges`, `236 communities`).
+
+Next: delete the locked `.phase4_as_is_parity_runtime.log` once the owning process releases it, then continue Phase 5 cleanup queue.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
@@ -1703,9 +1727,9 @@ Windows test**.
 
 ## Phase 0 Boundary
 
-Phase 0 documentation alignment is complete. `PROJECT_STATUS_old.md` remains historical reference unless deletion is explicitly approved.
+Phase 0 documentation alignment is complete. Historical duplicate status/PRD snapshots were removed during the 2026-06-18 approved cleanup.
 
-No legacy/reference files should be deleted without explicit approval.
+Legacy/reference files require explicit approval before deletion.
 
 ## PRD Completion Spec — In Progress (uncommitted, 2026-06-08)
 

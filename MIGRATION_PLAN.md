@@ -27,12 +27,11 @@ Each phase needs explicit approval and verification before moving to the next ph
 - `project_tracker/`
 - `frontend/`
 - `redesign_ui/*.py`
-- `PRD_old.md`
-- `PROJECT_STATUS_old.md`
+- historical PRD/status snapshots deleted only after explicit approval
 
 ### Exit Criteria
 
-- `PROJECT_STATUS.md` records current migration status and supersedes `PROJECT_STATUS_old.md`.
+- `PROJECT_STATUS.md` records current migration status.
 - `MIGRATION_PLAN.md` records phase order, entry criteria, and exit criteria.
 - `redesign_ui/_REFERENCE_ONLY.md` clarifies PyQt6/reference/static-HTML boundaries.
 - Git diff shows only Phase 0 allowed files changed.
