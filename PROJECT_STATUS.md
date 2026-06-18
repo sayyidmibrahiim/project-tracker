@@ -320,6 +320,30 @@ Verification:
 
 Next: Phase 3 per cleanup/audit queue.
 
+## 2026-06-18 — Cleanup MVP-1 Phase 3 atomic notes write
+
+Status: completed / verified on Windows dev machine.
+
+- P2-25: `_NotesServiceAdapter.update_notes()` now writes `notes.md` via a
+  sibling temp file and atomic replace instead of direct `Path.write_text()`.
+- Existing `IMPLEMENTED` view-only lock behavior is unchanged.
+- Added regression coverage proving a failed temp-file write preserves existing
+  `notes.md` content and leaves no `.notes.md.tmp` file behind.
+- No note editor UI, bridge signature, metadata JSON, packaging, or storage
+  migration changes were made.
+
+Verification:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_phase_e_notes_persistence.py -q` — PASS (`9 passed`).
+- `.\.venv\Scripts\python.exe -m py_compile project_tracker\app_web.py` — PASS.
+- `.\.venv\Scripts\python.exe -m pytest tests\ -q` — PASS (`1732 passed, 20 skipped`).
+- `npm --prefix frontend run build` — PASS (`vite build` completed in 3.35s).
+- `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
+- `.\.venv\Scripts\python.exe -m project_tracker.main` live HTTP probe — PASS (`/index.html` 200, JS asset 200).
+- `graphify update .` — PASS (`graph.json` and `GRAPH_REPORT.md` updated; HTML skipped because graph has 5462 nodes > 5000 limit).
+
+Next: Phase 4 cleanup queue.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
