@@ -8,6 +8,8 @@ Current branch: `prd-v31-migration`.
 
 `PRD.md` v3.1 remains the product and architecture source of truth. The current codebase has a mature backend/domain/bridge/Svelte implementation and Linux-automated verification has passed for the PRD-completion increment. The app is **not yet final Windows-release verified** because real Windows-only runtime behavior still requires manual testing on Windows 10/11.
 
+Project Details prototype-parity pivot (2026-06-18): user overrode the prior Notion-style direction for menu/page layout and requested `redesign_ui/*.py` parity. `ProjectDetails.svelte` now follows `redesign_ui/project_details_redesign.py` more closely: Project Command Center contains Project/Sub Project selectors plus Open/Delete only; body remains 50/50 with Project Identity, Schedule, Sub Projects on the left and Files, Notes, Activity History on the right; extra in-page Folder Transitions and Project Actions panels were removed from this page; Add Sub Project is surfaced inside the Sub Projects panel using the existing `subproject_create` bridge. Phase 4 datetime + implementation_plan editor remains wired through `project_update`. Gates: `npm --prefix frontend run check` clean, `npm --prefix frontend test` 101 passed, `npm --prefix frontend run build` clean. Runtime/manual WebView2 verification still pending below.
+
 Slice 0 truth reset: documentation alignment completed on 2026-06-08; production code unchanged.
 
 Dashboard menu completion (2026-06-09, PRD §11, plan in docs/dashboard-fix-plan.md,
