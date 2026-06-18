@@ -397,6 +397,29 @@ Verification:
 
 Next: delete the locked `.phase4_as_is_parity_runtime.log` once the owning process releases it, then continue Phase 5 cleanup queue.
 
+## 2026-06-18 — AS-IS parity Slice 1 state dropdown legality
+
+Status: completed / automated verification green on Windows dev machine; live manual UI check pending.
+
+- Dashboard CR/Drone state dropdowns now render PRD-legal user next-state options instead of the full state catalog.
+- Project Details CR/selected-subproject Drone state dropdowns now use the same legal next-state filtering.
+- `IN-PROGRESS` remains auto-only and disabled when present.
+- `REOPEN` remains an action, not a persisted CR state; Dashboard still routes it through `folder_reopen` behind `ConfirmModal` only for POSTPONED/CANCELED.
+- Closed state dropdown triggers now keep the AS-IS solid DBS-red chip styling while staying native keyboard-accessible selects.
+- Backend guards remain authoritative: rejected `cr_update_state`/`drone_update` responses surface in the existing error banners and reload/revert via existing flows.
+- No Python code or bridge signatures changed.
+
+Verification:
+
+- `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
+- `npm --prefix frontend test` — PASS (`113 passed`).
+- `npm --prefix frontend run build` — PASS (`vite build` completed in 3.50s).
+- `.\.venv\Scripts\python.exe -m pytest tests\test_app_web_dashboard_auto_move.py tests\test_phase_d_app_web_project_details_read_wiring.py -q` — PASS (`34 passed`).
+- `graphify update .` — PASS (`4695 nodes`, `10918 edges`, `230 communities`).
+- Python `py_compile` skipped — no Python files changed.
+
+Next: run live app monitor/manual checklist for Slice 1, then continue Slice 2 Project Details parity completion.
+
 ## Source of Truth
 
 `PRD.md` v3.1 is authoritative. If code, old docs, comments, folder structure, or PyQt6 prototype behavior conflicts with `PRD.md`, report the conflict before implementation.
