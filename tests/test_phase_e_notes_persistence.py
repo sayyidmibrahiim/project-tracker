@@ -156,6 +156,29 @@ def test_notes_update_round_trip(js_api, temp_project):
     assert result["data"] == "round trip test"
 
 
+def test_notes_update_failure_preserves_existing_notes_file(
+    js_api, temp_project, monkeypatch
+):
+    """Failed notes update leaves existing notes.md unchanged and removes temp file."""
+    project_path = temp_project["project_path"]
+    notes_file = project_path / "notes.md"
+    notes_file.write_text("original notes", encoding="utf-8")
+    original_write_text = Path.write_text
+
+    def fail_temp_notes_write(self: Path, data: str, *args, **kwargs):
+        if self.name == ".notes.md.tmp":
+            raise OSError("simulated temp write failure")
+        return original_write_text(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_temp_notes_write)
+
+    result = js_api.notes_update(str(project_path), "new notes")
+
+    assert result["ok"] is False
+    assert notes_file.read_text(encoding="utf-8") == "original notes"
+    assert not (project_path / ".notes.md.tmp").exists()
+
+
 # ── unrelated mutations remain unavailable ────────────────────────────────
 
 

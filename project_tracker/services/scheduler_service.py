@@ -119,42 +119,14 @@ class SchedulerService:
     def _create_scheduler_safe(cls) -> Any | None:
         """Create the default scheduler, tolerating a missing apscheduler.
 
-        On environments where ``apscheduler`` is not installed (Linux dev/test
-        baseline), return ``None`` so entry CRUD still works (job-management
-        calls are getattr-guarded no-ops). ``start()`` re-attempts creation and
-        surfaces a clear error if a scheduler is genuinely required.
+        On platforms/environments where ``apscheduler`` is not installed, return
+        ``None`` so entry CRUD still works (job-management calls are
+        getattr-guarded no-ops). ``start()`` re-attempts creation and surfaces a
+        clear error if a scheduler is genuinely required.
         """
         try:
             return cls._create_scheduler()
-        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
-            return None
-
-    @classmethod
-    def _create_scheduler_safe(cls) -> Any | None:
-        """Create the default scheduler, tolerating a missing apscheduler.
-
-        On environments where ``apscheduler`` is not installed (the Linux
-        dev/test baseline), return ``None`` so entry CRUD still works
-        (job-management calls are getattr-guarded no-ops). ``start()`` re-attempts
-        creation and surfaces a clear error if a scheduler is genuinely required.
-        """
-        try:
-            return cls._create_scheduler()
-        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
-            return None
-
-    @classmethod
-    def _create_scheduler_safe(cls) -> Any | None:
-        """Create the default scheduler, tolerating a missing apscheduler.
-
-        On platforms/environments where ``apscheduler`` is not installed (e.g. the
-        Linux dev/test baseline), return ``None`` so entry CRUD still works
-        (job-management calls are getattr-guarded no-ops). ``start()`` re-attempts
-        creation and surfaces a clear error if a scheduler is genuinely required.
-        """
-        try:
-            return cls._create_scheduler()
-        except Exception:  # noqa: BLE001 - apscheduler optional off-Windows
+        except Exception:  # noqa: BLE001 - optional runtime scheduler dependency
             return None
 
     # ------------------------------------------------------------------

@@ -40,6 +40,7 @@ class DashboardProject:
     drone_ticket_count: int
     updated_at: datetime | None
     scanned_at: datetime | None
+    subprojects: tuple[str, ...] = ()
     drone_tickets: tuple[DashboardRowDrone, ...] = ()
 
 
@@ -103,8 +104,19 @@ def _dashboard_project_from_cache_row(row: CachedProjectRow) -> DashboardProject
         drone_ticket_count=_drone_ticket_count(row.drone_tickets_json),
         updated_at=row.updated_at,
         scanned_at=row.scanned_at,
+        subprojects=_subprojects_from_json(row.subprojects_json),
         drone_tickets=_dashboard_drones_from_json(row.drone_tickets_json),
     )
+
+
+def _subprojects_from_json(subprojects_json: str) -> tuple[str, ...]:
+    try:
+        parsed: Any = json.loads(subprojects_json)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(parsed, list):
+        return ()
+    return tuple(str(item) for item in parsed if isinstance(item, str) and item.strip())
 
 
 def _dashboard_drones_from_json(drone_tickets_json: str) -> tuple[DashboardRowDrone, ...]:

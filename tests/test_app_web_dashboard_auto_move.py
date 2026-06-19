@@ -1,4 +1,4 @@
-"""Task 6 — `_apply_auto_move` helper on the AppAPI adapter layer.
+"""Task 6 — `_apply_auto_move` helper on the JsApi project-service adapter layer.
 
 Proves the reusable helper, in isolation (Task 7 wires it into
 update_cr_state), performs the auto-move after an inline CR state persist:

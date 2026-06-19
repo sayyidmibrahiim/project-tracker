@@ -20,11 +20,15 @@ def test_get_frontend_entry_path_prefers_built_svelte_index():
     assert path == app_web.PROJECT_ROOT / "web" / "static" / "index.html"
 
 
-def test_resolve_frontend_url_uses_built_svelte_relative_path():
-    """Production frontend path lets pywebview serve built Svelte via HTTP server."""
+def test_resolve_frontend_url_uses_absolute_built_svelte_index():
+    """Production frontend URL is the absolute built index path for pywebview HTTP serving."""
     from project_tracker import app_web
 
-    assert app_web.resolve_frontend_url() == "web/static/index.html"
+    url = app_web.resolve_frontend_url()
+
+    assert url == str(app_web.get_frontend_entry_path())
+    assert Path(url).is_absolute()
+    assert Path(url).parent == app_web.SVELTE_STATIC_DIR
 
 
 def test_resolve_frontend_url_dev_mode_preserved():

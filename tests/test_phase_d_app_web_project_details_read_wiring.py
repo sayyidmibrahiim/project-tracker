@@ -209,11 +209,29 @@ def test_folder_move_still_deferred(js_api):
     assert result["error"] is not None
 
 
-def test_subproject_create_still_deferred(js_api):
-    """subproject_create still returns SERVICE_UNAVAILABLE."""
-    result = js_api.subproject_create("/tmp/x", "new-sub")
-    assert result["ok"] is False
-    assert result["error"] is not None
+def test_project_open_folder_wired_and_returns_ok(js_api, temp_project, monkeypatch):
+    """project_open_folder delegates to filesystem.open_folder."""
+    from project_tracker.infrastructure import filesystem
+
+    opened: list[Path] = []
+    monkeypatch.setattr(filesystem, "open_folder", lambda path: opened.append(Path(path)))
+
+    path = temp_project["project_path"]
+    result = js_api.project_open_folder(str(path))
+
+    assert result["ok"] is True
+    assert opened == [path]
+
+
+def test_subproject_create_wired_and_creates_folder(js_api, temp_project):
+    """subproject_create creates a folder inside the project."""
+    path = temp_project["project_path"]
+
+    result = js_api.subproject_create(str(path), "new-sub")
+
+    assert result["ok"] is True
+    assert (path / "new-sub").is_dir()
+    assert result["data"]["subproject"] == "new-sub"
 
 
 def test_file_open_dev_skipped_off_windows(js_api):

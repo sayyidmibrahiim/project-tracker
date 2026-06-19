@@ -14,6 +14,7 @@ def _project_row(
     project_state: ProjectState = ProjectState.UAT_PREPARE,
     project_name: str = "PAYMENT_MODULE_UPGRADE",
     cr_state: CRState = CRState.APPROVED,
+    subprojects_json: str = "[]",
 ) -> CachedProjectRow:
     return CachedProjectRow(
         project_path=project_path,
@@ -24,6 +25,7 @@ def _project_row(
         end_datetime=datetime(2026, 6, 3, 11, 0, tzinfo=timezone.utc),
         cr_number="CR202604209900114",
         cr_state=cr_state,
+        subprojects_json=subprojects_json,
         updated_at=datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc),
     )
 
@@ -154,10 +156,49 @@ def test_project_index_schema_matches_prd_cache_columns(tmp_path: Path) -> None:
         "start_datetime",
         "end_datetime",
         "drone_tickets_json",
+        "subprojects_json",
         "t10_status",
         "updated_at",
         "scanned_at",
     ]
+
+
+def test_initialize_migrates_existing_project_index_with_subprojects_json(tmp_path: Path) -> None:
+    import sqlite3
+
+    db_path = tmp_path / "cache.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE project_index (
+                path TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                year TEXT NOT NULL,
+                folder_state TEXT NOT NULL,
+                cr_link TEXT,
+                cr_number TEXT,
+                cr_state TEXT,
+                cr_pending_approval_at TEXT,
+                start_datetime TEXT,
+                end_datetime TEXT,
+                drone_tickets_json TEXT,
+                t10_status TEXT,
+                updated_at TEXT,
+                scanned_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+    CacheDb(db_path).initialize()
+
+    with sqlite3.connect(db_path) as connection:
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(project_index)").fetchall()]
+        default_value = connection.execute(
+            "SELECT dflt_value FROM pragma_table_info('project_index') WHERE name = 'subprojects_json'"
+        ).fetchone()[0]
+
+    assert "subprojects_json" in columns
+    assert default_value == "'[]'"
 
 
 def test_health_check_returns_true_for_initialized_db(tmp_path: Path) -> None:

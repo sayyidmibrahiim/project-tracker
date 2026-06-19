@@ -267,6 +267,21 @@ class LinkBankDependencyProtocol(Protocol):
     def archive_link(self, link_id: str) -> object:
         """Archive link."""
 
+    def category_create(self, name: str) -> object:
+        """Create category."""
+
+    def category_rename(self, old_name: str, new_name: str) -> object:
+        """Rename category."""
+
+    def category_archive(self, name: str) -> object:
+        """Archive category."""
+
+    def export_json(self) -> object:
+        """Export full link bank JSON."""
+
+    def import_json(self, data: dict[str, object]) -> object:
+        """Import full link bank JSON."""
+
 
 class AutomationServiceProtocol(Protocol):
     """Automation service surface used by JsApi."""
@@ -470,6 +485,50 @@ class JsApi:
             return ok({"valid": True, "error": None})
         except Exception as exc:
             return ok({"valid": False, "error": str(exc)})
+
+    def util_choose_folder(self) -> dict[str, object]:
+        """Open the native OS folder picker and return the chosen path.
+
+        Lazily imports pywebview so the bridge stays importable in headless
+        Linux/dev/test environments where pywebview has no window. Returns the
+        chosen path in ``data.path`` (null when the user cancels). Any dialog
+        failure surfaces as a standard fail envelope rather than crashing the
+        bridge call.
+        """
+        try:
+            import webview  # lazy: not imported at module load
+        except Exception as exc:  # pragma: no cover - pywebview always importable in app
+            return fail(
+                f"Folder picker unavailable: {exc}",
+                code="FOLDER_PICKER_UNAVAILABLE",
+            )
+
+        windows = getattr(webview, "windows", []) or []
+        if not windows:
+            return fail(
+                "No application window is available to host the folder picker.",
+                code="FOLDER_PICKER_UNAVAILABLE",
+            )
+
+        try:
+            file_dialog = getattr(webview, "FileDialog", None)
+            folder_dialog = (
+                getattr(file_dialog, "FOLDER", None)
+                if file_dialog is not None
+                else None
+            )
+            if folder_dialog is None:
+                folder_dialog = getattr(webview, "FOLDER_DIALOG")
+            result = windows[0].create_file_dialog(folder_dialog)
+        except Exception as exc:
+            return fail(str(exc), code="FOLDER_PICKER_FAILED")
+
+        # pywebview returns a tuple/list of selected paths, or empty on cancel.
+        path: str | None = None
+        if result:
+            first = result[0] if isinstance(result, (list, tuple)) else result
+            path = str(first) if first else None
+        return ok({"path": path})
 
     def year_list(self) -> dict[str, object]:
         """Return years from injected year service."""
@@ -1244,6 +1303,46 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_ARCHIVE_LINK_FAILED")
 
+    def linkbank_category_create(self, name: str) -> dict[str, object]:
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.category_create(name)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_CATEGORY_CREATE_FAILED")
+
+    def linkbank_category_rename(self, old_name: str, new_name: str) -> dict[str, object]:
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.category_rename(old_name, new_name)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_CATEGORY_RENAME_FAILED")
+
+    def linkbank_category_archive(self, name: str) -> dict[str, object]:
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.category_archive(name)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_CATEGORY_ARCHIVE_FAILED")
+
+    def linkbank_export(self) -> dict[str, object]:
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.export_json()))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_EXPORT_FAILED")
+
+    def linkbank_import(self, data: dict[str, object]) -> dict[str, object]:
+        try:
+            if self._linkbank_dependency is None:
+                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._linkbank_dependency.import_json(data)))
+        except Exception as exc:
+            return fail(str(exc), code="LINKBANK_IMPORT_FAILED")
+
     def automation_list_rules(self) -> dict[str, object]:
         """Return automation rules."""
         try:
@@ -1379,6 +1478,34 @@ class JsApi:
             return ok(_to_frontend_safe(created))
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_NOTE_CREATE_FAILED")
+
+    def second_brain_folder_create(self, parent: str, name: str) -> dict[str, object]:
+        """Create a subfolder ``parent/name`` in the Second Brain root."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            created = self._second_brain_service.create_folder(Path(parent), name)
+            return ok(_to_frontend_safe(created))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_FOLDER_CREATE_FAILED")
+
+    def second_brain_file_create(
+        self, parent: str, filename: str, content: str = ""
+    ) -> dict[str, object]:
+        """Create a generic text-like file ``parent/filename`` in the Second Brain.
+
+        Extension is restricted to a text-like allowlist; binary/unknown types
+        are rejected (use the OS file system for those).
+        """
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            created = self._second_brain_service.create_file(
+                Path(parent), filename, content
+            )
+            return ok(_to_frontend_safe(created))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_FILE_CREATE_FAILED")
 
     def second_brain_note_write(self, filepath: str, content: str) -> dict[str, object]:
         """Write ``content`` to an existing Second Brain note."""

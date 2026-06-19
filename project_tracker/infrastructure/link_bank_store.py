@@ -40,13 +40,26 @@ class LinkBank:
 
 
 def _normalize_link(link: dict[Any, Any]) -> dict[str, str]:
+    details = str(link.get("details", link.get("notes", "")))
+    notes = str(link.get("notes", details))
+    tags_value = link.get("tags", "")
+    if isinstance(tags_value, list):
+        tags = ",".join(str(tag).strip() for tag in tags_value if str(tag).strip())
+    else:
+        tags = str(tags_value)
     return {
         "id": str(link.get("id", "")) or uuid.uuid4().hex,
-        "name": str(link.get("name", "")),
+        "name": str(link.get("name", link.get("title", ""))),
         "url": str(link.get("url", "")),
-        "notes": str(link.get("notes", "")),
-        "category": str(link.get("category", "")),
-        "archived": str(link.get("archived", "false")),
+        "notes": notes,
+        "details": details,
+        "tags": tags,
+        "category": str(link.get("category", link.get("category_id", ""))),
+        "archived": str(link.get("archived", "false")).lower(),
+        "pinned": str(link.get("pinned", "false")).lower(),
+        "favorite": str(link.get("favorite", "false")).lower(),
+        "created_at": str(link.get("created_at", "")),
+        "updated_at": str(link.get("updated_at", "")),
     }
 
 

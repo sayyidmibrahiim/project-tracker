@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { callBridge, isPywebviewReady } from "../bridge";
+  import { callBridge, isPywebviewReady, waitForPywebviewReady } from "../bridge";
   import type { DashboardProject, DashboardSummary, DashboardRowDrone } from "../types";
   import { BridgeErrorCode } from "../types";
   import { stateChipClass } from "../dashboardChips";
@@ -39,12 +39,52 @@
   // Inline-edit transient state
   let savingKey: string = $state("");
   let actionError: string = $state("");
-  type PendingState = { kind: "cr" | "drone"; path: string; index: number; next: string; name: string };
+  type PendingState = { kind: "cr" | "drone" | "reopen"; path: string; index: number; next: string; name: string };
   let pendingState: PendingState | null = $state(null);
 
   const CR_STATE_OPTIONS = ["PENDING SUBMISSION", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "POSTPONED", "CANCELED"];
   const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "CANCELED"];
   const DESTRUCTIVE = new Set(["POSTPONED", "CANCELED"]);
+  const REOPENABLE = new Set(["POSTPONED", "CANCELED"]);
+  const REOPEN_OPTION = "REOPEN";
+
+  const CR_NEXT: Record<string, string[]> = {
+    "PENDING SUBMISSION": ["PENDING APPROVAL", "POSTPONED", "CANCELED"],
+    "PENDING APPROVAL": ["APPROVED", "POSTPONED", "CANCELED"],
+    "APPROVED": ["POSTPONED", "CANCELED"],
+    "IN-PROGRESS": ["FINISHED", "POSTPONED", "CANCELED"],
+    "FINISHED": [],
+    "POSTPONED": [REOPEN_OPTION],
+    "CANCELED": [REOPEN_OPTION],
+  };
+  const DRONE_NEXT: Record<string, string[]> = {
+    "UAT": ["PENDING APPROVAL", "CANCELED"],
+    "PENDING APPROVAL": ["APPROVED", "CANCELED"],
+    "APPROVED": ["CANCELED"],
+    "IN-PROGRESS": ["FINISHED", "CANCELED"],
+    "FINISHED": [],
+    "CANCELED": [],
+  };
+
+  function uniqueOptions(current: string, next: string[], fallback: string[]): string[] {
+    const options = [current, ...next].filter((value) => value && value.trim().length > 0);
+    return options.length > 0 ? Array.from(new Set(options)) : fallback;
+  }
+
+  /** Legal CR next states for user-controlled dropdown; backend remains authoritative. */
+  function legalCrOptionsFor(crState: string): string[] {
+    return uniqueOptions(crState, CR_NEXT[crState] ?? [], [crState || "PENDING SUBMISSION"]);
+  }
+
+  /** Back-compat source marker for reopen tests; use legalCrOptionsFor in markup. */
+  function crOptionsFor(crState: string): string[] {
+    return legalCrOptionsFor(crState);
+  }
+
+  /** Legal Drone next states for user-controlled dropdown; IN-PROGRESS stays auto-only. */
+  function legalDroneOptionsFor(droneState: string): string[] {
+    return uniqueOptions(droneState, DRONE_NEXT[droneState] ?? [], [droneState || "UAT"]);
+  }
 
   // ── Status filter tabs (counts from real summary) ──
   interface StatusTab { key: string; label: string; count: number }
@@ -79,11 +119,35 @@
     return result;
   });
 
+  interface AlignedDroneRow extends DashboardRowDrone {
+    existingIndex: number;
+  }
+
   function subprojectsOf(p: DashboardProject): string[] {
-    const names = (p.drone_tickets ?? [])
-      .map((d) => d.subfolder_name)
-      .filter((n): n is string => !!n && n.trim().length > 0);
+    const names = [
+      ...(p.subprojects ?? []),
+      ...(p.drone_tickets ?? [])
+        .map((d) => d.subfolder_name)
+        .filter((n): n is string => !!n && n.trim().length > 0),
+    ];
     return Array.from(new Set(names));
+  }
+
+  function alignedDroneRows(p: DashboardProject): AlignedDroneRow[] {
+    const drones = p.drone_tickets ?? [];
+    const used = new Set<number>();
+    const rows: AlignedDroneRow[] = subprojectsOf(p).map((sub) => {
+      const index = drones.findIndex((d, i) => !used.has(i) && (d.subfolder_name ?? "") === sub);
+      if (index >= 0) {
+        used.add(index);
+        return { ...drones[index], existingIndex: index };
+      }
+      return { subfolder_name: sub, drone_ticket: "", drone_link: "", drone_state: "", owner: "", existingIndex: -1 };
+    });
+    drones.forEach((d, index) => {
+      if (!used.has(index)) rows.push({ ...d, existingIndex: index });
+    });
+    return rows;
   }
 
   // Split text into highlight segments around the (case-insensitive) search query.
@@ -118,6 +182,31 @@
       : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   }
 
+  function pad2(value: number): string {
+    return String(value).padStart(2, "0");
+  }
+
+  function toDatetimeLocal(value?: string | null): string {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  }
+
+  function fromDatetimeLocal(value: string): string | null {
+    if (!value) return null;
+    const [datePart, timePart] = value.split("T");
+    if (!datePart || !timePart) return null;
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute] = timePart.split(":").map(Number);
+    const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+    if (Number.isNaN(date.getTime())) return null;
+    const offsetMinutes = -date.getTimezoneOffset();
+    const sign = offsetMinutes >= 0 ? "+" : "-";
+    const absOffset = Math.abs(offsetMinutes);
+    return `${datePart}T${timePart}:00${sign}${pad2(Math.floor(absOffset / 60))}:${pad2(absOffset % 60)}`;
+  }
+
   function joinPath(base: string, child: string): string {
     const sep = base.includes("\\") ? "\\" : "/";
     return base.endsWith(sep) ? base + child : base + sep + child;
@@ -127,7 +216,7 @@
   async function loadDashboard() {
     loadState = "loading";
     errorMessage = ""; errorCode = ""; actionError = "";
-    if (!isPywebviewReady()) {
+    if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
       errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
       errorMessage = "pywebview bridge is not available. Running outside desktop shell.";
       loadState = "error";
@@ -164,11 +253,29 @@
     await loadDashboard();
   }
 
-  async function saveDroneLink(p: DashboardProject, index: number, value: string) {
-    if (value === (p.drone_tickets?.[index]?.drone_link ?? "")) return;
-    savingKey = `${p.project_path}:dronelink:${index}`;
+  async function saveProjectDatetime(p: DashboardProject, field: "start_datetime" | "end_datetime", value: string) {
+    const nextValue = fromDatetimeLocal(value);
+    if (nextValue === p[field]) return;
+    savingKey = `${p.project_path}:${field}`;
     actionError = "";
-    const r = await callBridge("drone_update", p.project_path, index, { drone_link: value });
+    const r = await callBridge("project_update", p.project_path, {
+      start_datetime: field === "start_datetime" ? nextValue : p.start_datetime,
+      end_datetime: field === "end_datetime" ? nextValue : p.end_datetime,
+    });
+    savingKey = "";
+    if (!r.ok) { actionError = r.error.message; }
+    await loadDashboard();
+  }
+
+  async function saveDroneLink(p: DashboardProject, row: AlignedDroneRow, value: string) {
+    const next = value.trim();
+    if (next === row.drone_link) return;
+    const keyIndex = row.existingIndex >= 0 ? row.existingIndex : row.subfolder_name ?? "new";
+    savingKey = `${p.project_path}:dronelink:${keyIndex}`;
+    actionError = "";
+    const r = row.existingIndex >= 0
+      ? await callBridge("drone_update", p.project_path, row.existingIndex, { drone_link: next })
+      : await callBridge("drone_add", p.project_path, { drone_link: next, subfolder_name: row.subfolder_name, owner: "" });
     savingKey = "";
     if (!r.ok) { actionError = r.error.message; }
     await loadDashboard();
@@ -176,6 +283,10 @@
 
   function onCrStateChange(p: DashboardProject, next: string) {
     if (next === p.cr_state) return;
+    if (next === REOPEN_OPTION) {
+      pendingState = { kind: "reopen", path: p.project_path, index: -1, next, name: p.project_name };
+      return;
+    }
     if (DESTRUCTIVE.has(next)) {
       pendingState = { kind: "cr", path: p.project_path, index: -1, next, name: p.project_name };
       return;
@@ -191,13 +302,13 @@
     await loadDashboard();
   }
 
-  function onDroneStateChange(p: DashboardProject, index: number, next: string) {
-    if (next === (p.drone_tickets?.[index]?.drone_state ?? "")) return;
+  function onDroneStateChange(p: DashboardProject, row: AlignedDroneRow, next: string) {
+    if (row.existingIndex < 0 || next === row.drone_state) return;
     if (DESTRUCTIVE.has(next)) {
-      pendingState = { kind: "drone", path: p.project_path, index, next, name: `${p.project_name} · drone ${index + 1}` };
+      pendingState = { kind: "drone", path: p.project_path, index: row.existingIndex, next, name: `${p.project_name} · ${row.subfolder_name ?? `drone ${row.existingIndex + 1}`}` };
       return;
     }
-    void applyDroneState(p.project_path, index, next);
+    void applyDroneState(p.project_path, row.existingIndex, next);
   }
   async function applyDroneState(path: string, index: number, next: string) {
     savingKey = `${path}:dronestate:${index}`;
@@ -208,11 +319,21 @@
     await loadDashboard();
   }
 
+  async function reopenProject(path: string) {
+    savingKey = `${path}:crstate`;
+    actionError = "";
+    const r = await callBridge("folder_reopen", path);
+    savingKey = "";
+    if (!r.ok) actionError = r.error.message;
+    await loadDashboard();
+  }
+
   async function confirmPendingState() {
     const ps = pendingState;
     pendingState = null;
     if (!ps) return;
-    if (ps.kind === "cr") await applyCrState(ps.path, ps.next);
+    if (ps.kind === "reopen") await reopenProject(ps.path);
+    else if (ps.kind === "cr") await applyCrState(ps.path, ps.next);
     else await applyDroneState(ps.path, ps.index, ps.next);
   }
   async function cancelPendingState() {
@@ -238,7 +359,7 @@
   }
 </script>
 
-<div class="dashboard-screen">
+<section class="screen active" id="screen-dashboard">
   {#if loadState === "error"}
     <div class="dashboard-banner banner-error">
       <span class="banner-icon">⚠</span>
@@ -300,8 +421,7 @@
           </div>
         {:else}
           {#each filteredProjects as p, idx}
-            {@const drones = (p.drone_tickets ?? [])}
-            {@const subs = subprojectsOf(p)}
+            {@const rows = alignedDroneRows(p)}
             <div class="project-row dash-row" class:alt={idx % 2 === 1}>
               <div class="table-cell cell-center"><strong>{idx + 1}</strong></div>
 
@@ -316,11 +436,17 @@
               <!-- Sub Project (click → open subfolder) -->
               <div class="table-cell">
                 <div class="stack-lines">
-                  {#if subs.length === 0}
+                  {#if rows.length === 0}
                     <div class="stack-line"><span class="muted-text">—</span></div>
                   {:else}
-                    {#each subs as sp}
-                      <div class="stack-line"><button class="dash-sub-btn dash-truncate" type="button" title={sp} onclick={() => openSubfolder(p.project_path, sp)}>{sp}</button></div>
+                    {#each rows as row}
+                      <div class="stack-line">
+                        {#if row.subfolder_name}
+                          <button class="dash-sub-btn dash-truncate" type="button" title={row.subfolder_name} onclick={() => openSubfolder(p.project_path, row.subfolder_name!)}>{row.subfolder_name}</button>
+                        {:else}
+                          <span class="muted-text">—</span>
+                        {/if}
+                      </div>
                     {/each}
                   {/if}
                 </div>
@@ -328,30 +454,39 @@
 
               <!-- Start / End -->
               <div class="table-cell cell-center">
-                {#if p.start_datetime}<div class="date-block">{fmtDate(p.start_datetime, "date")}<br /><span class="date-time">{fmtDate(p.start_datetime, "time")}</span></div>{:else}<span class="muted-text">—</span>{/if}
+                <div class="dash-date-wrap">
+                  <input class="dash-date-input" type="datetime-local" value={toDatetimeLocal(p.start_datetime)} onblur={(e) => saveProjectDatetime(p, "start_datetime", (e.currentTarget as HTMLInputElement).value)} disabled={savingKey === `${p.project_path}:start_datetime`} />
+                  {#if p.start_datetime}<span class="date-time">{fmtDate(p.start_datetime, "date")} · {fmtDate(p.start_datetime, "time")}</span>{/if}
+                  {#if savingKey === `${p.project_path}:start_datetime`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                </div>
               </div>
               <div class="table-cell cell-center">
-                {#if p.end_datetime}<div class="date-block">{fmtDate(p.end_datetime, "date")}<br /><span class="date-time">{fmtDate(p.end_datetime, "time")}</span></div>{:else}<span class="muted-text">—</span>{/if}
+                <div class="dash-date-wrap">
+                  <input class="dash-date-input" type="datetime-local" value={toDatetimeLocal(p.end_datetime)} onblur={(e) => saveProjectDatetime(p, "end_datetime", (e.currentTarget as HTMLInputElement).value)} disabled={savingKey === `${p.project_path}:end_datetime`} />
+                  {#if p.end_datetime}<span class="date-time">{fmtDate(p.end_datetime, "date")} · {fmtDate(p.end_datetime, "time")}</span>{/if}
+                  {#if savingKey === `${p.project_path}:end_datetime`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                </div>
               </div>
 
               <!-- Drone Ticket (inline paste + open link) -->
               <div class="table-cell">
                 <div class="stack-lines">
-                  {#if drones.length === 0}
+                  {#if rows.length === 0}
                     <div class="stack-line"><span class="muted-text">—</span></div>
                   {:else}
-                    {#each drones as d, di}
+                    {#each rows as d}
+                      {@const droneKey = d.existingIndex >= 0 ? d.existingIndex : d.subfolder_name ?? "new"}
                       <div class="stack-line dash-link-cell">
                         <input
                           class="link-edit"
                           value={d.drone_link}
-                          placeholder="Paste drone URL…"
-                          title={d.drone_ticket || d.drone_link}
+                          placeholder={d.subfolder_name ? `Paste drone URL for ${d.subfolder_name}…` : "Paste drone URL…"}
+                          title={d.drone_ticket || d.drone_link || d.subfolder_name || "Drone ticket"}
                           onkeydown={onInputKey}
-                          onblur={(e) => saveDroneLink(p, di, (e.currentTarget as HTMLInputElement).value)}
-                          disabled={savingKey === `${p.project_path}:dronelink:${di}`}
+                          onblur={(e) => saveDroneLink(p, d, (e.currentTarget as HTMLInputElement).value)}
+                          disabled={savingKey === `${p.project_path}:dronelink:${droneKey}`}
                         />
-                        {#if savingKey === `${p.project_path}:dronelink:${di}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                        {#if savingKey === `${p.project_path}:dronelink:${droneKey}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
                         {#if d.drone_ticket}<span class="dash-id-label" title={d.drone_ticket}>{d.drone_ticket}</span>{/if}
                         {#if d.drone_link}<a class="dash-open" href={d.drone_link} target="_blank" rel="noopener noreferrer" title="Open in browser">↗</a>{/if}
                       </div>
@@ -363,16 +498,20 @@
               <!-- Drone State (inline dropdown + guard) -->
               <div class="table-cell">
                 <div class="stack-lines">
-                  {#if drones.length === 0}
+                  {#if rows.length === 0}
                     <div class="stack-line"><span class="muted-text">—</span></div>
                   {:else}
-                    {#each drones as d, di}
+                    {#each rows as d}
                       <div class="stack-line">
-                        <select class="dash-state-select {stateChipClass(d.drone_state)}" value={d.drone_state} onchange={(e) => onDroneStateChange(p, di, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:dronestate:${di}`}>
-                          {#each DRONE_STATE_OPTIONS as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
-                          {#if !DRONE_STATE_OPTIONS.includes(d.drone_state) && d.drone_state}<option value={d.drone_state}>{d.drone_state}</option>{/if}
-                        </select>
-                        {#if savingKey === `${p.project_path}:dronestate:${di}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                        {#if d.existingIndex < 0}
+                          <select class="dash-state-select" disabled title="Add drone ticket first"><option>Add ticket first</option></select>
+                        {:else}
+                          <select class="dash-state-select {stateChipClass(d.drone_state)}" value={d.drone_state} onchange={(e) => onDroneStateChange(p, d, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:dronestate:${d.existingIndex}`}>
+                            {#each legalDroneOptionsFor(d.drone_state) as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
+                            {#if !DRONE_STATE_OPTIONS.includes(d.drone_state) && d.drone_state}<option value={d.drone_state}>{d.drone_state}</option>{/if}
+                          </select>
+                          {#if savingKey === `${p.project_path}:dronestate:${d.existingIndex}`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
+                        {/if}
                       </div>
                     {/each}
                   {/if}
@@ -401,7 +540,7 @@
               <div class="table-cell">
                 <div class="dash-link-cell">
                   <select class="dash-state-select {stateChipClass(p.cr_state)}" value={p.cr_state} onchange={(e) => onCrStateChange(p, (e.currentTarget as HTMLSelectElement).value)} disabled={savingKey === `${p.project_path}:crstate`}>
-                    {#each CR_STATE_OPTIONS as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
+                    {#each legalCrOptionsFor(p.cr_state) as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
                     {#if !CR_STATE_OPTIONS.includes(p.cr_state) && p.cr_state}<option value={p.cr_state}>{p.cr_state}</option>{/if}
                   </select>
                   {#if savingKey === `${p.project_path}:crstate`}<span class="dash-cell-spin" aria-label="Saving"></span>{/if}
@@ -424,40 +563,46 @@
       </div>
     </div>
   </div>
-</div>
+</section>
 
 {#if pendingState}
   <ConfirmModal
-    title={pendingState.next === "CANCELED" ? "Mark as Canceled?" : "Postpone project?"}
-    actionLabel={pendingState.next === "CANCELED" ? "Set Canceled" : "Set Postponed"}
-    targetName={`${pendingState.name} → ${pendingState.next}`}
-    reversible={false}
+    title={pendingState.kind === "reopen" ? "Reopen project?" : pendingState.next === "CANCELED" ? "Mark as Canceled?" : "Postpone project?"}
+    actionLabel={pendingState.kind === "reopen" ? "Reopen to UAT_PREPARE" : pendingState.next === "CANCELED" ? "Set Canceled" : "Set Postponed"}
+    targetName={pendingState.kind === "reopen" ? `${pendingState.name} → UAT_PREPARE` : `${pendingState.name} → ${pendingState.next}`}
+    reversible={pendingState.kind === "reopen"}
     onConfirm={confirmPendingState}
     onCancel={cancelPendingState}
   />
 {/if}
 
 <style>
-  .dash-action-error { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); color:var(--color-dbs-red); border-radius:6px; padding:7px 12px; font-size:11px; font-weight:800; flex:0 0 auto; }
-  .dash-name-btn { border:0; background:transparent; padding:0; font-size:13px; font-weight:900; color:var(--color-dbs-red); cursor:pointer; text-align:left; }
-  .dash-name-btn:hover { text-decoration:underline; }
-  .dash-hl { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border-radius:2px; padding:0 1px; }
-  .dash-sub-btn { border:0; background:transparent; padding:0; font-size:11px; font-weight:800; color:var(--color-ink); cursor:pointer; text-align:left; }
-  .dash-sub-btn:hover { color:var(--color-dbs-red); text-decoration:underline; }
+  .dash-action-error { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); color:var(--color-dbs-red); border-radius:8px; padding:8px 12px; font-size:12px; font-weight:500; flex:0 0 auto; }
+  .dash-name-btn { border:0; background:transparent; padding:0; font-size:13px; font-weight:600; color:var(--color-ink-strong); cursor:pointer; text-align:left; }
+  .dash-name-btn:hover { color:var(--color-dbs-red); }
+  .dash-hl { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border-radius:3px; padding:0 2px; }
+  .dash-sub-btn { border:0; background:transparent; padding:0; font-size:12px; font-weight:500; color:var(--color-ink); cursor:pointer; text-align:left; }
+  .dash-sub-btn:hover { color:var(--color-dbs-red); }
   .dash-link-cell { display:flex; align-items:center; gap:5px; width:100%; }
   .dash-link-cell .link-edit { flex:1; min-width:0; }
-  .dash-open { flex:0 0 auto; color:var(--color-dbs-red); font-weight:900; text-decoration:none; font-size:12px; padding:0 2px; }
-  .dash-open:hover { background:var(--color-soft-pink-surface); border-radius:3px; }
-  .dash-state-select { height:28px; border:1px solid var(--color-input-border, #D7DCE2); border-radius:5px; background:#fff; color:var(--color-ink); font-size:10px; font-weight:850; outline:none; padding:0 6px; cursor:pointer; max-width:100%; }
-  .dash-state-select:focus { border-color:var(--color-dbs-red); }
-  .dash-state-select:disabled { background:var(--color-workspace-panel); color:var(--color-muted); cursor:not-allowed; }
-  .dash-row:hover { background:var(--color-soft-pink-surface); }
-  .dash-skel-bar { height:14px; border-radius:4px; background:linear-gradient(90deg,#ececec 25%,#f6f6f6 37%,#ececec 63%); background-size:400% 100%; animation:dash-shimmer 1.2s ease infinite; }
+  .dash-date-wrap { display:flex; flex-direction:column; align-items:center; gap:4px; width:100%; }
+  .dash-date-input { width:100%; min-width:130px; height:28px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--color-ink); font-size:11px; font-weight:600; padding:0 6px; outline:none; }
+  .dash-date-input:hover { background:var(--color-row-hover); }
+  .dash-date-input:focus { border-color:var(--color-dbs-red); background:var(--color-workspace-panel); }
+  .dash-open { flex:0 0 auto; color:var(--color-muted); font-weight:700; text-decoration:none; font-size:12px; padding:1px 4px; border-radius:4px; }
+  .dash-open:hover { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }
+  /* Inline state select — Notion soft-tag pill */
+  .dash-state-select { height:28px; border:1px solid var(--primary-red); border-radius:6px; background:var(--primary-red); color:#fff; font-size:11.5px; font-weight:800; outline:none; padding:0 8px; cursor:pointer; max-width:100%; appearance:auto; transition:filter 0.12s ease; }
+  .dash-state-select:hover { filter:brightness(0.95); }
+  .dash-state-select:focus { box-shadow:0 0 0 2px var(--color-dbs-red-active); }
+  .dash-state-select:disabled { opacity:0.55; cursor:not-allowed; }
+  .dash-row:hover { background:var(--color-row-hover); }
+  .dash-skel-bar { height:14px; border-radius:5px; background:linear-gradient(90deg,#eee 25%,#f6f6f6 37%,#eee 63%); background-size:400% 100%; animation:dash-shimmer 1.2s ease infinite; }
   @keyframes dash-shimmer { 0% { background-position:100% 0; } 100% { background-position:-100% 0; } }
-  .dash-empty-cta { margin-top:10px; height:30px; padding:0 16px; border:1px solid var(--color-dbs-red); border-radius:5px; background:var(--color-dbs-red); color:#fff; font-size:11px; font-weight:850; cursor:pointer; }
+  .dash-empty-cta { margin-top:10px; height:32px; padding:0 16px; border:1px solid var(--color-dbs-red); border-radius:7px; background:var(--color-dbs-red); color:#fff; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.12s ease; }
   .dash-empty-cta:hover { background:var(--color-dbs-red-hover); }
   .dash-empty-actions { display:flex; gap:8px; justify-content:center; }
-  .dash-empty-cta.secondary { background:#fff; color:var(--color-dbs-red); }
+  .dash-empty-cta.secondary { background:var(--color-workspace-panel); color:var(--color-dbs-red); }
   .dash-empty-cta.secondary:hover { background:var(--color-soft-pink-surface); }
 
   /* B4 — long name ellipsis (cell stays single-line, hover title shows full) */
@@ -465,14 +610,15 @@
   .dash-truncate { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* A4 — extracted CR/drone identifier shown beside the link cell */
-  .dash-id-label { flex:0 0 auto; font-size:9px; font-weight:850; color:var(--color-muted); background:var(--color-workspace-panel); border-radius:3px; padding:1px 4px; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dash-id-label { flex:0 0 auto; font-size:9.5px; font-weight:600; color:var(--color-muted); background:var(--color-workspace); border:1px solid var(--color-border); border-radius:4px; padding:1px 5px; max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  /* C2 — semantic state colour chips on the inline state selects */
-  .dash-state-select.chip-approved { border-color:#1f9d57; color:#1f7a44; background:#eafaf0; }
-  .dash-state-select.chip-pending { border-color:#d39e00; color:#9a7400; background:#fff8e6; }
-  .dash-state-select.chip-negative { border-color:var(--color-dbs-red); color:var(--color-dbs-red); background:var(--color-soft-pink-surface); }
+  /* C2 — semantic soft-tag colours on the inline state selects (Notion style) */
+  .dash-state-select.chip-approved { background:var(--tag-green-bg); color:var(--tag-green-ink); }
+  .dash-state-select.chip-pending { background:var(--tag-amber-bg); color:var(--tag-amber-ink); }
+  .dash-state-select.chip-negative { background:var(--tag-red-bg); color:var(--tag-red-ink); }
+  .dash-state-select.chip-approved:disabled, .dash-state-select.chip-pending:disabled, .dash-state-select.chip-negative:disabled { opacity:0.55; }
 
   /* C4 — per-cell saving spinner */
-  .dash-cell-spin { flex:0 0 auto; width:12px; height:12px; border:2px solid var(--color-input-border, #D7DCE2); border-top-color:var(--color-dbs-red); border-radius:50%; display:inline-block; animation:dash-cell-spin 0.6s linear infinite; }
+  .dash-cell-spin { flex:0 0 auto; width:12px; height:12px; border:2px solid var(--color-border); border-top-color:var(--color-dbs-red); border-radius:50%; display:inline-block; animation:dash-cell-spin 0.6s linear infinite; }
   @keyframes dash-cell-spin { to { transform:rotate(360deg); } }
 </style>

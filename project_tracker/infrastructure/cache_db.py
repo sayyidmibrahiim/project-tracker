@@ -44,6 +44,7 @@ class CachedProjectRow:
     cr_state: CRState = CRState.PENDING_SUBMISSION
     cr_pending_approval_at: datetime | None = None
     drone_tickets_json: str = "[]"
+    subprojects_json: str = "[]"
     t10_status: str = "UNKNOWN"
     updated_at: datetime | None = None
     scanned_at: datetime | None = None
@@ -86,6 +87,7 @@ def cached_project_row_from_scan(scanned: ScannedProject) -> CachedProjectRow:
         cr_state=metadata.cr_state,
         cr_pending_approval_at=metadata.cr_pending_approval_at,
         drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
+        subprojects_json=json.dumps([path.name for path in scanned.subproject_paths], ensure_ascii=False),
         t10_status=_t10_status(scanned),
         updated_at=metadata.updated_at,
         scanned_at=local_now(),
@@ -134,6 +136,7 @@ class CacheDb:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             self._create_schema(connection)
+            self._migrate_schema(connection)
 
     def health_check(self) -> bool:
         try:
@@ -197,10 +200,11 @@ class CacheDb:
                     start_datetime,
                     end_datetime,
                     drone_tickets_json,
+                    subprojects_json,
                     t10_status,
                     updated_at,
                     scanned_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     name = excluded.name,
                     year = excluded.year,
@@ -214,6 +218,7 @@ class CacheDb:
                     drone_tickets_json = excluded.drone_tickets_json,
                     t10_status = excluded.t10_status,
                     updated_at = excluded.updated_at,
+                    subprojects_json = excluded.subprojects_json,
                     scanned_at = excluded.scanned_at
                 """,
                 self._project_values(row),
@@ -251,10 +256,11 @@ class CacheDb:
                         start_datetime,
                         end_datetime,
                         drone_tickets_json,
+                        subprojects_json,
                         t10_status,
                         updated_at,
                         scanned_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         name = excluded.name,
                         year = excluded.year,
@@ -266,6 +272,7 @@ class CacheDb:
                         start_datetime = excluded.start_datetime,
                         end_datetime = excluded.end_datetime,
                         drone_tickets_json = excluded.drone_tickets_json,
+                        subprojects_json = excluded.subprojects_json,
                         t10_status = excluded.t10_status,
                         updated_at = excluded.updated_at,
                         scanned_at = excluded.scanned_at
@@ -280,7 +287,7 @@ class CacheDb:
                     """
                     SELECT path, year, folder_state, name, cr_link, start_datetime,
                            end_datetime, cr_number, cr_state, cr_pending_approval_at,
-                           drone_tickets_json, t10_status, updated_at, scanned_at
+                           drone_tickets_json, subprojects_json, t10_status, updated_at, scanned_at
                     FROM project_index
                     ORDER BY year, name, path
                     """
@@ -290,7 +297,7 @@ class CacheDb:
                     """
                     SELECT path, year, folder_state, name, cr_link, start_datetime,
                            end_datetime, cr_number, cr_state, cr_pending_approval_at,
-                           drone_tickets_json, t10_status, updated_at, scanned_at
+                           drone_tickets_json, subprojects_json, t10_status, updated_at, scanned_at
                     FROM project_index
                     WHERE year = ?
                     ORDER BY year, name, path
@@ -454,6 +461,7 @@ class CacheDb:
                 start_datetime TEXT,
                 end_datetime TEXT,
                 drone_tickets_json TEXT,
+                subprojects_json TEXT NOT NULL DEFAULT '[]',
                 t10_status TEXT,
                 updated_at TEXT,
                 scanned_at TEXT DEFAULT (datetime('now'))
@@ -516,9 +524,20 @@ class CacheDb:
         )
 
     @staticmethod
+    def _migrate_schema(connection: sqlite3.Connection) -> None:
+        project_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(project_index)").fetchall()
+        }
+        if "subprojects_json" not in project_columns:
+            connection.execute(
+                "ALTER TABLE project_index ADD COLUMN subprojects_json TEXT NOT NULL DEFAULT '[]'"
+            )
+
+    @staticmethod
     def _project_values(
         row: CachedProjectRow,
-    ) -> tuple[str, str, str, str, str, str | None, str, str | None, str | None, str | None, str, str, str | None, str | None]:
+    ) -> tuple[str, str, str, str, str, str | None, str, str | None, str | None, str | None, str, str, str, str | None, str | None]:
         return (
             str(row.project_path),
             row.project_name,
@@ -531,6 +550,7 @@ class CacheDb:
             datetime_to_json(row.start_datetime),
             datetime_to_json(row.end_datetime),
             row.drone_tickets_json,
+            row.subprojects_json,
             row.t10_status,
             datetime_to_json(row.updated_at),
             datetime_to_json(row.scanned_at),
@@ -553,6 +573,7 @@ class CacheDb:
             str | None,
             str | None,
             str | None,
+            str | None,
         ]
     ) -> CachedProjectRow:
         return CachedProjectRow(
@@ -567,9 +588,10 @@ class CacheDb:
             cr_state=CRState(row[8]),
             cr_pending_approval_at=datetime_from_json(row[9]),
             drone_tickets_json=row[10] or "[]",
-            t10_status=row[11] or "UNKNOWN",
-            updated_at=datetime_from_json(row[12]),
-            scanned_at=datetime_from_json(row[13]),
+            subprojects_json=row[11] or "[]",
+            t10_status=row[12] or "UNKNOWN",
+            updated_at=datetime_from_json(row[13]),
+            scanned_at=datetime_from_json(row[14]),
         )
 
     @staticmethod

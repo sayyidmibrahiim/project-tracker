@@ -65,6 +65,10 @@ hiddenimports = [
     "apscheduler.schedulers.background",
     "dateutil",
     "send2trash",
+    "pythoncom",
+    "win32com.client",
+    "pyperclip",
+    "pyautogui",
 ]
 
 
@@ -98,7 +102,7 @@ exe = EXE(  # noqa: F821
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -113,7 +117,7 @@ coll = COLLECT(  # noqa: F821
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="ProjectTrackerDBS",
 )

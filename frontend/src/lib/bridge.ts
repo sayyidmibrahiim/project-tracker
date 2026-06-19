@@ -5,15 +5,62 @@ import { BridgeErrorCode } from "./types";
 const BRIDGE_TIMEOUT_MS = 30_000;
 
 /**
- * Return true when the pywebview bridge is available.
+ * Track whether the `pywebviewready` DOM event has fired. pywebview injects
+ * an empty `window.pywebview.api` object early; methods are only populated
+ * once the event fires. Polling the object alone causes a race where
+ * `isPywebviewReady()` returns true but methods are not yet registered.
+ */
+let _pywebviewEventFired = false;
+
+if (typeof window !== "undefined") {
+  // pywebview fires this event once the bridge is fully initialized.
+  window.addEventListener("pywebviewready", () => {
+    _pywebviewEventFired = true;
+  });
+  // In case the event already fired before this script loaded:
+  if (window.pywebview?.api && Object.keys(window.pywebview.api).length > 0) {
+    _pywebviewEventFired = true;
+  }
+}
+
+/**
+ * Return true when the pywebview bridge is available AND fully populated.
  * Safe to call during SSR/Vite dev/build — no global assumptions.
  */
 export function isPywebviewReady(): boolean {
   try {
-    return typeof window !== "undefined" && window.pywebview?.api !== undefined;
+    if (typeof window === "undefined") return false;
+    const api = window.pywebview?.api;
+    if (api === undefined) return false;
+    const hasKeys = Object.keys(api).length > 0;
+    // Accept either the event having fired OR the api being populated (covers
+    // both normal runtime and test environments where events aren't available).
+    if (hasKeys) _pywebviewEventFired = true;
+    return _pywebviewEventFired && hasKeys;
   } catch {
     return false;
   }
+}
+
+/** Wait for the pywebview bridge to be fully ready (event-driven, not just object existence). */
+export async function waitForPywebviewReady(timeoutMs = 5_000, intervalMs = 50): Promise<boolean> {
+  if (isPywebviewReady()) return true;
+  return new Promise((resolve) => {
+    let elapsed = 0;
+    const check = () => {
+      if (isPywebviewReady()) {
+        resolve(true);
+        return;
+      }
+      elapsed += intervalMs;
+      if (elapsed >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(check, intervalMs);
+    };
+    setTimeout(check, intervalMs);
+  });
 }
 
 function bridgeError(code: string, message: string): BridgeResponse<never> {

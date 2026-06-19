@@ -16,6 +16,8 @@
  */
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { render } from "svelte/server";
 import { renderComponent, cleanup } from "./ssrHelper.mjs";
@@ -32,6 +34,7 @@ const SUB_PROJECT_TABLE = "../src/lib/components/SubProjectTable.svelte";
 const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
 const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
+const PROJECT_DETAILS_SRC = "../src/lib/components/ProjectDetails.svelte";
 
 const noop = () => {};
 
@@ -149,17 +152,17 @@ async function renderViaLoader(relativeSveltePath, props = {}) {
   return body;
 }
 
-test("Automations renders PRD §16.2 tab order with Outlook first and mounts the Outlook scaffold", async () => {
+test("Automations renders AS_IS tab order with Outlook first and mounts the Outlook scaffold", async () => {
   const body = await renderViaLoader(AUTOMATIONS, {});
   const outlook = body.indexOf("Outlook");
   const teams = body.indexOf("Teams");
-  const scheduler = body.indexOf("Scheduler");
+  const reminder = body.indexOf("Reminder");
   const rules = body.indexOf("Rules Engine");
   assert.ok(outlook >= 0, "Outlook tab is rendered");
   assert.ok(teams > outlook, "Teams follows Outlook");
-  assert.ok(scheduler > teams, "Scheduler follows Teams");
-  assert.ok(rules > scheduler, "Rules Engine follows Scheduler");
-  // Default tab is Outlook, so the Outlook scaffold (not the old placeholder) renders.
+  assert.ok(reminder > teams, "Reminder follows Teams");
+  assert.ok(rules > reminder, "Rules Engine follows Reminder");
+  assert.match(body, /Automation Center/);
   assert.match(body, /SEND AUTOMATION/);
   assert.doesNotMatch(body, /Project-scoped/);
 });
@@ -289,6 +292,21 @@ test("DashboardRowMenu renders a closed ⋮ trigger with no menu open at render"
   assert.match(body, /Row actions/);
   // Menu items only render once opened (open=false at render).
   assert.doesNotMatch(body, /Open Project Folder/);
+  assert.doesNotMatch(body, /Project Details/);
+});
+
+test("DashboardRowMenu source carries only Details + Delete — no transitions or Open Folder", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL("../src/lib/components/DashboardRowMenu.svelte", import.meta.url)),
+    "utf8",
+  );
+  // The trimmed menu keeps Project Details and Delete only.
+  assert.match(src, /Project Details/);
+  assert.match(src, /Delete project…/);
+  // Folder transitions and Open Project Folder were removed (auto-move + name-click cover them).
+  assert.doesNotMatch(src, /ProjectTransitions/);
+  assert.doesNotMatch(src, /Open Project Folder/);
+  assert.doesNotMatch(src, /project_open_folder/);
 });
 
 test("FirstRunSetup renders the root-folder setup dialog (PRD §11.3)", async () => {
@@ -296,4 +314,41 @@ test("FirstRunSetup renders the root-folder setup dialog (PRD §11.3)", async ()
   assert.match(body, /First-Run Setup/);
   assert.match(body, /root folder/i);
   assert.match(body, /Continue/);
+});
+
+// --- Project Details: MVP-1 date/plan editor (P1-6, P1-12) ------------------
+
+test("ProjectDetails source includes datetime-local editors and saves date fields through project_update", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL(PROJECT_DETAILS_SRC, import.meta.url)),
+    "utf8",
+  );
+
+  assert.match(src, /type="datetime-local"/);
+  assert.match(src, /metaStartEdit/);
+  assert.match(src, /metaEndEdit/);
+  assert.match(src, /start_datetime:\s*fromDatetimeLocal\(metaStartEdit\)/);
+  assert.match(src, /end_datetime:\s*fromDatetimeLocal\(metaEndEdit\)/);
+  assert.match(src, /implementation_plan:\s*metaPlanEdit/);
+});
+
+test("ProjectDetails source follows the prototype Project Command Center structure", () => {
+  const src = readFileSync(
+    fileURLToPath(new URL(PROJECT_DETAILS_SRC, import.meta.url)),
+    "utf8",
+  );
+
+  assert.match(src, /screen-details/);
+  assert.match(src, /Project Command Center/);
+  assert.match(src, /Sub Project/);
+  assert.match(src, /Project Identity/);
+  assert.match(src, /Schedule/);
+  assert.match(src, /Activity History/);
+  assert.match(src, /Add Sub Project/);
+  assert.match(src, /openProjectFolder/);
+  assert.match(src, /requestTopDelete/);
+  assert.doesNotMatch(src, /pd-list-panel/);
+  assert.doesNotMatch(src, /ProjectTransitions/);
+  assert.doesNotMatch(src, /Project Actions/);
+  assert.doesNotMatch(src, /Folder Transitions/);
 });

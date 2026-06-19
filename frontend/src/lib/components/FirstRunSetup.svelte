@@ -17,7 +17,27 @@
 
   let rootPath = $state("");
   let busy = $state(false);
+  let browseBusy = $state(false);
   let error = $state("");
+
+  async function browse() {
+    if (!isPywebviewReady()) {
+      error = "Folder picker requires the desktop app. Type a path manually.";
+      return;
+    }
+    browseBusy = true;
+    const resp = await callBridge<{ path: string | null }>("util_choose_folder");
+    browseBusy = false;
+    if (!resp.ok) {
+      error = resp.error.message;
+      return;
+    }
+    const path = resp.data?.path ?? null;
+    if (path) {
+      rootPath = path;
+      error = "";
+    }
+  }
 
   async function save() {
     const value = rootPath.trim();
@@ -57,7 +77,10 @@
       continue. A native folder picker is available in the Windows desktop app; on other platforms, type
       the path.
     </p>
-    <input class="fr-input" type="text" bind:value={rootPath} placeholder="D:\WORK\CR" disabled={busy} />
+    <div class="fr-input-row">
+      <input class="fr-input" type="text" bind:value={rootPath} placeholder="D:\WORK\CR" disabled={busy} />
+      <button class="fr-btn fr-browse" type="button" onclick={browse} disabled={busy || browseBusy}>{browseBusy ? "…" : "Browse"}</button>
+    </div>
     {#if error}<p class="fr-err" role="alert">⚠ {error}</p>{/if}
     <div class="fr-actions">
       <button class="fr-btn fr-primary" type="button" onclick={save} disabled={busy}>{busy ? "Saving…" : "Save & Continue"}</button>
@@ -73,6 +96,10 @@
   .fr-hint { margin:0; font-size:11px; font-weight:700; color:var(--color-muted); line-height:1.5; }
   .fr-input { height:32px; border:1px solid var(--color-input-border, #D7DCE2); border-radius:6px; padding:0 10px; font-size:12px; font-weight:750; color:var(--color-ink); outline:none; font-family:inherit; }
   .fr-input:focus { border:2px solid var(--color-dbs-red); }
+  .fr-input-row { display:flex; gap:8px; align-items:center; }
+  .fr-input-row .fr-input { flex:1; min-width:0; }
+  .fr-browse { background:#fff; color:var(--color-dbs-red); border-color:var(--color-dbs-red); }
+  .fr-browse:hover:not(:disabled) { background:var(--color-soft-pink-surface, #FFF1F4); }
   .fr-err { margin:0; font-size:11px; font-weight:800; color:var(--color-dbs-red); }
   .fr-actions { display:flex; justify-content:flex-end; }
   .fr-btn { height:34px; padding:0 18px; border-radius:6px; font-size:12px; font-weight:850; cursor:pointer; border:1px solid var(--color-dbs-red); }

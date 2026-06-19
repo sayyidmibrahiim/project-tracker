@@ -11,3 +11,14 @@ web/static/
 
 # graphify knowledge graph (rebuildable, AST-only)
 graphify-out/
+
+# Claude/debug probe artifacts
+_memprobe*.py
+_probe*.py
+_app_stdout.txt
+_app_stderr.txt
+_app_live_*.log
+.phase4_*.log
+
+# Root-level accidental metadata; canonical metadata is per-project project_data.json.
+/project_data.json

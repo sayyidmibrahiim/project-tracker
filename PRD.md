@@ -55,10 +55,6 @@ Built for a deployment/support engineer who tracks multiple CR projects, coordin
 ### 2.2 Platform
 
 - Windows 10/11 is the production runtime target.
-- Linux (PopOS) is used for development and unit testing only.
-  - On Linux: run unit tests, browser-preview frontend, run Python backend logic that does not use Windows APIs.
-  - On Linux: Windows-only integrations (Outlook COM, Teams `pyautogui`, `os.startfile`, `send2trash`, PyInstaller Windows build) must not be executed.
-- PyInstaller Windows build must only be attempted from Windows.
 
 ### 2.3 Features
 
@@ -66,7 +62,6 @@ Built for a deployment/support engineer who tracks multiple CR projects, coordin
 - No external server or web backend.
 - No multi-user collaboration.
 - No embedded browser (all web links open in default OS browser).
-- No PDF export (CSV only).
 - No hard delete.
 - No auto-send Teams messages by default (`teams_auto_send = false`).
 - No new dependencies without user confirmation.
@@ -205,25 +200,7 @@ project_tracker_dbs/
 
 ## 5. Development Environment & Workflow
 
-### 5.1 Linux Development (PopOS)
-
-```bash
-# Setup
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cd frontend && npm install
-
-# Run (browser preview)
-cd frontend && npm run dev
-# Open http://localhost:5173 in browser for UI work
-# Python backend with mocked Windows APIs:
-python app_web.py --dev --no-windows
-
-# Run unit tests
-pytest tests/ -v
-```
-
-### 5.2 Windows Testing
+### 5.1 Windows
 
 ```bash
 # Full app test
@@ -233,23 +210,6 @@ python app_web.py
 # Windows integration test (Outlook, Teams, file ops)
 python -m pytest tests/windows/ -v  # manual verification
 ```
-
-### 5.3 Windows-only Guard Pattern
-
-```python
-import sys
-IS_WINDOWS = sys.platform == "win32"
-
-def open_file_externally(path: Path) -> None:
-    if IS_WINDOWS:
-        import os
-        os.startfile(str(path))
-    else:
-        # Dev fallback: log and skip
-        print(f"[DEV] Would open: {path}")
-```
-
----
 
 ## 6. Design System & UI Theme
 

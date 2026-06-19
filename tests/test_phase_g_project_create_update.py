@@ -133,6 +133,23 @@ def test_project_update_persists(js_api, temp_project):
     assert metadata.updated_at is not None
 
 
+def test_project_update_persists_start_end_datetime_and_plan(js_api, temp_project):
+    """project_update persists start/end datetime and implementation_plan."""
+    path = str(temp_project["project_path"])
+
+    result = js_api.project_update(path, {
+        "start_datetime": "2026-06-17T09:00:00+07:00",
+        "end_datetime": "2026-06-17T10:00:00+07:00",
+        "implementation_plan": "Deploy CR",
+    })
+
+    assert result["ok"] is True
+    data = js_api.project_get(path)["data"]
+    assert data["start_datetime"] == "2026-06-17T09:00:00+07:00"
+    assert data["end_datetime"] == "2026-06-17T10:00:00+07:00"
+    assert data["implementation_plan"] == "Deploy CR"
+
+
 # ── project_update on nonexistent path fails controlled ──────────────────
 
 

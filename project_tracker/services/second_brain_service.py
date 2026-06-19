@@ -12,6 +12,7 @@ from pathlib import Path
 
 from project_tracker.infrastructure.filesystem import (
     assert_within,
+    create_directory,
     create_file,
     delete_target,
 )
@@ -102,6 +103,46 @@ class SecondBrainService:
         reflects the new note (Req 13.9).
         """
         folder = self._require_folder()
+        target = create_file(folder, parent / filename, content=content)
+        self._invalidate()
+        return target
+
+    def create_folder(self, parent: Path, name: str) -> Path:
+        """Create a subfolder ``parent/name`` within the Second Brain folder.
+
+        Mirrors ``create_note`` discipline: the name is validated, the target
+        must resolve within the root, and an existing target is rejected (no
+        silent reuse) so the UI can surface "already exists" honestly.
+        """
+        folder = self._require_folder()
+        target = (parent / name).resolve()
+        assert_within(folder, target)
+        if target.exists():
+            raise FileExistsError(f"Second Brain folder already exists: {target}")
+        result = create_directory(folder, target)
+        self._invalidate()
+        return result
+
+    #: Text-like extensions the in-app editor can open and edit (Req 13.1).
+    TEXT_LIKE_EXTENSIONS: frozenset[str] = frozenset(
+        {".md", ".txt", ".py", ".sql", ".json", ".csv", ".log", ".ini", ".yaml", ".yml", ".ts", ".js", ".html", ".css"}
+    )
+
+    def create_file(self, parent: Path, filename: str, content: str = "") -> Path:
+        """Create a generic text-like file ``parent/filename`` in the Second Brain.
+
+        Same guards as ``create_note`` plus an extension allowlist: only
+        text-like files may be created here (binary/unknown types must be added
+        by the user via the OS file system). An existing target is rejected
+        without overwrite.
+        """
+        folder = self._require_folder()
+        suffix = Path(filename).suffix.casefold()
+        if suffix not in self.TEXT_LIKE_EXTENSIONS:
+            raise ValueError(
+                f"Unsupported file type '{suffix}'. Only text-like files "
+                f"({', '.join(sorted(self.TEXT_LIKE_EXTENSIONS))}) can be created here."
+            )
         target = create_file(folder, parent / filename, content=content)
         self._invalidate()
         return target

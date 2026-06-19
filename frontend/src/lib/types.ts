@@ -73,6 +73,7 @@ export interface DashboardProject {
   end_datetime: string | null;
   t10_status: string;
   drone_ticket_count: number;
+  subprojects: string[];
   updated_at: string | null;
   scanned_at: string | null;
   drone_tickets: DashboardRowDrone[];
@@ -129,6 +130,15 @@ export interface ProjectDetail {
   drone_ticket_count: number;
   drone_tickets: DroneTicket[];
   implementation_plan?: string | null;
+  history?: HistoryEntry[];
+}
+
+/** Mirrors HistoryEntry metadata rows returned by project_get. */
+export interface HistoryEntry {
+  timestamp: string;
+  action: string;
+  detail: string;
+  user: string;
 }
 
 /** Mirrors DroneTicket metadata fields. */

@@ -1,16 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "project-tracker-dbs"
 version = "0.1.0"
 description = "Windows desktop tracker for CR deployment projects"
 requires-python = ">=3.12"
 dependencies = [
-  "PyQt6>=6.6.0",
+  "pywebview>=6.2.1",
   "pywin32>=306; platform_system == 'Windows'",
   "pyinstaller>=6.0.0",
   "pyautogui>=0.9.54",
   "pyperclip>=1.8.2",
   "send2trash>=1.8.3",
   "watchdog>=4.0.0",
+  "python-dateutil>=2.9.0",
+  "APScheduler>=3.10,<4",
 ]
 
 [tool.pytest.ini_options]

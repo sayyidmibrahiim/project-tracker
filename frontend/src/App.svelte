@@ -10,7 +10,7 @@
   import Automations from "./lib/components/Automations.svelte";
   import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
-  import { callBridge, isPywebviewReady } from "./lib/bridge";
+  import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
@@ -173,7 +173,11 @@
     refreshKey++;
   }
 
-  onMount(() => {
+  onMount(async () => {
+    // Wait for pywebview to fully register bridge methods before any call.
+    // Without this, early isPywebviewReady() returns false (or true with an
+    // empty api object) and all initial loads silently bail.
+    await waitForPywebviewReady();
     loadNotifications();
     loadYears();
     checkRoot();
@@ -194,7 +198,7 @@
     onDismiss={handleDismiss}
     onDismissAll={handleDismissAll}
   />
-  <main class="main-area">
+  <main class="main">
     <Header
       {currentPage}
       {selectedYear}
@@ -208,21 +212,23 @@
       onAddYear={addYear}
       {openAddYearToken}
     />
-    {#if currentPage === "dashboard"}
-      <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
-    {:else if currentPage === "report"}
-      <Report {selectedYear} {searchQuery} key={refreshKey} />
-    {:else if currentPage === "settings"}
-      <Settings />
-    {:else if currentPage === "second-brain"}
-      <SecondBrain />
-    {:else if currentPage === "project-detail"}
-      <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} />
-    {:else if currentPage === "automations"}
-      <Automations />
-    {:else}
-      <PagePlaceholder title="Unknown Page" subtitle="Page not found." sections={[]} />
-    {/if}
+    <div class="app-content">
+      {#if currentPage === "dashboard"}
+        <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
+      {:else if currentPage === "report"}
+        <Report {selectedYear} {searchQuery} key={refreshKey} />
+      {:else if currentPage === "settings"}
+        <Settings />
+      {:else if currentPage === "second-brain"}
+        <SecondBrain />
+      {:else if currentPage === "project-detail"}
+        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} />
+      {:else if currentPage === "automations"}
+        <Automations />
+      {:else}
+        <PagePlaceholder title="Unknown Page" subtitle="Page not found." sections={[]} />
+      {/if}
+    </div>
   </main>
   {#if rootUnset}
     <FirstRunSetup onSaved={onRootConfigured} />

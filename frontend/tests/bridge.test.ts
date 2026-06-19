@@ -14,7 +14,7 @@
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 
-import { callBridge } from "../src/lib/bridge.ts";
+import { callBridge, waitForPywebviewReady } from "../src/lib/bridge.ts";
 import { BridgeErrorCode } from "../src/lib/types.ts";
 
 type AnyApi = Record<string, unknown> | undefined;
@@ -48,6 +48,30 @@ test("returns BRIDGE_UNAVAILABLE when the bridge is missing", async () => {
     const res = await callBridge("anything");
     assert.equal(res.ok, false);
     assert.equal(res.error?.code, BridgeErrorCode.BRIDGE_UNAVAILABLE);
+  } finally {
+    clearBridge();
+  }
+});
+
+test("waitForPywebviewReady resolves true when the bridge appears before timeout", async () => {
+  setBridge(undefined);
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const pending = waitForPywebviewReady(3000, 50);
+    mock.timers.tick(100);
+    setBridge({ existing: () => okResponse });
+    mock.timers.tick(50);
+    assert.equal(await pending, true);
+  } finally {
+    mock.timers.reset();
+    clearBridge();
+  }
+});
+
+test("waitForPywebviewReady resolves false after timeout when bridge never appears", async () => {
+  setBridge(undefined);
+  try {
+    assert.equal(await waitForPywebviewReady(5, 1), false);
   } finally {
     clearBridge();
   }
