@@ -34,6 +34,10 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
   assert.match(PD, /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/);
   // Edit control toggles back to input mode
   assert.match(PD, /crLinkEditing\s*=\s*true/);
+  // Displays copy, open, and edit icons (as SVG nodes now)
+  assert.match(PD, /<svg[^>]*Copy CR link/);
+  assert.match(PD, /<svg[^>]*Open CR link in browser/);
+  assert.match(PD, /<svg[^>]*Edit CR link/);
 });
 
 // --- CR State autosave (Section 1.2) -----------------------------------------
@@ -48,6 +52,7 @@ test("CR State select has onchange autosave hook", () => {
 test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => {
   assert.match(PD, /onNavigateDashboard/);
   assert.match(PD, /Back to Dashboard/);
+  assert.match(PD, /<svg[^>]*pd-icon-back/);
 });
 
 test("App.svelte wires onNavigateDashboard to navigate('dashboard')", () => {
