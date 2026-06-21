@@ -8,16 +8,13 @@
   import SecondBrain from "./lib/components/SecondBrain.svelte";
   import ProjectDetails from "./lib/components/ProjectDetails.svelte";
   import Automations from "./lib/components/Automations.svelte";
-  import PagePlaceholder from "./lib/components/PagePlaceholder.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
 
-  // No remaining placeholder pages — all pages have real components.
-  // pageShells kept for type safety if new placeholder pages are added later.
-  const pageShells: Partial<Record<PageId, { title: string; subtitle: string; sections: { title: string; detail: string }[] }>> = {};
+  // All pages have real components — no placeholder needed.
 
   let currentPage: PageId = $state("dashboard");
   let selectedYear = $state("all");
@@ -43,7 +40,7 @@
 
   function navigate(id: string) {
     const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations"];
-    if (id in pageShells || validPages.includes(id)) {
+    if (validPages.includes(id)) {
       if (id !== "project-detail") {
         pendingProjectPath = null;
         startNewProject = false;
@@ -222,11 +219,9 @@
       {:else if currentPage === "second-brain"}
         <SecondBrain />
       {:else if currentPage === "project-detail"}
-        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} />
+        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
       {:else if currentPage === "automations"}
         <Automations />
-      {:else}
-        <PagePlaceholder title="Unknown Page" subtitle="Page not found." sections={[]} />
       {/if}
     </div>
   </main>

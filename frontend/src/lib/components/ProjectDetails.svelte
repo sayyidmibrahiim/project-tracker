@@ -10,7 +10,7 @@
   import ConfirmModal from "./ConfirmModal.svelte";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false }: { initialPath?: string | null; startNew?: boolean } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -538,6 +538,14 @@
 </script>
 
 <section class="screen active" id="screen-details">
+  {#if onNavigateDashboard}
+    <div class="pd-back-bar">
+      <button type="button" class="pd-back-btn" onclick={() => onNavigateDashboard?.()}>
+        <span class="pd-back-arrow" aria-hidden="true">←</span>
+        <span>Back to Dashboard</span>
+      </button>
+    </div>
+  {/if}
   <div class="panel-card" style="flex:0 0 auto;">
     <div class="toolbar">
       <div class="panel-title-row" style="margin:0 18px 0 0;"><span class="panel-title-icon">▣</span><span class="panel-title">Project Command Center</span><span class="panel-subtitle">compact editing workspace</span></div>
@@ -772,4 +780,8 @@
   .cr-state-select { padding:5px 9px; font-size:11.5px; font-weight:800; border:1px solid var(--primary-red); border-radius:6px; background:var(--primary-red); color:#fff; outline:none; cursor:pointer; }
   .cr-state-select:focus { box-shadow:0 0 0 2px var(--color-dbs-red-active); }
   .cr-state-select:disabled { opacity:0.55; cursor:not-allowed; }
+  .pd-back-bar { flex: 0 0 auto; display: flex; align-items: center; }
+  .pd-back-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 7px; background: #fff; color: var(--color-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+  .pd-back-btn:hover { border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
+  .pd-back-arrow { font-weight: 900; }
 </style>
