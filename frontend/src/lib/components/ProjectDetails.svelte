@@ -21,6 +21,7 @@
   let projects: ProjectRow[] = $state([]);
   let selectedPath: string = $state("");
   let detail: ProjectDetail | null = $state(null);
+  let isSubproject: boolean = $state(false);
   let subprojects: string[] = $state([]);
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
@@ -195,7 +196,7 @@
   async function selectProject(path: string) {
     selectedPath = path;
     detailState = "loading";
-    detail = null; subprojects = []; files = []; notes = "";
+    detail = null; isSubproject = false; subprojects = []; files = []; notes = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -224,6 +225,7 @@
     ]);
 
     detail = dResp.ok ? (dResp.data ?? null) : null;
+    isSubproject = detail ? (detail as any).is_subproject || false : false;
     subprojects = spResp.ok ? (spResp.data ?? []) : [];
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
@@ -648,7 +650,7 @@
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
-                {#if crLinkEditing}
+                {#if crLinkEditing && !isSubproject}
                   <input
                     id="meta-cr-link"
                     class="cr-link-input"
@@ -663,23 +665,30 @@
                   {/if}
                 {:else}
                   <div class="pd-cr-link-display">
-                    <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link}</span>
-                    <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-                      {#if crLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
-                    </button>
-                    <button class="pd-icon-btn" type="button" onclick={openCrLink} aria-label="Open CR link in browser">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                    </button>
-                    <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                    </button>
+                    <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link || "—"}</span>
+                    {#if detail.cr_link}
+                      <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                        {#if crLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
+                      </button>
+                      <button class="pd-icon-btn" type="button" onclick={openCrLink} aria-label="Open CR link in browser">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                      </button>
+                    {/if}
+                    {#if !isSubproject}
+                      <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </button>
+                    {/if}
                   </div>
+                {/if}
+                {#if isSubproject}
+                  <span class="pd-inherited-label">(Inherited from Main Project)</span>
                 {/if}
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-cr-state">
                     <span class="pd-meta-label">CR State</span>
-                    <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving"}>
+                    <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving" || isSubproject}>
                       {#each legalCrOptionsFor(detail.cr_state) as opt}
                         <option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>
                       {/each}
@@ -705,15 +714,18 @@
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-start">
                     <span class="pd-meta-label">Start datetime</span>
-                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
+                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
                   </label>
                   <label class="pd-meta-field" for="meta-end">
                     <span class="pd-meta-label">End datetime</span>
-                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
+                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
                   </label>
                 </div>
+                {#if isSubproject}
+                  <span class="pd-inherited-label">(Inherited from Main Project)</span>
+                {/if}
                 <div class="pd-notes-actions">
-                  <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail)}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
+                  <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail) || isSubproject}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
                   {#if metaSaveState === "success"}
                     <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
                   {:else if metaSaveState === "error"}
@@ -723,54 +735,56 @@
               </div>
             </div>
 
-            <div class="pd-section">
-              <div class="pd-section-head">
-                <h4 class="pd-section-title">Sub Project (DRONE)</h4>
-                <div class="pd-inline-create">
-                  <input class="pd-control" placeholder="Sub project name…" bind:value={newSubprojectName} disabled={subprojectBusy} />
-                  <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={subprojectBusy || !newSubprojectName.trim()}>Add Sub Project</button>
+            {#if !isSubproject}
+              <div class="pd-section">
+                <div class="pd-section-head">
+                  <h4 class="pd-section-title">Sub Project (DRONE)</h4>
+                  <div class="pd-inline-create">
+                    <input class="pd-control" placeholder="Sub project name…" bind:value={newSubprojectName} disabled={subprojectBusy} />
+                    <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={subprojectBusy || !newSubprojectName.trim()}>Add Sub Project</button>
+                  </div>
                 </div>
+                <SubProjectTable
+                  {subprojects}
+                  droneTickets={detail.drone_tickets}
+                  selectedRow={selectedSubprojectRow}
+                  droneStateBusyName={droneStateBusyName}
+                  droneStateErrorName={droneStateErrorName}
+                  onSelectRow={onSelectSubprojectRow}
+                  onChangeDroneState={onChangeSubprojectDroneState}
+                  onOpenFolder={openSubprojectFolder}
+                  {legalDroneOptionsFor}
+                />
+                {#if selectedSubprojectRowDetail}
+                  {@const ticket = selectedSubprojectRowDetail.ticket}
+                  <div class="pd-drone-detail">
+                    <h5 class="pd-drone-detail-title">{selectedSubprojectRow} · Drone Ticket</h5>
+                    <label class="pd-meta-field" for="row-drone-link">
+                      <span class="pd-meta-label">Drone URL</span>
+                      <input
+                        id="row-drone-link"
+                        class="cr-link-input"
+                        type="url"
+                        placeholder="Paste drone URL…"
+                        value={droneLinkEdit}
+                        oninput={(e) => (droneLinkEdit = (e.currentTarget as HTMLInputElement).value)}
+                        onblur={saveDroneLinkFromPanel}
+                        disabled={droneLinkBusy}
+                      />
+                    </label>
+                    {#if !ticket}
+                      <button class="cr-link-save-btn" type="button" onclick={addDroneForSelectedRow} disabled={droneLinkBusy || !droneLinkEdit.trim()}>Add Drone Ticket</button>
+                    {/if}
+                    {#if droneLinkError}
+                      <span class="cr-link-feedback cr-link-err">✗ {droneLinkError}</span>
+                    {/if}
+                  </div>
+                {/if}
+                {#if subprojectFeedback}
+                  <p class:cr-link-ok={subprojectFeedbackKind === "success"} class:cr-link-err={subprojectFeedbackKind === "error"} class="cr-link-feedback">{subprojectFeedbackKind === "success" ? "✓" : "✗"} {subprojectFeedback}</p>
+                {/if}
               </div>
-              <SubProjectTable
-                {subprojects}
-                droneTickets={detail.drone_tickets}
-                selectedRow={selectedSubprojectRow}
-                droneStateBusyName={droneStateBusyName}
-                droneStateErrorName={droneStateErrorName}
-                onSelectRow={onSelectSubprojectRow}
-                onChangeDroneState={onChangeSubprojectDroneState}
-                onOpenFolder={openSubprojectFolder}
-                {legalDroneOptionsFor}
-              />
-              {#if selectedSubprojectRowDetail}
-                {@const ticket = selectedSubprojectRowDetail.ticket}
-                <div class="pd-drone-detail">
-                  <h5 class="pd-drone-detail-title">{selectedSubprojectRow} · Drone Ticket</h5>
-                  <label class="pd-meta-field" for="row-drone-link">
-                    <span class="pd-meta-label">Drone URL</span>
-                    <input
-                      id="row-drone-link"
-                      class="cr-link-input"
-                      type="url"
-                      placeholder="Paste drone URL…"
-                      value={droneLinkEdit}
-                      oninput={(e) => (droneLinkEdit = (e.currentTarget as HTMLInputElement).value)}
-                      onblur={saveDroneLinkFromPanel}
-                      disabled={droneLinkBusy}
-                    />
-                  </label>
-                  {#if !ticket}
-                    <button class="cr-link-save-btn" type="button" onclick={addDroneForSelectedRow} disabled={droneLinkBusy || !droneLinkEdit.trim()}>Add Drone Ticket</button>
-                  {/if}
-                  {#if droneLinkError}
-                    <span class="cr-link-feedback cr-link-err">✗ {droneLinkError}</span>
-                  {/if}
-                </div>
-              {/if}
-              {#if subprojectFeedback}
-                <p class:cr-link-ok={subprojectFeedbackKind === "success"} class:cr-link-err={subprojectFeedbackKind === "error"} class="cr-link-feedback">{subprojectFeedbackKind === "success" ? "✓" : "✗"} {subprojectFeedback}</p>
-              {/if}
-            </div>
+            {/if}
           </div>
 
           <div class="pane">
@@ -877,5 +891,6 @@
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
   .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
   .pd-spinner { animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  .pd-inherited-label { font-size: 10px; color: var(--color-muted); font-style: italic; margin-top: 2px; }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
