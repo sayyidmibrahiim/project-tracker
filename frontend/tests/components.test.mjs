@@ -199,7 +199,7 @@ test("EmailTemplateDialog renders the PRD §16.3 two-column editor for a fixed c
   assert.match(body, /Cancel/);
 });
 
-test("NotesEditor renders the markdown toolbar, edit/preview toggle, and autosave status", async () => {
+test("NotesEditor renders the markdown toolbar and autosave status", async () => {
   const body = await renderViaLoader(NOTES_EDITOR, {
     projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
     initialNotes: "# Hi",
@@ -209,11 +209,8 @@ test("NotesEditor renders the markdown toolbar, edit/preview toggle, and autosav
   assert.match(body, /title="Heading 1"/);
   assert.match(body, /title="Inline code"/);
   assert.match(body, /title="Link"/);
-  // Edit/Preview toggle.
-  assert.match(body, />Edit</);
-  assert.match(body, />Preview</);
-  // Default edit mode shows the textarea; autosave (not an explicit Save button).
-  assert.match(body, /ne-textarea/);
+  // Default edit mode shows the visual area; autosave (not an explicit Save button).
+  assert.match(body, /ne-editor-area/);
   assert.match(body, /Autosave on/);
   assert.doesNotMatch(body, /Save Notes/);
 });
@@ -287,7 +284,7 @@ test("Dashboard renders the PRD §11.15 summary table shell and touches no bridg
   assert.doesNotMatch(body, /pywebview/i);
 });
 
-test("DashboardRowMenu renders a closed More trigger with no menu open at render", async () => {
+test("DashboardRowMenu renders a closed vertical-dot trigger with no menu open at render", async () => {
   const body = await renderViaLoader(DASHBOARD_ROW_MENU, {
     projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
     projectState: "UAT_PREPARE",
@@ -296,7 +293,8 @@ test("DashboardRowMenu renders a closed More trigger with no menu open at render
     onChanged: () => {},
   });
   assert.match(body, /Row actions/);
-  assert.match(body, />More</);
+  assert.match(body, /rm-dot-stack/);
+  assert.doesNotMatch(body, />More</);
   // Menu items only render once opened (open=false at render).
   assert.doesNotMatch(body, /Open Project Folder/);
   assert.doesNotMatch(body, /Project Details/);
