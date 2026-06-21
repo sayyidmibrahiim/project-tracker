@@ -24,7 +24,6 @@
   let subprojects: string[] = $state([]);
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
-  let selectedSubproject: string = $state("all");
   type TopActionState = "idle" | "saving" | "success" | "error";
   let topActionState: TopActionState = $state("idle");
   let topActionError: string = $state("");
@@ -196,7 +195,7 @@
   async function selectProject(path: string) {
     selectedPath = path;
     detailState = "loading";
-    detail = null; subprojects = []; files = []; notes = ""; selectedSubproject = "all";
+    detail = null; subprojects = []; files = []; notes = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -430,7 +429,8 @@
       return;
     }
     newSubprojectName = "";
-    selectedSubproject = name;
+    selectedSubprojectRow = name;
+    droneLinkEdit = "";
     subprojectFeedback = `Created ${name}.`;
     subprojectFeedbackKind = "success";
     await reloadSubprojects();
@@ -589,15 +589,6 @@
           <option value="">Select project…</option>
           {#each filtered as p}
             <option value={p.project_path}>{p.project_name}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="pd-command-field pd-command-project" for="pd-subproject-select">
-        <span>Sub Project</span>
-        <select id="pd-subproject-select" class="pd-control" bind:value={selectedSubproject} disabled={!selectedPath || subprojects.length === 0 || mode === "new"}>
-          <option value="all">All Sub Projects</option>
-          {#each subprojects as sp}
-            <option value={sp}>{sp}</option>
           {/each}
         </select>
       </label>
