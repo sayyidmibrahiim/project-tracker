@@ -581,14 +581,18 @@
   {#if onNavigateDashboard}
     <div class="pd-back-bar">
       <button type="button" class="pd-back-btn" onclick={() => onNavigateDashboard?.()}>
-        <span class="pd-back-arrow" aria-hidden="true">←</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon-back"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
         <span>Back to Dashboard</span>
       </button>
     </div>
   {/if}
   <div class="panel-card" style="flex:0 0 auto;">
     <div class="toolbar">
-      <div class="panel-title-row" style="margin:0 18px 0 0;"><span class="panel-title-icon">▣</span><span class="panel-title">Project Command Center</span><span class="panel-subtitle">compact editing workspace</span></div>
+      <div class="panel-title-row" style="margin:0 18px 0 0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+        <span class="panel-title">Project Command Center</span>
+        <span class="panel-subtitle">compact editing workspace</span>
+      </div>
       <label class="pd-command-field pd-command-project" for="pd-project-select">
         <span>Project</span>
         <select id="pd-project-select" class="pd-control" value={selectedPath} onchange={(e) => selectProject((e.target as HTMLSelectElement).value)} disabled={filtered.length === 0 || mode === "new"}>
@@ -621,13 +625,19 @@
       {:else if listState === "loading"}
         <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading projects…</span></div>
       {:else if listState === "error"}
-        <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
+        <div class="dashboard-banner banner-error">
+          <span class="banner-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
+          <div><p class="banner-title">Failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div>
+        </div>
       {:else if !selectedPath}
         <div class="table-empty"><p class="empty-title">Select a project</p><p class="empty-sub">Use the Project Command Center selector to view details.</p></div>
       {:else if detailState === "loading"}
         <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading details…</span></div>
       {:else if detailState === "error"}
-        <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Detail load failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
+        <div class="dashboard-banner banner-error">
+          <span class="banner-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
+          <div><p class="banner-title">Detail load failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div>
+        </div>
       {:else if detail}
         <div class="split">
           <div class="pane">
@@ -654,9 +664,16 @@
                 {:else}
                   <div class="pd-cr-link-display">
                     <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link}</span>
-                    <button class="pd-icon-btn" type="button" title="Copy CR link" onclick={copyCrLink} aria-label="Copy CR link">📋{#if crLinkCopied} ✓{/if}</button>
-                    <button class="pd-icon-btn" type="button" title="Open CR link in browser" onclick={openCrLink} aria-label="Open CR link in browser">↗</button>
-                    <button class="pd-icon-btn" type="button" title="Edit CR link" onclick={editCrLink} aria-label="Edit CR link">✎</button>
+                    <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                      {#if crLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
+                    </button>
+                    <button class="pd-icon-btn" type="button" onclick={openCrLink} aria-label="Open CR link in browser">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    </button>
+                    <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
                   </div>
                 {/if}
                 <div class="pd-meta-datetime-row">
@@ -670,7 +687,10 @@
                   </label>
                 </div>
                 {#if crStateSaveState === "saving"}
-                  <span class="cr-link-feedback">⏳ Saving…</span>
+                  <span class="cr-link-feedback">
+                    <svg class="pd-spinner" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                    Saving…
+                  </span>
                 {:else if crStateSaveState === "success"}
                   <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
                 {:else if crStateSaveState === "error"}
@@ -848,11 +868,14 @@
   .cr-state-select { padding:5px 9px; font-size:11.5px; font-weight:800; border:1px solid var(--primary-red); border-radius:6px; background:var(--primary-red); color:#fff; outline:none; cursor:pointer; }
   .cr-state-select:focus { box-shadow:0 0 0 2px var(--color-dbs-red-active); }
   .cr-state-select:disabled { opacity:0.55; cursor:not-allowed; }
-  .pd-back-bar { flex: 0 0 auto; display: flex; align-items: center; }
+  .pd-back-bar { flex: 0 0 auto; display: flex; align-items: center; margin-bottom: 12px; }
   .pd-back-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 7px; background: #fff; color: var(--color-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
   .pd-back-btn:hover { border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
-  .pd-back-arrow { font-weight: 900; }
+  .pd-icon-back { stroke: var(--color-ink); margin-right: 4px; }
+  .pd-back-btn:hover .pd-icon-back { stroke: var(--color-dbs-red); }
   .pd-drone-detail { margin-top: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-workspace); display: flex; flex-direction: column; gap: 6px; }
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
   .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
+  .pd-spinner { animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

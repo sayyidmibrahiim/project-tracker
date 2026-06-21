@@ -34,10 +34,10 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
   assert.match(PD, /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/);
   // Edit control toggles back to input mode
   assert.match(PD, /crLinkEditing\s*=\s*true/);
-  // Displays copy, open, and edit icons (as SVG nodes now)
-  assert.match(PD, /<svg[^>]*Copy CR link/);
-  assert.match(PD, /<svg[^>]*Open CR link in browser/);
-  assert.match(PD, /<svg[^>]*Edit CR link/);
+  // Displays copy, open, and edit icons (as button + SVG nodes now)
+  assert.match(PD, /aria-label="Copy CR link"[^>]*>\s*<svg/);
+  assert.match(PD, /aria-label="Open CR link in browser"[^>]*>\s*<svg/);
+  assert.match(PD, /aria-label="Edit CR link"[^>]*>\s*<svg/);
 });
 
 // --- CR State autosave (Section 1.2) -----------------------------------------
