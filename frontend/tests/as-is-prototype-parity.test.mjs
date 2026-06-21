@@ -38,10 +38,10 @@ test("AS_IS header and sidebar labels are present", () => {
 });
 
 test("AS_IS page titles and core sections are present", () => {
-  for (const label of ["No", "Main Project", "Sub Project", "Start Datetime", "End Datetime", "Drone Ticket", "Drone State", "CR Number", "CR State"]) {
+  for (const label of ["No", "Project", "Sub Project", "Start", "End", "Drone Ticket", "Drone State", "CR Number", "CR State"]) {
     assert.match(DASHBOARD, new RegExp(label));
   }
-  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Projects", "Files", "Notes", "Activity History"]) {
+  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Project \\(DRONE\\)", "Files", "Notes", "Activity History"]) {
     assert.match(PROJECT_DETAILS, new RegExp(label));
   }
   for (const label of ["Second Brain", "Notes", "Link Bank", "Backlinks", "Recent Activity"]) {
@@ -50,6 +50,8 @@ test("AS_IS page titles and core sections are present", () => {
   for (const label of ["Report Table", "Total CR", "Folder: UAT_PREPARE", "Folder: PROD_READY", "Folder: IMPLEMENTED", "Folder: POSTPONED"]) {
     assert.match(REPORT, new RegExp(label));
   }
+  assert.doesNotMatch(DASHBOARD, /dash-group-cell/);
+  assert.doesNotMatch(DASHBOARD, /dashboard-command-strip/);
   for (const label of ["Automation Center", "Outlook", "Teams", "Reminder", "Rules Engine"]) {
     assert.match(AUTOMATIONS, new RegExp(label));
   }

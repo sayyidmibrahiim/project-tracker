@@ -270,9 +270,8 @@ test("SubProjectTable renders an empty state when there are no sub-projects", as
 
 test("Dashboard renders the PRD §11.15 summary table shell and touches no bridge at render", async () => {
   const body = await renderViaLoader(DASHBOARD, { selectedYear: "2026", searchQuery: "" });
-  assert.match(body, /CR - Project Summary Table/);
-  // Column headers (real PRD §11.15 columns).
-  assert.match(body, /Main Project/);
+  // Column headers (real PRD §11.15 columns; compact labels allowed by design pass).
+  assert.match(body, /Project/);
   assert.match(body, /Sub Project/);
   assert.match(body, /Drone Ticket/);
   assert.match(body, /Drone State/);
@@ -281,7 +280,7 @@ test("Dashboard renders the PRD §11.15 summary table shell and touches no bridg
   assert.doesNotMatch(body, /pywebview/i);
 });
 
-test("DashboardRowMenu renders a closed ⋮ trigger with no menu open at render", async () => {
+test("DashboardRowMenu renders a closed More trigger with no menu open at render", async () => {
   const body = await renderViaLoader(DASHBOARD_ROW_MENU, {
     projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
     projectState: "UAT_PREPARE",
@@ -290,6 +289,7 @@ test("DashboardRowMenu renders a closed ⋮ trigger with no menu open at render"
     onChanged: () => {},
   });
   assert.match(body, /Row actions/);
+  assert.match(body, />More</);
   // Menu items only render once opened (open=false at render).
   assert.doesNotMatch(body, /Open Project Folder/);
   assert.doesNotMatch(body, /Project Details/);
@@ -329,7 +329,9 @@ test("ProjectDetails source includes datetime-local editors and saves date field
   assert.match(src, /metaEndEdit/);
   assert.match(src, /start_datetime:\s*fromDatetimeLocal\(metaStartEdit\)/);
   assert.match(src, /end_datetime:\s*fromDatetimeLocal\(metaEndEdit\)/);
-  assert.match(src, /implementation_plan:\s*metaPlanEdit/);
+  // Fase 1 removed the Implementation Plan UI; project_update no longer sends implementation_plan.
+  assert.doesNotMatch(src, /implementation_plan:\s*metaPlanEdit/);
+  assert.doesNotMatch(src, /metaPlanEdit/);
 });
 
 test("ProjectDetails source follows the prototype Project Command Center structure", () => {
