@@ -82,15 +82,6 @@
   // ── Drone edit state ──
   let droneBusy: boolean = $state(false);
   let droneError: string = $state("");
-  // Add-drone form
-  let newDroneLink: string = $state("");
-  let newDroneSubfolder: string = $state("");
-  let newDroneOwner: string = $state("");
-  // Per-index edit drafts
-  let droneEditIndex: number = $state(-1);
-  let droneEditLink: string = $state("");
-  let droneEditSubfolder: string = $state("");
-  let droneEditOwner: string = $state("");
   // ── Drone state edit state ──
   const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "POSTPONED", "CANCELED"];
   const DRONE_NEXT: Record<string, string[]> = {
@@ -131,12 +122,6 @@
       );
     }
     return result;
-  });
-
-  let selectedSubprojectDrone = $derived.by(() => {
-    if (!detail || selectedSubproject === "all") return null;
-    const index = detail.drone_tickets.findIndex((t) => (t.subfolder_name ?? "") === selectedSubproject);
-    return index >= 0 ? { ticket: detail.drone_tickets[index], index } : null;
   });
 
   function pad2(value: number): string {
@@ -202,7 +187,7 @@
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
-    droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
+    droneError = "";
     droneStateEdits = {}; droneStateBusy = -1; droneStateError = {};
     newSubprojectName = ""; subprojectBusy = false; subprojectFeedback = ""; subprojectFeedbackKind = "idle";
     errorCode = ""; errorMessage = "";
@@ -290,6 +275,11 @@
     setTimeout(() => { if (crStateSaveState === "success") crStateSaveState = "idle"; }, 2500);
   }
 
+  async function onCrStateChange(next: string) {
+    crStateEdit = next;
+    await saveCrState();
+  }
+
   /** Reopen moves the folder POSTPONED/CANCELED → UAT_PREPARE and CR → PENDING SUBMISSION. */
   async function reopenProject(path: string) {
     crStateSaveState = "saving";
@@ -341,42 +331,11 @@
 
   async function addDrone() {
     if (!selectedPath || !isPywebviewReady()) return;
-    const subfolder = selectedSubproject !== "all" ? selectedSubproject : newDroneSubfolder;
+    const subfolder = selectedSubproject !== "all" ? selectedSubproject : "";
     droneBusy = true; droneError = "";
     const resp = await callBridge("drone_add", selectedPath, {
-      drone_link: newDroneLink, subfolder_name: subfolder, owner: newDroneOwner,
+      drone_link: "", subfolder_name: subfolder, owner: "",
     });
-    droneBusy = false;
-    if (!resp.ok) { droneError = resp.error.message; return; }
-    newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
-    await refreshDetail();
-  }
-
-  function startEditDrone(index: number, t: DroneTicket) {
-    droneEditIndex = index;
-    droneEditLink = t.drone_link;
-    droneEditSubfolder = t.subfolder_name || "";
-    droneEditOwner = t.owner;
-  }
-
-  function cancelEditDrone() { droneEditIndex = -1; }
-
-  async function saveDrone() {
-    if (!selectedPath || droneEditIndex < 0 || !isPywebviewReady()) return;
-    droneBusy = true; droneError = "";
-    const resp = await callBridge("drone_update", selectedPath, droneEditIndex, {
-      drone_link: droneEditLink, subfolder_name: droneEditSubfolder, owner: droneEditOwner,
-    });
-    droneBusy = false;
-    if (!resp.ok) { droneError = resp.error.message; return; }
-    droneEditIndex = -1;
-    await refreshDetail();
-  }
-
-  async function deleteDrone(index: number) {
-    if (!selectedPath || !isPywebviewReady()) return;
-    droneBusy = true; droneError = "";
-    const resp = await callBridge("drone_delete", selectedPath, index);
     droneBusy = false;
     if (!resp.ok) { droneError = resp.error.message; return; }
     await refreshDetail();
@@ -420,28 +379,6 @@
       return;
     }
     droneStateError = { ...droneStateError, [index]: "" };
-    await refreshDetail();
-  }
-
-  async function saveSelectedSubprojectDroneLink(value: string) {
-    if (!selectedPath || !isPywebviewReady() || !selectedSubprojectDrone) return;
-    const next = value.trim();
-    if (next === selectedSubprojectDrone.ticket.drone_link) return;
-    droneBusy = true; droneError = "";
-    const resp = await callBridge("drone_update", selectedPath, selectedSubprojectDrone.index, { drone_link: next });
-    droneBusy = false;
-    if (!resp.ok) { droneError = resp.error.message; return; }
-    await refreshDetail();
-  }
-
-  async function saveSelectedSubprojectDroneOwner(value: string) {
-    if (!selectedPath || !isPywebviewReady() || !selectedSubprojectDrone) return;
-    const next = value.trim();
-    if (next === selectedSubprojectDrone.ticket.owner) return;
-    droneBusy = true; droneError = "";
-    const resp = await callBridge("drone_update", selectedPath, selectedSubprojectDrone.index, { owner: next });
-    droneBusy = false;
-    if (!resp.ok) { droneError = resp.error.message; return; }
     await refreshDetail();
   }
 
@@ -623,10 +560,7 @@
               <div class="pd-meta-edit">
                 <label class="pd-meta-label" for="meta-name">Project Name</label>
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} disabled={metaSaveState === "saving"} />
-                <div class="pd-detail-grid">
-                  <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
-                  <div class="pd-dl-item"><dt>Selected Sub Project</dt><dd>{selectedSubproject === "all" ? "Choose one above" : selectedSubproject}</dd></div>
-                </div>
+                <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
                 <div class="cr-link-row">
                   <input id="meta-cr-link" class="cr-link-input" type="url" placeholder="https://cr.example.com/CR..." bind:value={crLinkEdit} disabled={crLinkSaveState === "saving"} />
@@ -635,66 +569,20 @@
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-cr-state">
                     <span class="pd-meta-label">CR State</span>
-                    <select id="meta-cr-state" class="cr-state-select" bind:value={crStateEdit} disabled={crStateSaveState === "saving"}>
+                    <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving"}>
                       {#each legalCrOptionsFor(detail.cr_state) as opt}
                         <option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>
                       {/each}
                     </select>
                   </label>
-                  <label class="pd-meta-field" for="meta-drone-state-summary">
-                    <span class="pd-meta-label">Drone State</span>
-                    <select id="meta-drone-state-summary" class="cr-state-select" value={detail.drone_tickets[0]?.drone_state ?? ""} disabled>
-                      <option>{detail.drone_tickets[0]?.drone_state ?? "—"}</option>
-                    </select>
-                  </label>
                 </div>
-                <div class="pd-notes-actions">
-                  <button class="cr-link-save-btn" onclick={saveCrState} disabled={crStateSaveState === "saving" || crStateEdit === detail.cr_state}>{#if crStateSaveState === "saving"}⏳ Saving…{:else}Save CR State{/if}</button>
-                  {#if crLinkSaveState === "success" || crStateSaveState === "success"}
-                    <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
-                  {:else if crLinkSaveState === "error"}
-                    <span class="cr-link-feedback cr-link-err">✗ {crLinkSaveError}</span>
-                  {:else if crStateSaveState === "error"}
-                    <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
-                  {/if}
-                </div>
-
-                <div class="pd-drone-flow">
-                  <h5>Drone Ticket</h5>
-                  {#if selectedSubproject === "all"}
-                    <p class="pd-muted">Choose a Sub Project in the command center to add or edit its drone ticket.</p>
-                  {:else if selectedSubprojectDrone}
-                    <div class="pd-meta-datetime-row">
-                      <label class="pd-meta-field" for="selected-drone-link">
-                        <span class="pd-meta-label">Drone Ticket URL</span>
-                        <input id="selected-drone-link" class="cr-link-input" value={selectedSubprojectDrone.ticket.drone_link} onblur={(e) => saveSelectedSubprojectDroneLink((e.currentTarget as HTMLInputElement).value)} disabled={droneBusy} />
-                      </label>
-                      <label class="pd-meta-field" for="selected-drone-owner">
-                        <span class="pd-meta-label">Owner</span>
-                        <input id="selected-drone-owner" class="cr-link-input" value={selectedSubprojectDrone.ticket.owner} onblur={(e) => saveSelectedSubprojectDroneOwner((e.currentTarget as HTMLInputElement).value)} disabled={droneBusy} />
-                      </label>
-                    </div>
-                    <label class="pd-meta-field" for="selected-drone-state">
-                      <span class="pd-meta-label">Drone State</span>
-                      <select id="selected-drone-state" class="cr-state-select" bind:value={droneStateEdits[selectedSubprojectDrone.index]} onchange={() => saveDroneState(selectedSubprojectDrone.index)} disabled={droneStateBusy === selectedSubprojectDrone.index}>
-                        {#each legalDroneOptionsFor(selectedSubprojectDrone.ticket.drone_state) as opt}<option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>{/each}
-                      </select>
-                    </label>
-                  {:else}
-                    <div class="pd-meta-datetime-row">
-                      <label class="pd-meta-field" for="new-drone-link">
-                        <span class="pd-meta-label">Drone Ticket URL</span>
-                        <input id="new-drone-link" class="cr-link-input" placeholder="Paste drone URL…" bind:value={newDroneLink} disabled={droneBusy} />
-                      </label>
-                      <label class="pd-meta-field" for="new-drone-owner">
-                        <span class="pd-meta-label">Owner</span>
-                        <input id="new-drone-owner" class="cr-link-input" placeholder="Owner…" bind:value={newDroneOwner} disabled={droneBusy} />
-                      </label>
-                    </div>
-                    <button class="cr-link-save-btn" type="button" onclick={addDrone} disabled={droneBusy || !newDroneLink.trim()}>Add Drone Ticket</button>
-                  {/if}
-                  {#if droneError}<span class="cr-link-feedback cr-link-err">✗ {droneError}</span>{/if}
-                </div>
+                {#if crStateSaveState === "saving"}
+                  <span class="cr-link-feedback">⏳ Saving…</span>
+                {:else if crStateSaveState === "success"}
+                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                {:else if crStateSaveState === "error"}
+                  <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
+                {/if}
               </div>
             </div>
 
@@ -795,8 +683,6 @@
   .pane { display:flex; flex-direction:column; gap:10px; min-width:0; }
   .pd-muted { margin:0; font-size:11px; font-weight:400; color:var(--color-muted); line-height:1.5; }
   @media (max-width:980px) { .split { grid-template-columns:1fr; } }
-  .pd-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0; }
-  @media (max-width:700px) { .pd-detail-grid { grid-template-columns:1fr; } }
   .pd-dl-item { display:flex; flex-direction:column; gap:3px; }
   .pd-dl-item dt { font-size:9.5px; font-weight:600; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.05em; }
   .pd-dl-item dd { margin:0; font-size:12.5px; font-weight:500; color:var(--color-ink-strong); }
@@ -806,9 +692,6 @@
   .pd-section-title { margin:0 0 8px; font-family:var(--font-display); font-size:13px; font-weight:600; letter-spacing:-0.01em; color:var(--color-ink-strong); display:flex; align-items:center; gap:6px; }
   .pd-inline-create { display:flex; align-items:center; gap:6px; flex:0 1 360px; }
   .pd-inline-create .pd-control { flex:1; }
-  .pd-drone-flow { display:flex; flex-direction:column; gap:7px; padding:10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-workspace); }
-  .pd-drone-flow h5 { margin:0; font-size:11px; font-weight:800; color:var(--color-ink-strong); }
-  .pd-notes-actions { display:flex; align-items:center; gap:8px; }
   .pd-meta-edit { display:flex; flex-direction:column; gap:6px; }
   .pd-meta-datetime-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   @media (max-width:700px) { .pd-meta-datetime-row { grid-template-columns:1fr; } }
