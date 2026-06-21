@@ -769,11 +769,13 @@
             <div class="pd-section">
               <h4 class="pd-section-title">Activity History</h4>
               {#if detail.history?.length}
-                <ol class="pd-history-list">
-                  {#each detail.history as entry}
-                    <li class="pd-history-item"><time>{entry.timestamp}</time><strong>{entry.action}</strong><span>{entry.detail}</span><small>{entry.user}</small></li>
-                  {/each}
-                </ol>
+                <div class="pd-history-scroll">
+                  <ol class="pd-history-list">
+                    {#each detail.history as entry}
+                      <li class="pd-history-item"><time>{entry.timestamp}</time><strong>{entry.action}</strong><span>{entry.detail}</span><small>{entry.user}</small></li>
+                    {/each}
+                  </ol>
+                </div>
               {:else}
                 <p class="pd-muted">No activity yet.</p>
               {/if}
@@ -852,4 +854,5 @@
   .pd-back-arrow { font-weight: 900; }
   .pd-drone-detail { margin-top: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-workspace); display: flex; flex-direction: column; gap: 6px; }
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
+  .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
 </style>
