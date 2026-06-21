@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import webview
 
-from project_tracker.core.enums import CRState, ProjectState
+from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
 from project_tracker.core.rules import TransitionGuardResult, extract_cr_number
 from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
@@ -27,7 +27,7 @@ from project_tracker.infrastructure.filesystem import (
 )
 from project_tracker.infrastructure.link_bank_store import LinkBankStore
 from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from project_tracker.infrastructure.settings_store import SettingsStore, app_config_dir
 from project_tracker.services.automation_service import AutomationService
 from project_tracker.services.dashboard_service import DashboardService
 from project_tracker.services.download_email_service import DownloadEmailService
@@ -39,7 +39,6 @@ from project_tracker.services.email_service import (
 from project_tracker.services.notification_service import NotificationService
 from project_tracker.services.project_service import ProjectService
 from project_tracker.services.report_service import ReportService
-from project_tracker.services.safe_delete_service import SafeDeleteService
 from project_tracker.services.scheduler_service import SchedulerService
 from project_tracker.services.second_brain_service import SecondBrainItem, SecondBrainService
 from project_tracker.services.teams_service import TeamsMessage, TeamsService
@@ -171,8 +170,38 @@ def create_js_api(
             )
         return sorted(items, key=lambda item: (item.title.casefold(), str(item.path).casefold()))
 
+    class _LiveDashboardService:
+        def __init__(self, dashboard: DashboardService, cache: CacheDb, settings_store: SettingsStore, metadata_store: MetadataStore) -> None:
+            self._dashboard = dashboard
+            self._cache = cache
+            self._settings_store = settings_store
+            self._metadata_store = metadata_store
+
+        def _rebuild(self, year: str | None = None) -> None:
+            settings = self._settings_store.read()
+            root = settings.root_folder
+            if root is None or not root.exists():
+                return
+            years = [str(year)] if year and str(year) != "all" else [p.name for p in root.iterdir() if p.is_dir() and p.name.isdigit()]
+            for year_name in years:
+                rebuild_year_cache(self._cache, root / year_name, self._metadata_store)
+
+        def list_projects(self, year: str | None = None) -> object:
+            self._rebuild(year)
+            return self._dashboard.list_projects(year)
+
+        def get_summary(self, year: str | None = None) -> object:
+            self._rebuild(year)
+            return self._dashboard.get_summary(year)
+
+        def get_dashboard(self, year: str | None = None) -> object:
+            self._rebuild(year)
+            return self._dashboard.get_dashboard(year)
+
     # ── services ─────────────────────────────────────────────────────
-    dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
+    _metadata_store = MetadataStore()
+    raw_dashboard_svc = _dashboard_service or DashboardService(cache=cache_db)
+    dashboard_svc = raw_dashboard_svc if _dashboard_service is not None else _LiveDashboardService(raw_dashboard_svc, cache_db, _settings_store, _metadata_store)
     notification_svc = NotificationService(cache=cache_db)
     notification_svc.load_persisted()
     report_svc = ReportService(dashboard_service=dashboard_svc)
@@ -419,8 +448,25 @@ def create_js_api(
             if metadata is None:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
 
-            project_state = ProjectState(path.parent.name)
-            drone_tickets = getattr(metadata, "drone_tickets", None) or []
+            project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
+
+            # Sub-project detection: parent contains project_data.json
+            is_subproject = (path.parent / "project_data.json").is_file()
+
+            if is_subproject:
+                parent_path = path.parent
+                parent_meta = self._metadata_store.read(parent_path)
+                if parent_meta:
+                    metadata.cr_link = parent_meta.cr_link
+                    metadata.cr_state = parent_meta.cr_state
+                    metadata.start_datetime = parent_meta.start_datetime
+                    metadata.end_datetime = parent_meta.end_datetime
+                drone_tickets = []
+                subprojects_list = []
+            else:
+                drone_tickets = getattr(metadata, "drone_tickets", None) or []
+                subprojects_list = [p.name for p in discover_subproject_paths(path)]
+
             cr_number = extract_cr_number(metadata.cr_link)
 
             return {
@@ -435,7 +481,7 @@ def create_js_api(
                 "t10_status": "N/A",
                 "drone_ticket_count": len(drone_tickets),
                 "implementation_plan": metadata.implementation_plan,
-                "history": [entry.to_dict() for entry in metadata.history],
+                "history": [entry.to_dict() for entry in metadata.history] if not is_subproject else [],
                 "drone_tickets": [
                     {
                         "subfolder_name": t.subfolder_name,
@@ -445,6 +491,8 @@ def create_js_api(
                     }
                     for t in drone_tickets
                 ],
+                "is_subproject": is_subproject,
+                "subprojects": subprojects_list
             }
 
         def list_subprojects(self, project_path: Path) -> object:
@@ -473,7 +521,7 @@ def create_js_api(
                 )
             )
             self._metadata_store.write(path, metadata)
-            project_state = ProjectState(path.parent.name)
+            project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
             cr_number = extract_cr_number(cr_link)
             return {
                 "project_path": str(path),
@@ -518,21 +566,31 @@ def create_js_api(
             if drone_index < 0 or drone_index >= len(metadata.drone_tickets):
                 raise IndexError(f"Drone index {drone_index} out of range")
             ticket = metadata.drone_tickets[drone_index]
+            now = local_now()
+            state_changed = False
             if "drone_link" in data:
-                ticket.drone_link = str(data["drone_link"])
+                next_link = str(data["drone_link"])
+                if next_link != ticket.drone_link:
+                    ticket.drone_link = next_link
+                    if ticket.drone_state != DroneState.UAT:
+                        ticket.drone_state = DroneState.UAT
+                        ticket.drone_state_updated_at = now
+                        ticket.previous_drone_state_before_canceled = None
+                        state_changed = True
+                else:
+                    ticket.drone_link = next_link
             if "owner" in data:
                 ticket.owner = str(data["owner"])
             if "subfolder_name" in data:
                 ticket.subfolder_name = str(data["subfolder_name"]) or None
-            now = local_now()
-            state_changed = False
             if "drone_state" in data:
-                from project_tracker.core.enums import DroneState
                 from project_tracker.core.models import HistoryEntry
                 from project_tracker.core.rules import current_user
                 from project_tracker.core.state_machine import validate_drone_state_change_allowed
 
                 target = DroneState(str(data["drone_state"]))
+                if target == DroneState.CANCELED and metadata.cr_state != CRState.CANCELED:
+                    raise ValueError("Drone state cannot be CANCELED while CR state is not CANCELED")
                 validate_drone_state_change_allowed(ticket.drone_link, ticket.drone_state, target)
                 old_state = ticket.drone_state
                 ticket.drone_state = target
@@ -604,7 +662,7 @@ def create_js_api(
             old = metadata.cr_state
             # Capture project_state while ``path`` is still valid; _apply_auto_move
             # may physically move the folder out from under it.
-            project_state = ProjectState(path.parent.name)
+            project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
             metadata.cr_state = target
             metadata.cr_state_updated_at = now
             metadata.updated_at = now
@@ -646,19 +704,39 @@ def create_js_api(
             metadata = self._metadata_store.read(path)
             if metadata is None:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
+
+            is_subproject = (path.parent / "project_data.json").is_file()
+
             if "project_name" in data:
                 metadata.project_name = str(data["project_name"])
             if "implementation_plan" in data:
                 metadata.implementation_plan = str(data["implementation_plan"])
-            if "cr_link" in data:
-                metadata.cr_link = str(data["cr_link"])
-            if "start_datetime" in data:
-                metadata.start_datetime = _parse_optional_datetime(data["start_datetime"])
-            if "end_datetime" in data:
-                metadata.end_datetime = _parse_optional_datetime(data["end_datetime"])
+
+            # If dates or CR details are updated on a sub-project, propagate to parent
+            if is_subproject:
+                parent_path = path.parent
+                parent_meta = self._metadata_store.read(parent_path)
+                if parent_meta:
+                    if "cr_link" in data:
+                        parent_meta.cr_link = str(data["cr_link"])
+                    if "start_datetime" in data:
+                        parent_meta.start_datetime = _parse_optional_datetime(data["start_datetime"])
+                    if "end_datetime" in data:
+                        parent_meta.end_datetime = _parse_optional_datetime(data["end_datetime"])
+                    parent_meta.updated_at = local_now()
+                    self._metadata_store.write(parent_path, parent_meta)
+            else:
+                if "cr_link" in data:
+                    metadata.cr_link = str(data["cr_link"])
+                if "start_datetime" in data:
+                    metadata.start_datetime = _parse_optional_datetime(data["start_datetime"])
+                if "end_datetime" in data:
+                    metadata.end_datetime = _parse_optional_datetime(data["end_datetime"])
+
             metadata.updated_at = local_now()
             self._metadata_store.write(path, metadata)
-            project_state = ProjectState(path.parent.name)
+
+            project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
             return {
                 "project_path": str(path),
                 "project_name": metadata.project_name or path.name,
@@ -730,9 +808,10 @@ def create_js_api(
 
             moved_path = Path(str(result))
             self._rebuild_cache_for(moved_path)
+            project_state = _folder_state_for_path(moved_path) or ProjectState.UAT_PREPARE
             return {
                 "project_path": str(moved_path),
-                "project_state": ProjectState(moved_path.parent.name).value,
+                "project_state": project_state.value,
             }
 
         def _apply_auto_move(self, project_path: Path) -> dict[str, object] | None:
@@ -758,7 +837,7 @@ def create_js_api(
             metadata = self._metadata_store.read(path)
             if metadata is None:
                 return None
-            current_folder = ProjectState(path.parent.name)
+            current_folder = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
             drone_states = [t.drone_state for t in metadata.drone_tickets]
             target = resolve_auto_move(metadata.cr_state, drone_states, current_folder)
             if target is None:
@@ -897,10 +976,11 @@ def create_js_api(
                 str(self._project_service.rename_project(Path(project_path), new_name, settings))
             )
             self._rebuild_cache_for(moved_path)
+            project_state = _folder_state_for_path(moved_path) or ProjectState.UAT_PREPARE
             return {
                 "project_path": str(moved_path),
                 "project_name": new_name,
-                "project_state": ProjectState(moved_path.parent.name).value,
+                "project_state": project_state.value,
             }
 
         def delete_project(self, project_path: Path) -> object:
@@ -999,10 +1079,8 @@ def create_js_api(
         def __init__(
             self,
             settings_store: SettingsStore,
-            safe_delete_service: SafeDeleteService,
         ) -> None:
             self._settings_store = settings_store
-            self._safe_delete_service = safe_delete_service
 
         def list_files(self, path: Path) -> object:
             p = Path(path)
@@ -1062,7 +1140,7 @@ def create_js_api(
         def delete_file(self, filepath: Path) -> object:
             target = Path(filepath)
             self._reject_if_locked(target, "File delete")
-            self._safe_delete_service.delete_to_trash(target)
+            filesystem.send_to_recycle_bin(target)
             return {"path": str(target), "deleted": True}
 
         open_folder = None  # type: ignore[assignment]
@@ -1424,7 +1502,6 @@ def create_js_api(
     )
 
     # ── JsApi ─────────────────────────────────────────────────────────
-    _metadata_store = MetadataStore()
     return JsApi(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
@@ -1444,7 +1521,7 @@ def create_js_api(
         second_brain_service=second_brain_svc,
         scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
-        file_service=_FileServiceAdapter(_settings_store, SafeDeleteService()),
+        file_service=_FileServiceAdapter(_settings_store),
         notes_service=_NotesServiceAdapter(),
         outlook_service=_OutlookServiceAdapter(
             _settings_store,
@@ -1481,7 +1558,7 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
     webview.create_window(
         "Project Tracker DBS",
         url=resolve_frontend_url(dev=dev),
-        js_api=create_js_api(),
+        js_api=create_js_api(db_path=app_config_dir() / "project_tracker_cache.db"),
         width=1200,
         height=760,
         min_size=(960, 640),
