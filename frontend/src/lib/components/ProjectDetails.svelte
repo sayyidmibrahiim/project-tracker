@@ -357,6 +357,12 @@
     if (detail) crStateEdit = detail.cr_state;
   }
 
+  async function saveMetadataIfChanged() {
+    if (!detail) return;
+    if (metadataUnchanged(detail)) return;
+    await saveMetadata();
+  }
+
   async function saveMetadata() {
     if (!selectedPath || !isPywebviewReady()) {
       metaSaveError = "pywebview bridge unavailable.";
@@ -629,7 +635,7 @@
               <h4 class="pd-section-title">Project Identity</h4>
               <div class="pd-meta-edit">
                 <label class="pd-meta-label" for="meta-name">Project Name</label>
-                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} disabled={metaSaveState === "saving"} />
+                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
                 {#if crLinkEditing}
@@ -679,11 +685,11 @@
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-start">
                     <span class="pd-meta-label">Start datetime</span>
-                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} disabled={metaSaveState === "saving"} />
+                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                   </label>
                   <label class="pd-meta-field" for="meta-end">
                     <span class="pd-meta-label">End datetime</span>
-                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} disabled={metaSaveState === "saving"} />
+                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                   </label>
                 </div>
                 <div class="pd-notes-actions">
