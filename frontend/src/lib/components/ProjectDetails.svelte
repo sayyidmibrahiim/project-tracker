@@ -35,6 +35,8 @@
 
   // ── CR Link edit state ──
   let crLinkEdit: string = $state("");
+  let crLinkEditing: boolean = $state(false);
+  let crLinkCopied: boolean = $state(false);
   type CrLinkSave = "idle" | "saving" | "success" | "error";
   let crLinkSaveState: CrLinkSave = $state("idle");
   let crLinkSaveError: string = $state("");
@@ -211,7 +213,11 @@
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
 
-    if (detail) crLinkEdit = detail.cr_link || "";
+    if (detail) {
+      crLinkEdit = detail.cr_link || "";
+      crLinkEditing = !detail.cr_link;
+      crLinkCopied = false;
+    }
     if (detail) crStateEdit = detail.cr_state || "";
     if (detail) syncDroneStateEdits();
     if (detail) syncMetadataDrafts(detail);
@@ -247,6 +253,37 @@
     if (detail) detail.cr_link = crLinkEdit;
     crLinkSaveState = "success";
     setTimeout(() => { if (crLinkSaveState === "success") crLinkSaveState = "idle"; }, 2500);
+  }
+
+  async function saveCrLinkFromInput() {
+    if (!detail) return;
+    if (crLinkEdit === detail.cr_link) return;
+    await saveCrLink();
+    if (crLinkSaveState === "success" && crLinkEdit.trim()) {
+      crLinkEditing = false;
+    }
+  }
+
+  async function copyCrLink() {
+    if (!detail?.cr_link) return;
+    try {
+      await navigator.clipboard.writeText(detail.cr_link);
+      crLinkCopied = true;
+      setTimeout(() => { crLinkCopied = false; }, 2000);
+    } catch {
+      // ignore
+    }
+  }
+
+  function openCrLink() {
+    if (!detail?.cr_link) return;
+    window.open(detail.cr_link, "_blank", "noopener,noreferrer");
+  }
+
+  function editCrLink() {
+    if (!detail) return;
+    crLinkEdit = detail.cr_link || "";
+    crLinkEditing = true;
   }
 
   async function saveCrState() {
@@ -562,10 +599,27 @@
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} disabled={metaSaveState === "saving"} />
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
-                <div class="cr-link-row">
-                  <input id="meta-cr-link" class="cr-link-input" type="url" placeholder="https://cr.example.com/CR..." bind:value={crLinkEdit} disabled={crLinkSaveState === "saving"} />
-                  <button class="cr-link-save-btn" onclick={saveCrLink} disabled={crLinkSaveState === "saving" || crLinkEdit === detail.cr_link}>{#if crLinkSaveState === "saving"}⏳{:else}Save{/if}</button>
-                </div>
+                {#if crLinkEditing}
+                  <input
+                    id="meta-cr-link"
+                    class="cr-link-input"
+                    type="url"
+                    placeholder="Paste CR link…"
+                    bind:value={crLinkEdit}
+                    onblur={saveCrLinkFromInput}
+                    disabled={crLinkSaveState === "saving"}
+                  />
+                  {#if crLinkSaveState === "error"}
+                    <span class="cr-link-feedback cr-link-err">✗ {crLinkSaveError}</span>
+                  {/if}
+                {:else}
+                  <div class="pd-cr-link-display">
+                    <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link}</span>
+                    <button class="pd-icon-btn" type="button" title="Copy CR link" onclick={copyCrLink} aria-label="Copy CR link">📋{#if crLinkCopied} ✓{/if}</button>
+                    <button class="pd-icon-btn" type="button" title="Open CR link in browser" onclick={openCrLink} aria-label="Open CR link in browser">↗</button>
+                    <button class="pd-icon-btn" type="button" title="Edit CR link" onclick={editCrLink} aria-label="Edit CR link">✎</button>
+                  </div>
+                {/if}
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-cr-state">
                     <span class="pd-meta-label">CR State</span>
@@ -702,7 +756,10 @@
   .pd-history-item time { color:var(--color-muted); font-size:10px; }
   .pd-history-item strong { color:var(--color-ink-strong); font-size:10.5px; }
   .pd-history-item small { grid-column:3; color:var(--color-muted); font-size:10px; }
-  .cr-link-row { display:flex; gap:6px; align-items:center; }
+  .pd-cr-link-display { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pd-cr-link-number { font-size: 12px; font-weight: 700; color: var(--color-ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .pd-icon-btn { flex: 0 0 auto; width: 26px; height: 26px; padding: 0; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; color: var(--color-ink); font-size: 12px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+  .pd-icon-btn:hover:not(:disabled) { border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
   .cr-link-input { flex:1; min-width:0; padding:6px 9px; font-size:11.5px; font-weight:400; border:1px solid var(--color-border); border-radius:6px; background:var(--color-workspace-panel); color:var(--color-ink); outline:none; }
   .cr-link-input:focus { border-color:var(--color-dbs-red); }
   .cr-link-input:disabled { background:var(--color-row-alt); color:var(--color-muted); }
