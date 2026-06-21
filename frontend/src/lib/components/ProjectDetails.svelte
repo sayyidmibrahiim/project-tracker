@@ -75,7 +75,6 @@
   let metaNameEdit: string = $state("");
   let metaStartEdit: string = $state("");
   let metaEndEdit: string = $state("");
-  let metaPlanEdit: string = $state("");
   type MetaSave = "idle" | "saving" | "success" | "error";
   let metaSaveState: MetaSave = $state("idle");
   let metaSaveError: string = $state("");
@@ -93,7 +92,7 @@
   let droneEditSubfolder: string = $state("");
   let droneEditOwner: string = $state("");
   // ── Drone state edit state ──
-  const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "CANCELED"];
+  const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "POSTPONED", "CANCELED"];
   const DRONE_NEXT: Record<string, string[]> = {
     "UAT": ["PENDING APPROVAL", "CANCELED"],
     "PENDING APPROVAL": ["APPROVED", "CANCELED"],
@@ -169,14 +168,12 @@
     metaNameEdit = nextDetail.project_name || "";
     metaStartEdit = toDatetimeLocal(nextDetail.start_datetime);
     metaEndEdit = toDatetimeLocal(nextDetail.end_datetime);
-    metaPlanEdit = nextDetail.implementation_plan || "";
   }
 
   function metadataUnchanged(current: ProjectDetail): boolean {
     return metaNameEdit === current.project_name
       && metaStartEdit === toDatetimeLocal(current.start_datetime)
-      && metaEndEdit === toDatetimeLocal(current.end_datetime)
-      && metaPlanEdit === (current.implementation_plan || "");
+      && metaEndEdit === toDatetimeLocal(current.end_datetime);
   }
 
   async function loadProjects() {
@@ -331,7 +328,6 @@
       project_name: metaNameEdit,
       start_datetime: fromDatetimeLocal(metaStartEdit),
       end_datetime: fromDatetimeLocal(metaEndEdit),
-      implementation_plan: metaPlanEdit,
     });
     if (!resp.ok) {
       metaSaveError = resp.error.message;
@@ -727,16 +723,6 @@
             </div>
 
             <div class="pd-section">
-              <h4 class="pd-section-title">Implementation Plan</h4>
-              <div class="pd-meta-edit">
-                <textarea id="meta-plan" class="pd-notes-textarea" rows="5" bind:value={metaPlanEdit} disabled={metaSaveState === "saving"} placeholder="Write plan, dependencies, cutover notes…"></textarea>
-                <div class="pd-notes-actions">
-                  <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail)}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save Implementation Plan{/if}</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="pd-section">
               <div class="pd-section-head">
                 <h4 class="pd-section-title">Sub Projects</h4>
                 <div class="pd-inline-create">
@@ -822,9 +808,6 @@
   .pd-inline-create .pd-control { flex:1; }
   .pd-drone-flow { display:flex; flex-direction:column; gap:7px; padding:10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-workspace); }
   .pd-drone-flow h5 { margin:0; font-size:11px; font-weight:800; color:var(--color-ink-strong); }
-  .pd-notes-textarea { width:100%; min-height:100px; max-height:240px; padding:10px; background:var(--color-workspace); border:1px solid var(--color-border); border-radius:8px; font-size:11px; font-family:"JetBrains Mono","Fira Code",monospace; color:var(--color-ink); resize:vertical; outline:none; }
-  .pd-notes-textarea:focus { border-color:var(--color-dbs-red); }
-  .pd-notes-textarea:disabled { background:var(--color-row-alt); color:var(--color-muted); }
   .pd-notes-actions { display:flex; align-items:center; gap:8px; }
   .pd-meta-edit { display:flex; flex-direction:column; gap:6px; }
   .pd-meta-datetime-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
