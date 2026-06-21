@@ -109,6 +109,10 @@
       errorMessage = "Enter a file name before creating.";
       return;
     }
+    if (RESERVED_FILES.has(filename.toLowerCase())) {
+      errorMessage = "notes.md and project_data.json are reserved system files and cannot be created here.";
+      return;
+    }
     busy = true;
     const response = await callBridge("file_create", projectPath, filename);
     busy = false;
@@ -127,6 +131,10 @@
     const templateName = newTemplateName.trim();
     if (!templateName) {
       errorMessage = "Enter a template name before creating.";
+      return;
+    }
+    if (RESERVED_FILES.has(templateName.toLowerCase())) {
+      errorMessage = "notes.md and project_data.json are reserved system files and cannot be created here.";
       return;
     }
     busy = true;
@@ -181,6 +189,10 @@
     }
     if (trimmed === file.name) {
       errorMessage = "The new name matches the current name.";
+      return;
+    }
+    if (RESERVED_FILES.has(trimmed.toLowerCase())) {
+      errorMessage = "Cannot rename to a reserved system file name.";
       return;
     }
     pending = {
@@ -238,6 +250,9 @@
     pending = null;
     if (action) await runAction(action);
   }
+
+  const RESERVED_FILES = new Set(["project_data.json", "notes.md"]);
+  let visibleFiles = $derived(files.filter((f) => !RESERVED_FILES.has(f.name.toLowerCase())));
 </script>
 
 <div class="fa-root">
@@ -281,11 +296,11 @@
   <!-- ── File list with open / rename / delete ── -->
   <div class="fa-block">
     <span class="fa-block-label">Files</span>
-    {#if files.length === 0}
+    {#if visibleFiles.length === 0}
       <p class="fa-muted">No files.</p>
     {:else}
       <ul class="fa-file-list">
-        {#each files as f (f.path)}
+        {#each visibleFiles as f (f.path)}
           <li class="fa-file-row">
             {#if renameEditPath === f.path}
               <input
@@ -442,6 +457,9 @@
     margin: 0;
     padding: 0;
     list-style: none;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
   }
   .fa-file-row {
     display: flex;
