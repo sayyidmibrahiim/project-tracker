@@ -236,24 +236,25 @@ test("NewProjectForm renders the PRD §12.4 create form (name, year, disabled un
   assert.match(body, /disabled/);
 });
 
-test("SubProjectTable renders the PRD §12.10 columns and maps drones to sub-projects", async () => {
+test("SubProjectTable renders columns and maps drones to sub-projects", async () => {
   const body = await renderViaLoader(SUB_PROJECT_TABLE, {
-    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
     subprojects: ["alpha", "beta"],
     droneTickets: [
       { subfolder_name: "alpha", drone_link: "https://drone/DRN-1", drone_state: "UAT", owner: "Ops" },
     ],
+    selectedRow: null,
+    droneStateBusyName: null,
+    droneStateErrorName: {},
+    onSelectRow: () => {},
+    onChangeDroneState: () => {},
+    onOpenFolder: () => {},
+    legalDroneOptionsFor: (s) => [s],
   });
   // Column headers.
   assert.match(body, /Sub Project/);
-  assert.match(body, /Drone Ticket/);
   assert.match(body, /Drone State/);
-  assert.match(body, /Owner/);
-  // Mapped sub-project shows its drone link/state/owner.
+  // Mapped sub-project shows its name.
   assert.match(body, /alpha/);
-  assert.match(body, /https:\/\/drone\/DRN-1/);
-  assert.match(body, /UAT/);
-  assert.match(body, /Ops/);
   // Unmapped sub-project still renders with em-dash placeholders.
   assert.match(body, /beta/);
   assert.match(body, /Open Folder/);
@@ -261,9 +262,15 @@ test("SubProjectTable renders the PRD §12.10 columns and maps drones to sub-pro
 
 test("SubProjectTable renders an empty state when there are no sub-projects", async () => {
   const body = await renderViaLoader(SUB_PROJECT_TABLE, {
-    projectPath: "/Temp_Root/2026/UAT_PREPARE/Acme-Migration",
     subprojects: [],
     droneTickets: [],
+    selectedRow: null,
+    droneStateBusyName: null,
+    droneStateErrorName: {},
+    onSelectRow: () => {},
+    onChangeDroneState: () => {},
+    onOpenFolder: () => {},
+    legalDroneOptionsFor: (s) => [s],
   });
   assert.match(body, /No sub projects/);
 });
