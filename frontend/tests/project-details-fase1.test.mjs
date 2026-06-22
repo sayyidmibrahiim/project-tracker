@@ -66,8 +66,8 @@ test("Sub Project box is titled 'Sub Project (DRONE)'", () => {
 
 test("SubProjectTable is presentational (no callBridge inside)", () => {
   assert.doesNotMatch(SPT, /callBridge/);
-  assert.match(SPT, /onSelectRow/);
   assert.match(SPT, /onChangeDroneState/);
+  assert.match(SPT, /onUpdateDroneLink/);
 });
 
 test("SubProjectTable no longer has an Owner column", () => {
