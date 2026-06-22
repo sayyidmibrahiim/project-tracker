@@ -813,7 +813,7 @@
             <div class="pd-section">
               <h4 class="pd-section-title">Notes</h4>
               {#key detail.project_path}
-                <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n) => { notes = n; }} />
+                <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
               {/key}
             </div>
 

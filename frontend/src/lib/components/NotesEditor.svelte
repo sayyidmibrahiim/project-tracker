@@ -46,7 +46,10 @@
   function scheduleSave() {
     status = "pending";
     if (timer) clearTimeout(timer);
-    timer = setTimeout(flush, AUTOSAVE_MS);
+    timer = setTimeout(() => {
+      if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
+      flush();
+    }, AUTOSAVE_MS);
   }
 
   async function flush() {
@@ -81,42 +84,52 @@
 
   // ── HTML-to-Markdown Bidirectional Roundtrip ──
 
+  function domToMarkdown(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return "";
+    }
+    const el = node as HTMLElement;
+    const tagName = el.tagName.toLowerCase();
+
+    // Check if it's a checklist item
+    if (el.classList.contains("ne-todo-item")) {
+      const checkbox = el.querySelector("input[type='checkbox']") as HTMLInputElement | null;
+      const textSpan = el.querySelector("span") as HTMLElement | null;
+      const checked = checkbox?.checked ? "x" : " ";
+      const textContent = textSpan ? Array.from(textSpan.childNodes).map(domToMarkdown).join("") : "";
+      return `- [${checked}] ${textContent.trim()}\n`;
+    }
+
+    const childrenMd = Array.from(el.childNodes).map(domToMarkdown).join("");
+
+    switch (tagName) {
+      case "h1": return `# ${childrenMd.trim()}\n\n`;
+      case "h2": return `## ${childrenMd.trim()}\n\n`;
+      case "h3": return `### ${childrenMd.trim()}\n\n`;
+      case "blockquote": return `> ${childrenMd.trim()}\n\n`;
+      case "li": return `- ${childrenMd.trim()}\n`;
+      case "ul": return `${childrenMd}\n`;
+      case "strong":
+      case "b": return `**${childrenMd}**`;
+      case "em":
+      case "i": return `*${childrenMd}*`;
+      case "code": return `\`${childrenMd}\``;
+      case "a": return `[${childrenMd}](${el.getAttribute("href") || ""})`;
+      case "p": return `${childrenMd.trim()}\n\n`;
+      case "div": return `${childrenMd}\n`;
+      case "br": return "\n";
+      default: return childrenMd;
+    }
+  }
+
   function htmlToMarkdown(html: string): string {
     if (!html) return "";
-    let md = html;
-
-    // Clean inline styling wrappers WebView2/Chrome might add
-    md = md.replace(/<span style="font-weight:\s*bold;">(.*?)<\/span>/gi, "<strong>$1</strong>");
-    md = md.replace(/<span style="font-style:\s*italic;">(.*?)<\/span>/gi, "<em>$1</em>");
-
-    // Replace blocks
-    md = md.replace(/<h1>(.*?)<\/h1>/gi, "# $1\n\n");
-    md = md.replace(/<h2>(.*?)<\/h2>/gi, "## $1\n\n");
-    md = md.replace(/<h3>(.*?)<\/h3>/gi, "### $1\n\n");
-    md = md.replace(/<blockquote>(.*?)<\/blockquote>/gi, "> $1\n\n");
-
-    // Checkbox mapping
-    md = md.replace(/<div class="ne-todo-item"><input type="checkbox"[^>]*checked[^>]*>\s*<span>(.*?)<\/span><\/div>/gi, "- [x] $1\n");
-    md = md.replace(/<div class="ne-todo-item"><input type="checkbox"[^>]*>\s*<span>(.*?)<\/span><\/div>/gi, "- [ ] $1\n");
-
-    // List mapping
-    md = md.replace(/<li>(.*?)<\/li>/gi, "- $1\n");
-    md = md.replace(/<ul[^>]*>/gi, "").replace(/<\/ul>/gi, "\n");
-
-    // Inline replacements
-    md = md.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
-    md = md.replace(/<b>(.*?)<\/b>/gi, "**$1**");
-    md = md.replace(/<em>(.*?)<\/em>/gi, "*$1*");
-    md = md.replace(/<i>(.*?)<\/i>/gi, "*$1*");
-    md = md.replace(/<code>(.*?)<\/code>/gi, "`$1`");
-    md = md.replace(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)");
-
-    // Strip other paragraph / div tags
-    md = md.replace(/<p>(.*?)<\/p>/gi, "$1\n\n");
-    md = md.replace(/<div[^>]*>(.*?)<\/div>/gi, "$1\n");
-    md = md.replace(/<br\s*\/?>/gi, "\n");
-
-    // Clean multiple consecutive newlines
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    let md = Array.from(doc.body.childNodes).map(domToMarkdown).join("");
     md = md.replace(/\n{3,}/g, "\n\n");
     return md.trim();
   }
@@ -129,11 +142,15 @@
   }
 
   function onEditorInput() {
-    syncToMarkdown();
+    scheduleSave();
   }
 
   function onEditorBlur() {
-    if (status === "pending") flush();
+    if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
+    if (status === "pending" || timer) {
+      if (timer) { clearTimeout(timer); timer = undefined; }
+      flush();
+    }
   }
 
   function bindCheckboxListeners() {
@@ -159,18 +176,19 @@
 
   function format(command: string, value: string = "") {
     document.execCommand(command, false, value);
-    syncToMarkdown();
+    scheduleSave();
   }
 
   function formatCode() {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
     const code = document.createElement("code");
     code.textContent = range.toString();
     range.deleteContents();
     range.insertNode(code);
-    syncToMarkdown();
+    scheduleSave();
   }
 
   function formatLink() {
@@ -179,31 +197,39 @@
   }
 
   function formatChecklist() {
+    if (!editorEl) return;
+    editorEl.focus();
     const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    const fragment = range.createContextualFragment(html);
-    range.insertNode(fragment);
-    
-    // Bind change listener on newly created checkbox
+    if (!sel || sel.rangeCount === 0) {
+      editorEl.insertAdjacentHTML("beforeend", html);
+    } else {
+      const range = sel.getRangeAt(0);
+      if (!editorEl.contains(range.commonAncestorContainer)) {
+        editorEl.insertAdjacentHTML("beforeend", html);
+      } else {
+        const fragment = range.createContextualFragment(html);
+        range.insertNode(fragment);
+      }
+    }
+    editorEl.focus();
     setTimeout(bindCheckboxListeners, 50);
-    syncToMarkdown();
+    scheduleSave();
   }
 </script>
 
 <div class="ne-root">
   <div class="ne-toolbar">
     <div class="ne-tools" aria-label="Visual formatting">
-      <button type="button" class="ne-tbtn" title="Bold" onclick={() => format('bold')}><strong>B</strong></button>
-      <button type="button" class="ne-tbtn" title="Italic" onclick={() => format('italic')}><em>I</em></button>
-      <button type="button" class="ne-tbtn" title="Heading 1" onclick={() => format('formatBlock', '<h1>')}>H1</button>
-      <button type="button" class="ne-tbtn" title="Heading 2" onclick={() => format('formatBlock', '<h2>')}>H2</button>
-      <button type="button" class="ne-tbtn" title="Inline code" onclick={formatCode}>Code</button>
-      <button type="button" class="ne-tbtn" title="Bulleted list" onclick={() => format('insertUnorderedList')}>List</button>
-      <button type="button" class="ne-tbtn" title="Quote" onclick={() => format('formatBlock', '<blockquote>')}>Quote</button>
-      <button type="button" class="ne-tbtn" title="Link" onclick={formatLink}>Link</button>
-      <button type="button" class="ne-tbtn" title="Checklist" onclick={formatChecklist}>Todo</button>
+      <button type="button" class="ne-tbtn" title="Bold" onmousedown={(e) => { e.preventDefault(); format('bold'); }}><strong>B</strong></button>
+      <button type="button" class="ne-tbtn" title="Italic" onmousedown={(e) => { e.preventDefault(); format('italic'); }}><em>I</em></button>
+      <button type="button" class="ne-tbtn" title="Heading 1" onmousedown={(e) => { e.preventDefault(); format('formatBlock', '<h1>'); }}>H1</button>
+      <button type="button" class="ne-tbtn" title="Heading 2" onmousedown={(e) => { e.preventDefault(); format('formatBlock', '<h2>'); }}>H2</button>
+      <button type="button" class="ne-tbtn" title="Inline code" onmousedown={(e) => { e.preventDefault(); formatCode(); }}>Code</button>
+      <button type="button" class="ne-tbtn" title="Bulleted list" onmousedown={(e) => { e.preventDefault(); format('insertUnorderedList'); }}>List</button>
+      <button type="button" class="ne-tbtn" title="Quote" onmousedown={(e) => { e.preventDefault(); format('formatBlock', '<blockquote>'); }}>Quote</button>
+      <button type="button" class="ne-tbtn" title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>Link</button>
+      <button type="button" class="ne-tbtn" title="Checklist" onmousedown={(e) => { e.preventDefault(); formatChecklist(); }}>Todo</button>
     </div>
   </div>
 
@@ -230,6 +256,7 @@
   .ne-tbtn:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-textarea { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:12px; font-family:var(--font); color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; }
   .ne-textarea:focus { border-color:var(--color-dbs-red); }
+  .ne-textarea:empty::before { content: attr(placeholder); color: var(--color-muted); opacity: 0.7; pointer-events: none; display: block; }
   :global(.ne-todo-item) { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
   :global(.ne-todo-checkbox) { width: 14px; height: 14px; cursor: pointer; }
   .ne-status { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:800; color:var(--color-muted); }
