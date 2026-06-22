@@ -664,44 +664,45 @@
               <div class="pd-meta-edit">
                 <label class="pd-meta-label" for="meta-name">Project Name</label>
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
-                <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
-                <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
-                {#if crLinkEditing && !isSubproject}
-                  <input
-                    id="meta-cr-link"
-                    class="cr-link-input"
-                    type="url"
-                    placeholder="Paste CR link…"
-                    bind:value={crLinkEdit}
-                    onblur={saveCrLinkFromInput}
-                    disabled={crLinkSaveState === "saving"}
-                  />
-                  {#if crLinkSaveState === "error"}
-                    <span class="cr-link-feedback cr-link-err">✗ {crLinkSaveError}</span>
-                  {/if}
-                {:else}
-                  <div class="pd-cr-link-display">
-                    <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link || "—"}</span>
-                    {#if detail.cr_link}
-                      <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-                        {#if crLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
-                      </button>
-                      <button class="pd-icon-btn" type="button" onclick={openCrLink} aria-label="Open CR link in browser">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                      </button>
+                <div class="pd-meta-datetime-row">
+                  <div class="pd-meta-field">
+                    <span class="pd-meta-label">CR Number</span>
+                    {#if crLinkEditing && !isSubproject}
+                      <input
+                        id="meta-cr-link"
+                        class="cr-link-input"
+                        type="url"
+                        placeholder="Paste CR link…"
+                        bind:value={crLinkEdit}
+                        onblur={saveCrLinkFromInput}
+                        disabled={crLinkSaveState === "saving"}
+                      />
+                      {#if crLinkSaveState === "error"}
+                        <span class="cr-link-feedback cr-link-err">✗ {crLinkSaveError}</span>
+                      {/if}
+                    {:else}
+                      <div class="pd-cr-link-display">
+                        <span class="pd-cr-link-number">{detail.cr_number || detail.cr_link || "—"}</span>
+                        {#if detail.cr_link}
+                          <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                            {#if crLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
+                          </button>
+                          <button class="pd-icon-btn" type="button" onclick={openCrLink} aria-label="Open CR link in browser">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                          </button>
+                        {/if}
+                        {#if !isSubproject}
+                          <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                          </button>
+                        {/if}
+                      </div>
                     {/if}
-                    {#if !isSubproject}
-                      <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                      </button>
+                    {#if isSubproject}
+                      <span class="pd-inherited-label">(Inherited from Main Project)</span>
                     {/if}
                   </div>
-                {/if}
-                {#if isSubproject}
-                  <span class="pd-inherited-label">(Inherited from Main Project)</span>
-                {/if}
-                <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-cr-state">
                     <span class="pd-meta-label">CR State</span>
                     <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving" || isSubproject}>
@@ -709,18 +710,18 @@
                         <option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>
                       {/each}
                     </select>
+                    {#if crStateSaveState === "saving"}
+                      <span class="cr-link-feedback">
+                        <svg class="pd-spinner" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                        Saving…
+                      </span>
+                    {:else if crStateSaveState === "success"}
+                      <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                    {:else if crStateSaveState === "error"}
+                      <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
+                    {/if}
                   </label>
                 </div>
-                {#if crStateSaveState === "saving"}
-                  <span class="cr-link-feedback">
-                    <svg class="pd-spinner" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-                    Saving…
-                  </span>
-                {:else if crStateSaveState === "success"}
-                  <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
-                {:else if crStateSaveState === "error"}
-                  <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
-                {/if}
               </div>
             </div>
 
