@@ -22,6 +22,7 @@
   let selectedPath: string = $state("");
   let detail: ProjectDetail | null = $state(null);
   let isSubproject: boolean = $state(false);
+  let selectedSubproject: string = $state("all");
   let subprojects: string[] = $state([]);
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
@@ -196,7 +197,7 @@
   async function selectProject(path: string) {
     selectedPath = path;
     detailState = "loading";
-    detail = null; isSubproject = false; subprojects = []; files = []; notes = "";
+    detail = null; isSubproject = false; selectedSubproject = "all"; subprojects = []; files = []; notes = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -589,27 +590,33 @@
 </script>
 
 <section class="screen active" id="screen-details">
-  {#if onNavigateDashboard}
-    <div class="pd-back-bar">
-      <button type="button" class="pd-back-btn" onclick={() => onNavigateDashboard?.()}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon-back"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-        <span>Back to Dashboard</span>
-      </button>
-    </div>
-  {/if}
   <div class="panel-card" style="flex:0 0 auto;">
     <div class="toolbar">
       <div class="panel-title-row" style="margin:0 18px 0 0;">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
         <span class="panel-title">Project Command Center</span>
-        <span class="panel-subtitle">compact editing workspace</span>
       </div>
+      {#if onNavigateDashboard}
+        <button type="button" class="pd-command-btn" onclick={() => onNavigateDashboard?.()} title="Back to Dashboard">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Back
+        </button>
+      {/if}
       <label class="pd-command-field pd-command-project" for="pd-project-select">
         <span>Project</span>
         <select id="pd-project-select" class="pd-control" value={selectedPath} onchange={(e) => selectProject((e.target as HTMLSelectElement).value)} disabled={filtered.length === 0 || mode === "new"}>
           <option value="">Select project…</option>
           {#each filtered as p}
             <option value={p.project_path}>{p.project_name}</option>
+          {/each}
+        </select>
+      </label>
+      <label class="pd-command-field pd-command-project" for="pd-subproject-select">
+        <span>Sub Project</span>
+        <select id="pd-subproject-select" class="pd-control" bind:value={selectedSubproject} disabled={!selectedPath || subprojects.length === 0 || mode === "new"}>
+          <option value="all">All Sub Projects</option>
+          {#each subprojects as sp}
+            <option value={sp}>{sp}</option>
           {/each}
         </select>
       </label>
