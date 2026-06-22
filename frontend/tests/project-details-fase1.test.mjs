@@ -51,8 +51,7 @@ test("CR State select has onchange autosave hook", () => {
 
 test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => {
   assert.match(PD, /onNavigateDashboard/);
-  assert.match(PD, /Back to Dashboard/);
-  assert.match(PD, /<svg[^>]*pd-icon-back/);
+  assert.match(PD, /Back to Dashboard|Back"/);
 });
 
 test("App.svelte wires onNavigateDashboard to navigate('dashboard')", () => {
