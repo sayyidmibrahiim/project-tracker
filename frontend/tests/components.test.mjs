@@ -249,12 +249,12 @@ test("SubProjectTable renders columns and maps drones to sub-projects", async ()
   });
   // Column headers.
   assert.match(body, /Sub Project/);
+  assert.match(body, /Drone Ticket/);
   assert.match(body, /Drone State/);
   // Mapped sub-project shows its name.
   assert.match(body, /alpha/);
   // Unmapped sub-project still renders with em-dash placeholders.
   assert.match(body, /beta/);
-  assert.match(body, /Open Folder/);
 });
 
 test("SubProjectTable renders an empty state when there are no sub-projects", async () => {
