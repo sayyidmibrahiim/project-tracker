@@ -323,6 +323,9 @@
       crStateSaveState = "error";
       return;
     }
+    if (resp.data && (resp.data as any).project_path) {
+      selectedPath = (resp.data as any).project_path;
+    }
     if (detail) detail.cr_state = crStateEdit;
     crStateSaveState = "success";
     setTimeout(() => { if (crStateSaveState === "success") crStateSaveState = "idle"; }, 2500);
@@ -342,6 +345,9 @@
     if (!r.ok) {
       crStateSaveError = r.error.message;
       return;
+    }
+    if (r.data && (r.data as any).project_path) {
+      selectedPath = (r.data as any).project_path;
     }
     await refreshDetail();
   }
@@ -413,6 +419,9 @@
     if (!resp.ok) {
       droneStateErrorName = { ...droneStateErrorName, [name]: resp.error.message };
       return;
+    }
+    if (resp.data && (resp.data as any).project_path) {
+      selectedPath = (resp.data as any).project_path;
     }
     droneStateErrorName = { ...droneStateErrorName, [name]: "" };
     await refreshDetail();
