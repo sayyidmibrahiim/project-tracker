@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-20T00:00:00+07:00",
+  "title": "Design System: Project Tracker DBS",
+  "extensions": {
+    "colorMeta": {
+      "dbs-red": { "role": "primary", "displayName": "DBS Red", "canonical": "#B91C1C", "tonalRamp": ["#450A0A", "#7F1D1D", "#991B1B", "#B91C1C", "#DC2626", "#F87171", "#FEE2E2", "#FFF1F4"] },
+      "black-chrome": { "role": "neutral", "displayName": "Black Chrome", "canonical": "#0A0A0B", "tonalRamp": ["#0A0A0B", "#141416", "#2C2C30", "#3F3F46", "#71717A", "#A1A1AA", "#D7D7DC", "#F3F4F6"] },
+      "workspace-white": { "role": "neutral", "displayName": "Workbench White", "canonical": "#FFFFFF", "tonalRamp": ["#171717", "#6B7280", "#A1A1AA", "#D7D7DC", "#E5E7EB", "#EEF0F2", "#FAFAFA", "#FFFFFF"] },
+      "panel-grey": { "role": "neutral", "displayName": "Panel Grey", "canonical": "#E6E8EB", "tonalRamp": ["#111111", "#2C2C30", "#6B7280", "#A1A1AA", "#D7D7DC", "#E6E8EB", "#EEF0F2", "#FFFFFF"] },
+      "soft-pink": { "role": "secondary", "displayName": "Soft Action Pink", "canonical": "#FFF1F4", "tonalRamp": ["#4A0712", "#991B1B", "#B91C1C", "#F4A7B9", "#FFD4DF", "#FFF1F4", "#FFF7F9", "#FFFFFF"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Header Display", "purpose": "Page title in the red header only." },
+      "title": { "displayName": "Panel Title", "purpose": "Compact card/table/dialog headings." },
+      "body": { "displayName": "Operational Body", "purpose": "Dense row content, helper text, forms, and metadata." },
+      "label": { "displayName": "Control Label", "purpose": "Table headers, field labels, compact state labels." }
+    },
+    "shadows": [
+      { "name": "header", "value": "0 5px 20px rgba(0,0,0,.50)", "purpose": "Separate red app header from workspace." },
+      { "name": "panel", "value": "0 3px 14px rgba(0,0,0,.24)", "purpose": "Default panel/card lift." },
+      { "name": "card", "value": "0 6px 25px rgba(0,0,0,.20)", "purpose": "Large workspace/table containers." },
+      { "name": "inner", "value": "0 5px 18px rgba(0,0,0,.36)", "purpose": "Nested scroll/table surface separation." },
+      { "name": "button", "value": "0 3px 10px rgba(0,0,0,.40)", "purpose": "Primary and command controls." }
+    ],
+    "motion": [
+      { "name": "fast-state", "value": "150ms ease", "purpose": "Hover, focus, and state feedback." },
+      { "name": "chrome-slide", "value": "180ms ease", "purpose": "Sidebar/dock size and reveal transitions." }
+    ],
+    "breakpoints": [
+      { "name": "wide-adjust", "value": "1360px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "DBS Red primary action button for app-changing actions.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary{height:30px;border-radius:5px;border:1px solid #991B1B;background:#B91C1C;color:#fff;padding:0 16px;font:900 11px Inter, Segoe UI, Arial, sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 3px 10px rgba(0,0,0,.40);transition:background .15s ease,transform .15s ease}.ds-btn-primary:hover{background:#991B1B;transform:translateY(-1px)}.ds-btn-primary:focus-visible{outline:2px solid #DC2626;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "White secondary control with DBS Red text and soft pink border.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary{height:26px;border-radius:5px;border:1px solid #F2B8C6;background:#fff;color:#B91C1C;padding:0 10px;font:900 11px Inter, Segoe UI, Arial, sans-serif;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.15);transition:background .15s ease,border-color .15s ease}.ds-btn-secondary:hover{background:#FFF1F4;border-color:#FFD4DF}.ds-btn-secondary:focus-visible{outline:2px solid #DC2626;outline-offset:2px}"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Compact white field for dense operational forms and filters.",
+      "html": "<input class=\"ds-input\" value=\"CR search\" aria-label=\"Search\" />",
+      "css": ".ds-input{height:26px;border:1px solid #D7D7DC;border-radius:5px;background:#fff;color:#111;padding:4px 8px;font:750 11px Inter, Segoe UI, Arial, sans-serif;outline:none}.ds-input:focus{border:2px solid #B91C1C}.ds-input::placeholder{color:#71717A}"
+    },
+    {
+      "name": "Panel Card",
+      "kind": "card",
+      "refersTo": "panel-card",
+      "description": "White inner work card inside a grey operational frame.",
+      "html": "<section class=\"ds-panel-card\"><div class=\"ds-panel-title\">▦ Project Summary</div><p>Dense operational content lives here.</p></section>",
+      "css": ".ds-panel-card{background:#fff;border:1px solid #E5E7EB;border-radius:7px;box-shadow:0 3px 14px rgba(0,0,0,.24);padding:12px;color:#171717;font:750 11px Inter, Segoe UI, Arial, sans-serif}.ds-panel-title{font-weight:900;color:#111;margin-bottom:8px}.ds-panel-card p{margin:0;color:#6B7280;line-height:1.4}"
+    },
+    {
+      "name": "State Select",
+      "kind": "custom",
+      "refersTo": "state-select",
+      "description": "Strong red workflow-state control used in Dashboard rows.",
+      "html": "<button class=\"ds-state-select\">APPROVED</button>",
+      "css": ".ds-state-select{min-height:24px;border:1px solid rgba(45,61,52,.35);border-radius:7px;background:#B91C1C;color:#fff;font:900 10px Inter, Segoe UI, Arial, sans-serif;display:inline-flex;align-items:center;justify-content:center;padding:0 8px;line-height:1.05;text-align:center}.ds-state-select:hover{background:#991B1B}.ds-state-select:focus-visible{outline:2px solid #DC2626;outline-offset:2px}"
+    },
+    {
+      "name": "Dock Navigation Button",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Black-chrome floating navigation control with red active affordance.",
+      "html": "<button class=\"ds-dock-btn is-active\"><span>▦</span></button>",
+      "css": ".ds-dock-btn{width:38px;height:38px;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:rgba(255,255,255,.08);color:#fff;display:grid;place-items:center;font:900 14px Inter, Segoe UI, Arial, sans-serif;transition:transform .18s ease,background .18s ease,border-color .18s ease}.ds-dock-btn:hover,.ds-dock-btn.is-active{transform:translateY(-5px);background:#231112;border-color:#DC2626}.ds-dock-btn:focus-visible{outline:2px solid #DC2626;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Operations Desk",
+    "overview": "Project Tracker DBS uses a compact, modern operations-desk system: dense controls, strong hierarchy, banking-red emphasis, and black chrome navigation framing a white work surface. The UI should feel like a serious productivity app that stays out of the operator's way while keeping project state, dates, links, and risky actions visible.",
+    "keyCharacteristics": [
+      "Compact information density with readable 10–12px operational typography.",
+      "DBS Red used for primary actions, active states, and state controls only.",
+      "Black Chrome reserved for global navigation, dock chrome, and strong command buttons.",
+      "White workspace surfaces nested inside Panel Grey operational frames.",
+      "Fast 150–180ms interaction feedback; no ornamental choreography."
+    ],
+    "rules": [
+      { "name": "The Red Means Action Rule", "body": "DBS Red is for action, selection, and state. Do not use it as decorative wash or section flavor.", "section": "colors" },
+      { "name": "The Chrome Frames Work Rule", "body": "Black Chrome belongs to app chrome and command moments, not normal content cards.", "section": "colors" },
+      { "name": "The Weight Carries Hierarchy Rule", "body": "Use 750–900 weight before increasing type size. Large typography belongs only to page title and key metrics.", "section": "typography" },
+      { "name": "The Product Font Rule", "body": "Do not introduce decorative display fonts into labels, buttons, tables, or form controls.", "section": "typography" },
+      { "name": "The Layer Before Lift Rule", "body": "Use background, border, and spacing first. Add shadow only when a surface must visually separate from a neighboring layer.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use DBS Red for primary actions, current state, selected rows, and state controls.",
+      "Do preserve compact 10–12px operational typography with high font weight for readability.",
+      "Do keep tables and lists visibly structured; this app manages CR operations, not marketing content.",
+      "Do use visible focus rings and keep WCAG AA contrast for text, placeholders, and disabled states.",
+      "Do keep animations short (150–180ms) and tied to state feedback.",
+      "Do use native/product-standard controls where possible; predictability beats novelty."
+    ],
+    "donts": [
+      "Don't use decorative SaaS dashboards, playful gradients, neon/terminal novelty, generic AI-generated card grids, marketing-page drama, or raw prototype roughness.",
+      "Don't add gradient text, glassmorphism, hero-metric templates, or identical decorative card grids.",
+      "Don't introduce new palette hues unless a real semantic state needs them.",
+      "Don't make inactive states full-saturation red.",
+      "Don't use modals as the first solution when inline editing or progressive disclosure already works.",
+      "Don't weaken density by inflating spacing or typography beyond what the workflow needs."
+    ]
+  }
+}

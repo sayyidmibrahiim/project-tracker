@@ -129,15 +129,14 @@ def test_subproject_list_wired_and_returns_ok(js_api, temp_project):
     )
 
 
-def test_subproject_list_discovers_subdirs(js_api, temp_project):
-    """subproject_list returns real subproject paths from filesystem."""
+def test_subproject_list_discovers_subdir_names(js_api, temp_project):
+    """subproject_list returns subproject basenames, not absolute paths."""
     path = str(temp_project["project_path"])
     result = js_api.subproject_list(path)
     data = result["data"]
     assert isinstance(data, list)
-    # Should include "sub1" subdir
-    found = any("sub1" in str(s) for s in data)
-    assert found, f"Expected sub1 in subproject list, got {data}"
+    assert data == ["sub1"]
+
 
 
 # ── RED 4: file_list no longer SERVICE_UNAVAILABLE ─────────────────────
@@ -152,19 +151,15 @@ def test_file_list_wired_and_returns_ok(js_api, temp_project):
     )
 
 
-def test_file_list_discovers_files(js_api, temp_project):
-    """file_list returns real file entries from filesystem directory."""
+def test_file_list_hides_reserved_system_files(js_api, temp_project):
+    """file_list hides internal system files like notes.md and project_data.json."""
     path = str(temp_project["project_path"])
     result = js_api.file_list(path)
     data = result["data"]
     assert isinstance(data, list)
-    # Should include "notes.md"
-    found = any(
-        (isinstance(f, dict) and f.get("name") == "notes.md")
-        or (isinstance(f, str) and "notes.md" in f)
-        for f in data
-    )
-    assert found, f"Expected notes.md in file list, got {data}"
+    names = [f.get("name") for f in data if isinstance(f, dict)]
+    assert "notes.md" not in names
+    assert "project_data.json" not in names
 
 
 # ── RED 5: notes_get no longer SERVICE_UNAVAILABLE ─────────────────────
@@ -188,11 +183,11 @@ def test_project_create_still_deferred(js_api):
     assert result["error"] is not None
 
 
-def test_cr_update_link_still_deferred(js_api):
-    """cr_update_link still returns SERVICE_UNAVAILABLE."""
-    result = js_api.cr_update_link("/tmp/x", "http://cr.example.com")
-    assert result["ok"] is False
-    assert result["error"] is not None
+def test_cr_update_link_still_deferred(js_api, temp_project):
+    """cr_update_link is wired in Phase E. No longer deferred."""
+    path = str(temp_project["project_path"])
+    result = js_api.cr_update_link(path, "http://cr.example.com")
+    assert result["ok"] is True
 
 
 def test_drone_add_wired_phase_e(js_api, temp_project):

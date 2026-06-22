@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { NotificationItem } from "../types";
 
   let {
@@ -17,16 +18,39 @@
     onDismissAll: () => void;
   } = $props();
 
-  let collapsed = $state(false);
-
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: "◔" },
-    { id: "project-detail", label: "Project Details", icon: "▣" },
-    { id: "second-brain", label: "Second Brain", icon: "◆" },
-    { id: "report", label: "Report", icon: "▤" },
+    { id: "dashboard", label: "Dashboard", icon: "⌂" },
+    { id: "project-detail", label: "Project Details", icon: "▧" },
+    { id: "second-brain", label: "Second Brain", icon: "✦" },
+    { id: "report", label: "Report", icon: "▥" },
     { id: "automations", label: "Automations", icon: "⚙" },
-    { id: "settings", label: "Settings", icon: "◌" },
+    { id: "settings", label: "Settings", icon: "◎" },
   ];
+
+  let notificationOpen = $state(false);
+  let dockHidden = $state(false);
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let unreadCount = $derived(notifications.filter((n) => !n.dismissed).length);
+
+  function revealDockSoon(delay = 900) {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => (dockHidden = false), delay);
+  }
+
+  function handleGlobalActivity(event: Event) {
+    const target = event.target as Element | null;
+    if (target?.closest?.(".dock-hover-zone")) {
+      dockHidden = false;
+      return;
+    }
+    if (notificationOpen) return;
+    dockHidden = true;
+    revealDockSoon(event.type === "keydown" ? 1200 : 750);
+  }
+
+  onDestroy(() => {
+    if (idleTimer) clearTimeout(idleTimer);
+  });
 
   function formatTime(iso: string): string {
     try {
@@ -43,31 +67,40 @@
   }
 </script>
 
-<aside id="sidebar" class="sidebar" class:collapsed>
-  <div class="brand sidebar-brand">
-    <div class="brand-icon">▦</div>
-    <div class="brand-title">Project Tracker</div>
-  </div>
+<svelte:window onmousemove={handleGlobalActivity} onkeydown={handleGlobalActivity} />
 
-  <nav class="nav sidebar-nav" aria-label="Main navigation">
-    {#each navItems as item}
+<div class="dock-hover-zone" class:hidden-by-activity={dockHidden}>
+  <aside id="sidebar" class="sidebar dock-sidebar" aria-label="Main navigation dock">
+    <button class="dock-brand" type="button" title="Project Tracker" onclick={() => onNavigate("dashboard")}>PT</button>
+
+    <nav class="nav sidebar-nav dock-nav" aria-label="Main navigation">
+      {#each navItems as item}
+        <button
+          class="nav-btn dock-nav-btn"
+          class:active={currentPage === item.id}
+          title={item.label}
+          aria-label={item.label}
+          onclick={() => onNavigate(item.id)}
+        >
+          <span class="nav-icon">{item.icon}</span>
+          <span class="nav-text">{item.label}</span>
+        </button>
+      {/each}
       <button
-        class="nav-btn"
-        class:active={currentPage === item.id}
-        title={collapsed ? item.label : undefined}
-        onclick={() => onNavigate(item.id)}
+        class="nav-btn dock-nav-btn dock-notification-btn"
+        class:active={notificationOpen}
+        title="Notifications"
+        aria-label="Notifications"
+        onmouseenter={() => (notificationOpen = true)}
+        onclick={() => (notificationOpen = !notificationOpen)}
       >
-        <span class="nav-icon">{item.icon}</span>
-        <span class="nav-text">{item.label}</span>
+        <span class="nav-icon">●</span>
+        {#if unreadCount > 0}<span class="dock-badge">{unreadCount}</span>{/if}
+        <span class="nav-text">Notifications</span>
       </button>
-    {/each}
-    <button class="nav-btn nav-notif-collapsed" title="Notifications">
-      <span class="nav-icon">●</span>
-    </button>
-  </nav>
+    </nav>
 
-  <div class="sidebar-fill">
-    <section class="notification-panel sidebar-notif-panel">
+    <div class="notification-panel dock-notification-popover" class:open={notificationOpen} role="region" aria-label="Notifications" onmouseleave={() => (notificationOpen = false)}>
       <div class="notification-head notif-head">
         <div class="notification-title notif-title"><span class="notification-dot notif-dot">●</span>Notifications</div>
         {#if notifications.length > 0}
@@ -94,18 +127,9 @@
           {/each}
         {/if}
       </div>
-    </section>
-  </div>
-
-  <button
-    class="collapse-btn sidebar-collapse-btn"
-    id="collapseBtn"
-    type="button"
-    title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-    onclick={() => (collapsed = !collapsed)}
-  >{collapsed ? "›" : "‹"}</button>
-</aside>
+    </div>
+  </aside>
+</div>
 
 <style>
   .notif-item-row { display:flex; justify-content:space-between; align-items:flex-start; gap:4px; }

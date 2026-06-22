@@ -1,0 +1,21 @@
+{
+  "$schema": "project_data_v1",
+  "project_name": "",
+  "start_datetime": null,
+  "end_datetime": null,
+  "cr_link": "",
+  "cr_state": "PENDING SUBMISSION",
+  "cr_state_updated_at": null,
+  "cr_pending_approval_at": null,
+  "drone_tickets": [],
+  "implementation_plan": "",
+  "email_flags": {
+    "ack_sent": false,
+    "approval_sent": false,
+    "last_cr_link_when_sent": null
+  },
+  "history": [],
+  "created_at": null,
+  "updated_at": "2026-06-19T22:29:15.144837+07:00",
+  "h10_notified_at": null
+}

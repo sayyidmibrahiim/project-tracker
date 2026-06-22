@@ -16,8 +16,8 @@ test("NotesEditor uses contenteditable instead of textarea for WYSIWYG", () => {
 test("NotesEditor converts HTML checkboxes to markdown and vice-versa", () => {
   assert.match(NE, /htmlToMarkdown/);
   assert.match(NE, /ne-todo-checkbox/);
-  assert.match(NE, /- \[ \]/);
-  assert.match(NE, /- \[x\]/);
+  assert.match(NE, /checked \? "x" : " "/);
+  assert.match(NE, /- \[\$\{checked\}\]/);
 });
 
 test("ProjectDetails disables CR and schedule inputs for sub-projects", () => {

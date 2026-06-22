@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from project_tracker.core.models import AppSettings, local_now
+from project_tracker.core.signal import Signal
 from project_tracker.services.project_service import ProjectService
 from project_tracker.services.scheduler_service import SchedulerService
 from project_tracker.web.event_queue import push_event
@@ -15,18 +16,6 @@ if TYPE_CHECKING:
     from project_tracker.services.notification_service import NotificationService
 
 AUTO_TRANSITION_JOB_ID = "auto_transition_check"
-
-
-class Signal:
-    def __init__(self) -> None:
-        self._callbacks: list[Callable[..., None]] = []
-
-    def connect(self, callback: Callable[..., None]) -> None:
-        self._callbacks.append(callback)
-
-    def emit(self, *args: object) -> None:
-        for callback in list(self._callbacks):
-            callback(*args)
 
 
 class AutoTransitionService:

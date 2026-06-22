@@ -103,16 +103,19 @@ class DroneTicket:
     drone_state: DroneState = DroneState.UAT
     drone_state_updated_at: datetime | None = None
     owner: str = ""
+    previous_drone_state_before_canceled: DroneState | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DroneTicket:
         subfolder_name = data.get("subfolder_name")
+        previous_state = data.get("previous_drone_state_before_canceled")
         return cls(
             subfolder_name=str(subfolder_name) if subfolder_name else None,
             drone_link=str(data.get("drone_link", "")),
             drone_state=DroneState(data.get("drone_state", DroneState.UAT.value)),
             drone_state_updated_at=datetime_from_json(data.get("drone_state_updated_at")),
             owner=str(data.get("owner", "")),
+            previous_drone_state_before_canceled=DroneState(previous_state) if previous_state else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +125,7 @@ class DroneTicket:
             "drone_state": self.drone_state.value,
             "drone_state_updated_at": datetime_to_json(self.drone_state_updated_at),
             "owner": self.owner,
+            "previous_drone_state_before_canceled": self.previous_drone_state_before_canceled.value if self.previous_drone_state_before_canceled else None,
         }
 
 

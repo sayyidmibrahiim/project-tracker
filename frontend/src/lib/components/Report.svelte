@@ -133,53 +133,53 @@
 <section class="screen active" id="screen-report">
   <div class="filter-frame">
     <div class="status-inner">
-      <span class="field-label">Year</span>
-      <select class="combo" bind:value={yearFilter}>
+      <label class="field-label" for="report-year">Year</label>
+      <select id="report-year" class="combo" bind:value={yearFilter}>
         <option value="all">All Years</option>
         {#each yearOptions as y}<option value={y}>{y}</option>{/each}
       </select>
-      <span class="field-label">Folder State</span>
-      <select class="combo" bind:value={projectStateFilter}>
+      <label class="field-label" for="report-folder">Folder State</label>
+      <select id="report-folder" class="combo" bind:value={projectStateFilter}>
         <option value="all">All Folder</option>
-        {#each projectStates as ps}<option value={ps}>{ps}</option>{/each}
+        {#each projectStates as ps}<option value={ps}>{ps.replace(/_/g, " ")}</option>{/each}
       </select>
-      <span class="field-label">CR State</span>
-      <select class="combo" bind:value={crStateFilter}>
+      <label class="field-label" for="report-cr">CR State</label>
+      <select id="report-cr" class="combo" bind:value={crStateFilter}>
         <option value="all">All CR</option>
-        {#each crStates as cs}<option value={cs}>{cs}</option>{/each}
+        {#each crStates as cs}<option value={cs}>{cs.charAt(0) + cs.slice(1).toLowerCase()}</option>{/each}
       </select>
-      <div class="search-shell"><span class="search-icon">⌕</span><input class="input" placeholder="Search report..." bind:value={searchFilter} /></div>
+      <div class="search-shell"><span class="search-icon">⌕</span><input id="report-search" class="input" placeholder="Search report..." bind:value={searchFilter} /></div>
       <button class="btn-secondary" onclick={handleClearFilters}>Clear</button>
       <button class="btn-primary" onclick={() => void handleExportCsv()}>Export CSV</button>
     </div>
   </div>
 
   {#if loadState === "loading"}
-    <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading report data…</span></div>
+    <div class="dashboard-banner banner-loading" role="status" aria-live="polite"><span class="banner-icon">◌</span><span>Loading report data…</span></div>
   {:else if loadState === "error"}
-    <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Report unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
+    <div class="dashboard-banner banner-error" role="alert"><span class="banner-icon">⚠</span><div><p class="banner-title">Report unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
   {/if}
 
   <div class="metric-row">
-    <div class="metric-card"><div class="metric-icon">Σ</div><div><div class="metric-value">{summary.total}</div><div class="metric-label">Total CR</div><div class="metric-helper">All folder states</div></div></div>
-    <div class="metric-card"><div class="metric-icon">U</div><div><div class="metric-value">{summary.uat}</div><div class="metric-label">Folder: UAT_PREPARE</div><div class="metric-helper">Preparation state</div></div></div>
-    <div class="metric-card"><div class="metric-icon">P</div><div><div class="metric-value">{summary.prod}</div><div class="metric-label">Folder: PROD_READY</div><div class="metric-helper">Ready for release</div></div></div>
-    <div class="metric-card"><div class="metric-icon">I</div><div><div class="metric-value">{summary.impl}</div><div class="metric-label">Folder: IMPLEMENTED</div><div class="metric-helper">Completed work</div></div></div>
-    <div class="metric-card"><div class="metric-icon">⏸</div><div><div class="metric-value">{summary.postponed}</div><div class="metric-label">Folder: POSTPONED</div><div class="metric-helper">Deferred delivery</div></div></div>
+    <div class="metric-card"><div class="metric-icon">Σ</div><div><div class="metric-value">{summary.total}</div><div class="metric-label">Total</div></div></div>
+    <div class="metric-card"><div class="metric-icon">U</div><div><div class="metric-value">{summary.uat}</div><div class="metric-label">UAT Prepare</div></div></div>
+    <div class="metric-card"><div class="metric-icon">P</div><div><div class="metric-value">{summary.prod}</div><div class="metric-label">Prod Ready</div></div></div>
+    <div class="metric-card"><div class="metric-icon">I</div><div><div class="metric-value">{summary.impl}</div><div class="metric-label">Implemented</div></div></div>
+    <div class="metric-card"><div class="metric-icon">⏸</div><div><div class="metric-value">{summary.postponed}</div><div class="metric-label">Postponed</div></div></div>
   </div>
 
   <div class="panel-card accent" style="flex:1;">
-    <div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Report Table</span><span class="panel-subtitle">export-ready view</span></div>
+    <div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Report</span>{#if loadState === "loaded"}<span class="panel-subtitle">{projects.length} row{projects.length !== 1 ? "s" : ""}</span>{/if}</div>
     <div style="overflow:auto;">
       <table class="mini-table">
         <thead><tr><th>Year</th><th>Project</th><th>Folder State</th><th>CR State</th><th>Drone State</th><th>Start</th><th>End</th></tr></thead>
         <tbody>
           {#if loadState === "loaded" && projects.length > 0}
             {#each projects as p}
-              <tr><td>{p.year}</td><td>{p.project_name}</td><td>{p.project_state}</td><td>{p.cr_state}</td><td>{droneState(p)}</td><td>{fmt(p.start_datetime)}</td><td>{fmt(p.end_datetime)}</td></tr>
+              <tr><td>{p.year}</td><td>{p.project_name}</td><td>{p.project_state.replace(/_/g, " ")}</td><td>{p.cr_state.charAt(0) + p.cr_state.slice(1).toLowerCase()}</td><td>{droneState(p)}</td><td>{fmt(p.start_datetime)}</td><td>{fmt(p.end_datetime)}</td></tr>
             {/each}
           {:else}
-            <tr><td colspan="7">{loadState === "error" ? errorMessage : "No report rows."}</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:24px;">{loadState === "error" ? errorMessage : "No projects match the current filters."}</td></tr>
           {/if}
         </tbody>
       </table>

@@ -133,3 +133,27 @@ def test_create_js_api_wires_notification_dismiss_all():
     result = api.notification_dismiss_all()
     assert isinstance(result, dict)
     assert result.get("ok") is True
+
+
+def test_run_uses_app_config_cache_path(monkeypatch, tmp_path):
+    """The desktop app must not use the shared pytest/temp cache for live dashboard data."""
+    from project_tracker import app_web
+
+    captured: dict[str, object] = {}
+    fake_api = object()
+
+    monkeypatch.setattr(app_web, "app_config_dir", lambda: tmp_path)
+    monkeypatch.setattr(app_web, "resolve_frontend_url", lambda *, dev=False: "http://localhost/frontend")
+    def fake_create_js_api(**kwargs):
+        captured["js_api_kwargs"] = kwargs
+        return fake_api
+
+    monkeypatch.setattr(app_web, "create_js_api", fake_create_js_api)
+    monkeypatch.setattr(app_web.webview, "create_window", lambda *args, **kwargs: captured.setdefault("window_kwargs", kwargs))
+    monkeypatch.setattr(app_web.webview, "start", lambda **kwargs: captured.setdefault("start_kwargs", kwargs))
+
+    app_web.run(start_webview=False)
+
+    assert captured["js_api_kwargs"] == {"db_path": tmp_path / "project_tracker_cache.db"}
+    assert captured["window_kwargs"]["js_api"] is fake_api
+    assert "start_kwargs" not in captured

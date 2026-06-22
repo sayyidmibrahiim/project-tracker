@@ -29,6 +29,7 @@ DRONE_MANUAL_TRANSITIONS: dict[DroneState, frozenset[DroneState]] = {
     DroneState.APPROVED: frozenset({DroneState.CANCELED}),
     DroneState.IN_PROGRESS: frozenset({DroneState.FINISHED, DroneState.CANCELED}),
     DroneState.FINISHED: frozenset(),
+    DroneState.POSTPONED: frozenset(),
     DroneState.CANCELED: frozenset(),
 }
 

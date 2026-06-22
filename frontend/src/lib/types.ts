@@ -147,6 +147,7 @@ export interface HistoryEntry {
 export interface DroneTicket {
   subfolder_name: string | null;
   drone_link: string;
+  drone_ticket?: string;
   drone_state: string;
   owner: string;
 }

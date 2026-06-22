@@ -32,5 +32,6 @@ def test_drone_state_contains_prd_states() -> None:
         "APPROVED",
         "IN-PROGRESS",
         "FINISHED",
+        "POSTPONED",
         "CANCELED",
     }

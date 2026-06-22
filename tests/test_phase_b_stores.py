@@ -189,8 +189,14 @@ def test_link_bank_store_write_read_round_trip_current_schema(tmp_path: Path) ->
                 "name": "CR Portal",
                 "url": "https://example.local/",
                 "notes": "Daily CR work portal.",
+                "details": "Daily CR work portal.",
+                "tags": "",
                 "category": "CR & ITSM Tools",
                 "archived": "false",
+                "pinned": "false",
+                "favorite": "false",
+                "created_at": "",
+                "updated_at": "",
             }
         ],
     )

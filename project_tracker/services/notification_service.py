@@ -6,22 +6,11 @@ from typing import TYPE_CHECKING
 import uuid
 
 from project_tracker.core.models import Notification, local_now
+from project_tracker.core.signal import Signal
 from project_tracker.web.event_queue import push_event
 
 if TYPE_CHECKING:
     from project_tracker.infrastructure.cache_db import CacheDb
-
-
-class Signal:
-    def __init__(self) -> None:
-        self._callbacks: list[Callable[..., None]] = []
-
-    def connect(self, callback: Callable[..., None]) -> None:
-        self._callbacks.append(callback)
-
-    def emit(self, *args: object) -> None:
-        for callback in list(self._callbacks):
-            callback(*args)
 
 
 class NotificationService:

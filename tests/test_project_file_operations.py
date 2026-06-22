@@ -37,8 +37,8 @@ from pathlib import Path
 
 import pytest
 
+from project_tracker.infrastructure import filesystem as infra_fs
 from project_tracker.infrastructure.settings_store import SettingsStore
-from project_tracker.services.safe_delete_service import SafeDeleteService
 
 
 # ── helpers / fixtures ────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ def test_delete_send2trash_failure_preserves_file(env, monkeypatch):
     def _raise(self, path):
         raise RuntimeError("send2trash unavailable")
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _raise)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _raise)
 
     result = env["js_api"].file_delete(str(target))
 
@@ -228,10 +228,10 @@ def test_delete_success_routes_to_safe_delete(env, tmp_path, monkeypatch):
     trash = tmp_path / "trash"
     trash.mkdir()
 
-    def _fake_trash(self, path):
+    def _fake_trash(path):
         Path(path).replace(trash / Path(path).name)
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _fake_trash)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _fake_trash)
 
     result = env["js_api"].file_delete(str(target))
 
@@ -272,10 +272,10 @@ def test_rename_rejected_when_locked(env, state):
 @pytest.mark.parametrize("state", ["PROD_READY", "IMPLEMENTED"])
 def test_delete_rejected_when_locked(env, state, monkeypatch):
     # The lock guard must reject before any deletion route is reached.
-    def _boom(self, path):  # pragma: no cover - must never be called
-        raise AssertionError("delete_to_trash must not be called for a locked project")
+    def _boom(path):  # pragma: no cover - must never be called
+        raise AssertionError("send_to_recycle_bin must not be called for a locked project")
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _boom)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _boom)
 
     folder = _project_folder(env["root"], state)
     target = folder / "doc.txt"

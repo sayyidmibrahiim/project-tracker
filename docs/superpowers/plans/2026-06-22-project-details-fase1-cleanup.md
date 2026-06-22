@@ -158,8 +158,10 @@ Find:
 
 Replace with:
 ```js
-  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Project (DRONE)", "Files", "Notes", "Activity History"]) {
+  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Project \\(DRONE\\)", "Files", "Notes", "Activity History"]) {
 ```
+
+Note: parens MUST be double-backslash-escaped. The test builds its regex via `new RegExp(label)` (line 45 of the file), so a raw `"(DRONE)"` would be interpreted as a capture group and never match the literal title. `\\(` in the JS string literal yields `\(` in the regex, matching a literal paren — same escaping idiom the file already uses on line 33 for `.`.
 
 - [ ] **Step 6: Run tests — expect failures only from the new TODOs that aren't implemented yet**
 

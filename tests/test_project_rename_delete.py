@@ -28,7 +28,7 @@ from project_tracker.core.models import ProjectMetadata, local_now
 from project_tracker.infrastructure.cache_db import CacheDb
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.infrastructure.settings_store import SettingsStore
-from project_tracker.services.safe_delete_service import SafeDeleteService
+from project_tracker.infrastructure import filesystem as infra_fs
 
 
 # ── helpers / fixtures ────────────────────────────────────────────────────
@@ -121,10 +121,10 @@ def test_rename_rejected_when_locked(env, state):
 @pytest.mark.parametrize("state", ["PROD_READY", "IMPLEMENTED"])
 def test_delete_rejected_when_locked(env, state, monkeypatch):
     # Guard should reject before any deletion route is reached.
-    def _boom(self, path):  # pragma: no cover - must never be called
-        raise AssertionError("delete_to_trash must not be called for a locked project")
+    def _boom(path):  # pragma: no cover - must never be called
+        raise AssertionError("send_to_recycle_bin must not be called for a locked project")
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _boom)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _boom)
     project = _make_project(env["root"], state, "locked-project", env["store"])
 
     result = env["js_api"].project_delete(str(project))
@@ -146,10 +146,10 @@ def test_delete_send2trash_failure_preserves_folder_and_cache(env, monkeypatch):
     assert seed["ok"] is True
     assert "doomed" in _cache_names(env["db_path"])
 
-    def _raise(self, path):
+    def _raise(path):
         raise RuntimeError("send2trash unavailable")
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _raise)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _raise)
 
     result = env["js_api"].project_delete(str(project))
 
@@ -172,10 +172,10 @@ def test_delete_success_updates_cache(env, tmp_path, monkeypatch):
     trash = tmp_path / "trash"
     trash.mkdir()
 
-    def _fake_trash(self, path):
+    def _fake_trash(path):
         shutil.move(str(path), str(trash / Path(path).name))
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _fake_trash)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _fake_trash)
 
     result = env["js_api"].project_delete(str(project))
 
@@ -215,10 +215,10 @@ def test_subproject_delete_success(env, tmp_path, monkeypatch):
     trash = tmp_path / "trash"
     trash.mkdir()
 
-    def _fake_trash(self, path):
+    def _fake_trash(path):
         shutil.move(str(path), str(trash / Path(path).name))
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _fake_trash)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _fake_trash)
 
     result = env["js_api"].subproject_delete(str(project), "sub-a")
 
@@ -232,10 +232,10 @@ def test_subproject_delete_send2trash_failure_preserves_folder(env, monkeypatch)
     subproject = project / "sub-a"
     subproject.mkdir()
 
-    def _raise(self, path):
+    def _raise(path):
         raise RuntimeError("send2trash unavailable")
 
-    monkeypatch.setattr(SafeDeleteService, "delete_to_trash", _raise)
+    monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _raise)
 
     result = env["js_api"].subproject_delete(str(project), "sub-a")
 

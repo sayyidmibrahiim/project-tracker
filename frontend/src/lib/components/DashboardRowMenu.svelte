@@ -87,7 +87,9 @@
     aria-expanded={open}
     bind:this={triggerEl}
     onclick={toggleMenu}
-  >⋮</button>
+  >
+    <span class="rm-dot-stack" aria-hidden="true"><span></span><span></span><span></span></span>
+  </button>
 
   {#if open}
     <button class="rm-scrim" type="button" aria-label="Close menu" onclick={() => (open = false)}></button>
@@ -95,12 +97,12 @@
       <button class="rm-item" type="button" role="menuitem" onclick={details}>Project Details</button>
       <div class="rm-divider"></div>
       {#if deleteLock}
-        <div class="rm-locked" title={deleteLock}>🔒 Delete — {deleteLock}</div>
+        <div class="rm-locked" title={deleteLock}>Delete locked — {deleteLock}</div>
       {:else}
         <button class="rm-item rm-danger" type="button" role="menuitem" onclick={requestDelete} disabled={busy}>Delete project…</button>
       {/if}
       {#if error}
-        <div class="rm-error" role="alert">⚠ {error}</div>
+        <div class="rm-error" role="alert"><span aria-hidden="true">!</span> {error}</div>
       {/if}
     </div>
   {/if}
@@ -119,11 +121,13 @@
 
 <style>
   .rm-root { position:relative; display:inline-flex; }
-  .rm-trigger { width:28px; height:28px; border:0; border-radius:4px; background:transparent; color:var(--color-ink); font-size:14px; font-weight:900; cursor:pointer; line-height:1; }
-  .rm-trigger:hover { background:#ADB9B2; }
+  .rm-trigger { width:30px; min-width:30px; height:30px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--color-muted); cursor:pointer; line-height:1; display:inline-grid; place-items:center; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s cubic-bezier(.22,1,.36,1); }
+  .rm-trigger:hover, .rm-trigger[aria-expanded="true"] { background:var(--soft-pink-surface); border-color:var(--soft-pink-border); color:var(--primary-red); transform:translateY(-1px); }
+  .rm-dot-stack { display:flex; flex-direction:column; gap:3px; align-items:center; justify-content:center; }
+  .rm-dot-stack span { width:3px; height:3px; border-radius:999px; background:currentColor; box-shadow:0 0 0 1px rgba(255,255,255,.2); }
   .rm-scrim { position:fixed; inset:0; z-index:60; border:0; background:transparent; cursor:default; }
-  .rm-menu { position:fixed; transform:translateX(-100%); z-index:61; min-width:220px; background:#fff; border:1px solid #D7DCE2; border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.28); padding:6px; display:flex; flex-direction:column; gap:2px; }
-  .rm-item { text-align:left; padding:8px 11px; border:0; border-radius:5px; background:transparent; color:var(--color-ink); font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
+  .rm-menu { position:fixed; transform:translateX(-100%); z-index:61; min-width:220px; background:#fff; border:1px solid var(--soft-white-border); border-radius:10px; box-shadow:var(--shadow-card); padding:6px; display:flex; flex-direction:column; gap:2px; animation:rm-pop .14s cubic-bezier(.22,1,.36,1); }
+  .rm-item { text-align:left; padding:8px 11px; border:0; border-radius:6px; background:transparent; color:var(--color-ink); font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; transition:background .14s ease, color .14s ease; }
   .rm-item:hover:not(:disabled) { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }
   .rm-item:disabled { opacity:0.5; cursor:not-allowed; }
   .rm-danger { color:var(--color-dbs-red); }
@@ -131,4 +135,6 @@
   .rm-divider { height:1px; background:#E5E7EB; margin:3px 0; }
   .rm-locked { padding:8px 11px; font-size:11px; font-weight:750; color:var(--color-muted); }
   .rm-error { padding:7px 11px; font-size:11px; font-weight:800; color:var(--color-dbs-red); background:var(--color-soft-pink-surface); border-radius:5px; }
+  @keyframes rm-pop { from { opacity:0; transform:translateX(-100%) translateY(-2px); } to { opacity:1; transform:translateX(-100%) translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .rm-trigger, .rm-menu, .rm-item { transition:none; animation:none; } }
 </style>

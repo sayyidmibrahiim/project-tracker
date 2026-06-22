@@ -105,6 +105,13 @@ export function renderMarkdown(src: string): string {
       out.push(`<blockquote>${renderInline(line.slice(5))}</blockquote>`);
       continue;
     }
+    if (/^\s*[-*] \[[xX ]\] /.test(line)) {
+      closeList();
+      const checked = /^\s*[-*] \[[xX]\] /.test(line);
+      const content = line.replace(/^\s*[-*] \[[xX ]\] /, "");
+      out.push(`<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox"${checked ? " checked" : ""} /> <span>${renderInline(content)}</span></div>`);
+      continue;
+    }
     if (/^\s*[-*] /.test(line)) {
       if (!inList) {
         out.push("<ul>");

@@ -27,6 +27,7 @@ class DroneState(StrEnum):
     APPROVED = "APPROVED"
     IN_PROGRESS = "IN-PROGRESS"
     FINISHED = "FINISHED"
+    POSTPONED = "POSTPONED"
     CANCELED = "CANCELED"
 
 

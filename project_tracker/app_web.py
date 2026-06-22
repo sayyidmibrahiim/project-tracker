@@ -15,7 +15,7 @@ import webview
 
 from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import AppSettings, ProjectMetadata, local_now
-from project_tracker.core.rules import TransitionGuardResult, extract_cr_number
+from project_tracker.core.rules import TransitionGuardResult, extract_cr_number, extract_drone_ticket
 from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
 from project_tracker.infrastructure import filesystem, outlook_client
 from project_tracker.infrastructure.filesystem import (
@@ -486,6 +486,7 @@ def create_js_api(
                     {
                         "subfolder_name": t.subfolder_name,
                         "drone_link": t.drone_link,
+                        "drone_ticket": extract_drone_ticket(t.drone_link) or "",
                         "drone_state": t.drone_state.value,
                         "owner": t.owner,
                     }
@@ -496,8 +497,8 @@ def create_js_api(
             }
 
         def list_subprojects(self, project_path: Path) -> object:
-            """Return subproject paths under project_path."""
-            return [str(p) for p in discover_subproject_paths(Path(project_path))]
+            """Return subproject folder names under project_path."""
+            return [p.name for p in discover_subproject_paths(Path(project_path))]
 
         # ── wired mutation: update_cr_link (metadata-only) ──
 
@@ -1089,7 +1090,7 @@ def create_js_api(
             entries = [
                 {"name": child.name, "path": str(child)}
                 for child in p.iterdir()
-                if child.is_file()
+                if child.is_file() and child.name not in ("notes.md", "project_data.json")
             ]
             entries.sort(key=lambda e: e["name"])
             return entries

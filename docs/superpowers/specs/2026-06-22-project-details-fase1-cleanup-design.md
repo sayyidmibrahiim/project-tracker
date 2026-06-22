@@ -4,7 +4,7 @@
 **Date:** 2026-06-22
 **Scope owner:** Sayyid Ibrahim
 **Origin review:** User feedback on Project Details UI/UX (12 points total)
-**Phase:** 1 of 4 — see *Phase Roadmap* below for 2–4.
+**Phase:** 1 of 4 — see _Phase Roadmap_ below for 2–4.
 
 ## Goal
 
@@ -16,15 +16,15 @@ deliberately **cleanup + small structural changes only** — no new design langu
 
 ## Non-goals (deferred to later phases)
 
-| Review point | Phase | Why deferred |
-|---|---|---|
-| 5. Replace all ASCII glyph icons with professional SVG | Fase 2 | Needs icon-set decision + visual mockups |
-| 6. Notion-like visual polish / nuance | Fase 2 | Design-language overhaul — needs visual companion |
-| 8.1. Microsoft Word-style WYSIWYG Notes | Fase 3 | Needs library-vs-custom decision (Tiptap vs contenteditable) |
-| 8.2. Checklist (checkbox) support in Notes | Fase 3 | Part of WYSIWYG |
-| 10. Different Notes content for main vs sub project | Fase 4 | Needs sub-project first-class data model |
-| 11. Sub-project dates inherit from main project | Fase 4 | Needs backend date-inheritance logic |
-| 12. Project Details view adapted for sub-projects | Fase 4 | Needs `project_get` backend fix + parent linkage |
+| Review point                                           | Phase  | Why deferred                                                 |
+| ------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| 5. Replace all ASCII glyph icons with professional SVG | Fase 2 | Needs icon-set decision + visual mockups                     |
+| 6. Notion-like visual polish / nuance                  | Fase 2 | Design-language overhaul — needs visual companion            |
+| 8.1. Microsoft Word-style WYSIWYG Notes                | Fase 3 | Needs library-vs-custom decision (Tiptap vs contenteditable) |
+| 8.2. Checklist (checkbox) support in Notes             | Fase 3 | Part of WYSIWYG                                              |
+| 10. Different Notes content for main vs sub project    | Fase 4 | Needs sub-project first-class data model                     |
+| 11. Sub-project dates inherit from main project        | Fase 4 | Needs backend date-inheritance logic                         |
+| 12. Project Details view adapted for sub-projects      | Fase 4 | Needs `project_get` backend fix + parent linkage             |
 
 Review points covered by Fase 1: **1.1, 1.2, 1.3, 1.4, 2, 3.1, 3.2, 3.3, 3.4, 4, 7.1, 9.1, 9.2.**
 
@@ -61,6 +61,7 @@ The `<button onclick={saveCrState}>Save CR State</button>` is removed. The CR St
 `<select>` now fires save on `onchange` instead of waiting for a button press.
 
 Behavior:
+
 - **Non-destructive transitions:** any selected value that is the project's current
   `cr_state` OR a forward target in `CR_NEXT[currentState]` that is **not** in the
   destructive set `{POSTPONED, CANCELED}`. Concretely these are: PENDING SUBMISSION →
@@ -89,6 +90,7 @@ is also removed (it duplicated per-sub-project state and is meaningless on the m
 project when no sub-project is selected).
 
 State variables removed from `ProjectDetails.svelte`:
+
 - `selectedSubprojectDrone` derived (the master-detail in Section 3 replaces it).
 - `saveSelectedSubprojectDroneLink`, `saveSelectedSubprojectDroneOwner` (moved to
   Sub Project box handlers).
@@ -96,6 +98,7 @@ State variables removed from `ProjectDetails.svelte`:
   "add drone" flow keyed to the selected sub-project row).
 
 State variables kept:
+
 - `droneStateEdits`, `droneStateBusy`, `droneStateError` — repurposed for per-row
   state in the Sub Project table (keyed by sub-project name, not by drone ticket
   index — see Section 3).
@@ -103,18 +106,22 @@ State variables kept:
 **1.4 — CR Link conditional render.**
 
 When `detail.cr_link` is empty/whitespace → **input mode**:
+
 ```
 [ Paste CR link…                                   ]  ← single input, autosave on blur
 ```
+
 - `<input type="url" placeholder="Paste CR link…">` with `bind:value={crLinkEdit}`.
 - On `onblur`, if value changed and non-empty, call `cr_update_link`.
 - Existing `crLinkSaveState` feedback reused (inline transient next to input).
 
 When `detail.cr_link` is non-empty → **display mode**:
+
 ```
 CR Number: CR-12345    [📋 Copy]  [↗ Open]
                                           [✎ Edit]   ← small pencil, toggles back to input
 ```
+
 - Show `detail.cr_number` (or the raw `cr_link` if `cr_number` is empty — defensive).
 - `📋 Copy` button → `navigator.clipboard.writeText(detail.cr_link)`. On success show
   transient "✓ Copied" (2s). On failure (clipboard API not available) show "✗ Press
@@ -168,10 +175,10 @@ there, not here.)
 
 Table schema becomes:
 
-| Sub Project | Drone State | Actions |
-|---|---|---|
-| `api-service` | `[IN-PROGRESS ▾]` | `📁 Open` |
-| `▶ web-portal` (selected) | `[APPROVED ▾]` | `📁 Open` |
+| Sub Project               | Drone State       | Actions   |
+| ------------------------- | ----------------- | --------- |
+| `api-service`             | `[IN-PROGRESS ▾]` | `📁 Open` |
+| `▶ web-portal` (selected) | `[APPROVED ▾]`    | `📁 Open` |
 
 - **Drone State dropdown** in each row. Populated via the existing
   `legalDroneOptionsFor(row.droneState)` helper. On `onchange`:
@@ -193,7 +200,7 @@ Table schema becomes:
     `{drone_link: value}`.
   - If the selected sub-project **has no** drone ticket: show empty input + button
     "Add Drone Ticket" → calls `drone_add` with `{drone_link: value, subfolder_name:
-    row.name}`.
+row.name}`.
 - **Open Folder** action remains (`folder_open` via `joinPath(projectPath, name)`).
 
 **Component refactor:** `SubProjectTable.svelte` becomes a **presentational**
@@ -204,8 +211,8 @@ interface SubProjectTableProps {
   projectPath: string;
   subprojects: string[];
   droneTickets: DroneTicket[];
-  selectedRow: string | null;              // currently-selected sub-project name
-  droneStateBusy: string | null;           // name of row currently saving state
+  selectedRow: string | null; // currently-selected sub-project name
+  droneStateBusy: string | null; // name of row currently saving state
   droneStateErrors: Record<string, string>; // keyed by sub-project name
   onSelectRow: (name: string) => void;
   onChangeDroneState: (name: string, nextState: string) => void;
@@ -219,6 +226,7 @@ ProjectDetails renders the detail panel below the table. This keeps the table du
 and testable; ProjectDetails owns all bridge interactions.
 
 State removed from ProjectDetails:
+
 - `selectedSubproject` filter in Command Center is **kept** (it still filters which
   drone ticket to show in Identity — wait, no: Identity drone block is gone in Section
   1). Re-evaluate: does the Command Center "Sub Project" `<select>` still serve a
@@ -231,6 +239,7 @@ State removed from ProjectDetails:
   removing it.)
 
 New state added to ProjectDetails:
+
 - `selectedSubprojectRow: string | null` — drives the master-detail panel.
 - `droneLinkEdit: string` — draft for the Drone URL input in the detail panel.
 - `droneLinkBusy: boolean`, `droneLinkError: string`.
@@ -254,7 +263,11 @@ not an action.
 **Mechanism:** add new optional prop to `ProjectDetails.svelte`:
 
 ```ts
-let { initialPath, startNew, onNavigateDashboard }: {
+let {
+  initialPath,
+  startNew,
+  onNavigateDashboard,
+}: {
   initialPath?: string | null;
   startNew?: boolean;
   onNavigateDashboard?: () => void;
@@ -326,17 +339,19 @@ const RESERVED_FILES = new Set(["project_data.json", "notes.md"]);
 
 - **Hide:** before rendering, filter the `files` prop:
   ```ts
-  const visibleFiles = $derived(files.filter((f) => !RESERVED_FILES.has(f.name.toLowerCase())));
+  const visibleFiles = $derived(
+    files.filter((f) => !RESERVED_FILES.has(f.name.toLowerCase())),
+  );
   ```
   Render `visibleFiles` instead of `files` in the list. Case-insensitive match —
   Windows is case-insensitive, so `Notes.md` is also reserved.
 - **Lock create:** in `createFile()`, reject if `newFilename.trim().toLowerCase()` is
   in `RESERVED_FILES`. Error message: `"notes.md and project_data.json are reserved
-  system files and cannot be created here."` Same check in `createFromTemplate()`
+system files and cannot be created here."` Same check in `createFromTemplate()`
   (templates wouldn't normally target these names, but defense-in-depth).
 - **Lock rename:** in `requestRename()`, reject if `renameDraft.trim().toLowerCase()`
   is in `RESERVED_FILES`. Error message: `"Cannot rename to a reserved system file
-  name."`
+name."`
 
 The backend remains the authoritative guard — these are UX-level foot-gun prevention.
 A determined user can still create the file via Explorer; the app simply hides it
@@ -384,17 +399,18 @@ utilities. Fase 1 requires:
 
 ## Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Removing Implementation Plan loses user data on existing projects | Field stays in model + on disk; only UI editing removed. No migration needed. |
+| Risk                                                                           | Mitigation                                                                                                                        |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Removing Implementation Plan loses user data on existing projects              | Field stays in model + on disk; only UI editing removed. No migration needed.                                                     |
 | Removing Command Center Sub Project dropdown breaks a flow that depended on it | Verified: its only consumer was the Identity drone block (removed in Section 1.3). No other code path reads `selectedSubproject`. |
-| `navigator.clipboard` may be unavailable in some WebView2 configs | Fallback: select-and-instruct ("Press Ctrl+C"). |
-| Master-detail adds a click to edit Drone URL (was previously inline) | Acceptable trade-off for the cleaner Identity box; matches Notion-style interaction. |
-| Removing Owner editing may inconvenience existing workflows | Owner stays in the data model; re-exposed in Fase 4 sub-project detail if needed. |
+| `navigator.clipboard` may be unavailable in some WebView2 configs              | Fallback: select-and-instruct ("Press Ctrl+C").                                                                                   |
+| Master-detail adds a click to edit Drone URL (was previously inline)           | Acceptable trade-off for the cleaner Identity box; matches Notion-style interaction.                                              |
+| Removing Owner editing may inconvenience existing workflows                    | Owner stays in the data model; re-exposed in Fase 4 sub-project detail if needed.                                                 |
 
 ## Open questions
 
 None. All ambiguities resolved during clarifying questions:
+
 - Drone URL editing location → master-detail in Sub Project box.
 - Reserved files → hide + lock.
 - CR State autosave → confirm for destructive, autosave otherwise.

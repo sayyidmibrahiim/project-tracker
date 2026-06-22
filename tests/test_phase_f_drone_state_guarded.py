@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState
+from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.models import DroneTicket, ProjectMetadata
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.infrastructure.settings_store import SettingsStore
@@ -154,3 +154,86 @@ def test_update_without_state_still_works(js_api, temp_project_with_drones):
     assert metadata.drone_tickets[0].owner == "Zoe"
     assert metadata.drone_tickets[0].drone_state == DroneState.UAT
     assert metadata.drone_tickets[0].drone_state_updated_at is None
+
+
+def test_drone_cannot_be_canceled_while_cr_is_not_canceled(js_api, temp_project_with_drones):
+    path = str(temp_project_with_drones["project_path"])
+
+    result = js_api.drone_update(path, 0, {"drone_state": "CANCELED"})
+
+    assert result["ok"] is False
+    assert "CR" in result["error"]["message"]
+    metadata = temp_project_with_drones["metadata_store"].read(temp_project_with_drones["project_path"])
+    assert metadata.drone_tickets[0].drone_state == DroneState.UAT
+
+
+def test_canceling_cr_cancels_drones_and_reopen_restores_previous_drone_states(temp_project_with_drones):
+    from project_tracker import app_web
+
+    root = temp_project_with_drones["root"]
+    original_path = temp_project_with_drones["project_path"]
+    js_api = app_web.create_js_api(settings_store=temp_project_with_drones["settings_store"])
+
+    cancel_result = js_api.cr_update_state(str(original_path), "CANCELED")
+
+    assert cancel_result["ok"] is True
+    canceled_path = root / "2024" / ProjectState.CANCELED.value / "test-drones"
+    canceled_metadata = temp_project_with_drones["metadata_store"].read(canceled_path)
+    assert [ticket.drone_state for ticket in canceled_metadata.drone_tickets] == [
+        DroneState.CANCELED,
+        DroneState.CANCELED,
+        DroneState.CANCELED,
+    ]
+
+    reopen_result = js_api.folder_reopen(str(canceled_path))
+
+    assert reopen_result["ok"] is True
+    reopened_path = root / "2024" / ProjectState.UAT_PREPARE.value / "test-drones"
+    reopened_metadata = temp_project_with_drones["metadata_store"].read(reopened_path)
+    assert [ticket.drone_state for ticket in reopened_metadata.drone_tickets] == [
+        DroneState.UAT,
+        DroneState.APPROVED,
+        DroneState.UAT,
+    ]
+
+
+def test_postponing_cr_postpones_drones_and_reopen_restores_previous_drone_states(temp_project_with_drones):
+    from project_tracker import app_web
+
+    root = temp_project_with_drones["root"]
+    original_path = temp_project_with_drones["project_path"]
+    js_api = app_web.create_js_api(settings_store=temp_project_with_drones["settings_store"])
+
+    postpone_result = js_api.cr_update_state(str(original_path), "POSTPONED")
+
+    assert postpone_result["ok"] is True
+    postponed_path = root / "2024" / ProjectState.POSTPONED.value / "test-drones"
+    postponed_metadata = temp_project_with_drones["metadata_store"].read(postponed_path)
+    assert [ticket.drone_state for ticket in postponed_metadata.drone_tickets] == [
+        DroneState.POSTPONED,
+        DroneState.POSTPONED,
+        DroneState.POSTPONED,
+    ]
+
+    reopen_result = js_api.folder_reopen(str(postponed_path))
+
+    assert reopen_result["ok"] is True
+    reopened_path = root / "2024" / ProjectState.UAT_PREPARE.value / "test-drones"
+    reopened_metadata = temp_project_with_drones["metadata_store"].read(reopened_path)
+    assert [ticket.drone_state for ticket in reopened_metadata.drone_tickets] == [
+        DroneState.UAT,
+        DroneState.APPROVED,
+        DroneState.UAT,
+    ]
+
+
+def test_changing_drone_link_resets_drone_state_to_uat(js_api, temp_project_with_drones):
+    path = str(temp_project_with_drones["project_path"])
+
+    result = js_api.drone_update(path, 1, {"drone_link": "https://drone.test/D-201"})
+
+    assert result["ok"] is True
+    metadata = temp_project_with_drones["metadata_store"].read(temp_project_with_drones["project_path"])
+    assert metadata.drone_tickets[1].drone_link == "https://drone.test/D-201"
+    assert metadata.drone_tickets[1].drone_state == DroneState.UAT
+    assert metadata.drone_tickets[1].drone_state_updated_at is not None

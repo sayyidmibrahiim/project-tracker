@@ -113,6 +113,7 @@ def test_automatic_drone_approved_to_in_progress_is_allowed() -> None:
 
 def test_terminal_drone_states_have_no_outgoing_transitions() -> None:
     assert valid_next_drone_states(DroneState.FINISHED) == frozenset()
+    assert valid_next_drone_states(DroneState.POSTPONED) == frozenset()
     assert valid_next_drone_states(DroneState.CANCELED) == frozenset()
 
 

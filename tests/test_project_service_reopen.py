@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, ProjectState
+from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidTransitionError
-from project_tracker.core.models import AppSettings, ProjectMetadata
+from project_tracker.core.models import AppSettings, DroneTicket, ProjectMetadata
 from project_tracker.infrastructure.metadata_store import MetadataStore
 from project_tracker.services.project_service import ProjectService
 
@@ -54,6 +54,44 @@ def test_reopen_project_from_canceled_moves_folder_to_uat_prepare_and_resets_cr_
     assert saved_metadata.cr_state != CRState.REOPEN
     assert saved_metadata.history[-1].action == "REOPEN"
     assert saved_metadata.history[-1].detail == "REOPEN: project moved from CANCELED to UAT_PREPARE"
+
+
+def test_reopen_canceled_project_with_missing_previous_drone_state_restores_drone_to_uat(tmp_path: Path) -> None:
+    project_path = tmp_path / "2026" / ProjectState.CANCELED.value / "PROJECT_A"
+    project_path.mkdir(parents=True)
+    MetadataStore().save(
+        project_path,
+        ProjectMetadata(
+            project_name="PROJECT_A",
+            cr_state=CRState.CANCELED,
+            drone_tickets=[DroneTicket(drone_state=DroneState.CANCELED)],
+        ),
+    )
+    service = ProjectService(MetadataStore())
+
+    moved_path = service.reopen_project(project_path, AppSettings(display_name="Tester"))
+
+    saved_metadata = MetadataStore().load(moved_path)
+    assert saved_metadata.drone_tickets[0].drone_state == DroneState.UAT
+
+
+def test_reopen_postponed_project_with_missing_previous_drone_state_restores_drone_to_uat(tmp_path: Path) -> None:
+    project_path = tmp_path / "2026" / ProjectState.POSTPONED.value / "PROJECT_A"
+    project_path.mkdir(parents=True)
+    MetadataStore().save(
+        project_path,
+        ProjectMetadata(
+            project_name="PROJECT_A",
+            cr_state=CRState.POSTPONED,
+            drone_tickets=[DroneTicket(drone_state=DroneState.POSTPONED)],
+        ),
+    )
+    service = ProjectService(MetadataStore())
+
+    moved_path = service.reopen_project(project_path, AppSettings(display_name="Tester"))
+
+    saved_metadata = MetadataStore().load(moved_path)
+    assert saved_metadata.drone_tickets[0].drone_state == DroneState.UAT
 
 
 def test_reopen_project_from_uat_prepare_is_rejected(tmp_path: Path) -> None:

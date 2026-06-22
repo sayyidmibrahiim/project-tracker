@@ -3,9 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, ProjectState
+from project_tracker.core.enums import CRState, DroneState, ProjectState
 from project_tracker.core.exceptions import InvalidFolderNameError
-from project_tracker.core.models import AppSettings, HistoryEntry, local_now
+from project_tracker.core.models import AppSettings, HistoryEntry, ProjectMetadata, local_now
 from project_tracker.core.rules import (
     TransitionGuardResult,
     current_user,
@@ -21,8 +21,8 @@ from project_tracker.core.state_machine import (
     validate_drone_state_change_allowed,
     validate_project_state_transition,
 )
+from project_tracker.infrastructure import filesystem
 from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.services.safe_delete_service import SafeDeleteService
 
 
 def state_from_project_path(project_path: Path) -> ProjectState:
@@ -37,10 +37,8 @@ class ProjectService:
     def __init__(
         self,
         metadata_store: MetadataStore | None = None,
-        safe_delete_service: SafeDeleteService | None = None,
     ) -> None:
         self.metadata_store = metadata_store or MetadataStore()
-        self.safe_delete_service = safe_delete_service or SafeDeleteService()
 
     def rename_project(
         self, project_path: Path, new_name: str, settings: AppSettings
@@ -101,11 +99,32 @@ class ProjectService:
         the single permitted deletion path. On failure the exception
         propagates and the folder is left in place.
         """
-        self.safe_delete_service.delete_to_trash(project_path)
+        filesystem.send_to_recycle_bin(project_path)
 
     def delete_subproject(self, subproject_path: Path) -> None:
         """Route a subproject-folder deletion to the Recycle Bin via send2trash."""
-        self.safe_delete_service.delete_to_trash(subproject_path)
+        filesystem.send_to_recycle_bin(subproject_path)
+
+    @staticmethod
+    def _set_drone_pause_state(metadata: ProjectMetadata, target: DroneState, now) -> None:
+        for ticket in metadata.drone_tickets:
+            if ticket.drone_state == target:
+                continue
+            if ticket.previous_drone_state_before_canceled is None:
+                ticket.previous_drone_state_before_canceled = ticket.drone_state
+            ticket.drone_state = target
+            ticket.drone_state_updated_at = now
+
+    @staticmethod
+    def _restore_drone_pause_state(metadata: ProjectMetadata, now) -> None:
+        for ticket in metadata.drone_tickets:
+            if ticket.previous_drone_state_before_canceled is not None:
+                ticket.drone_state = ticket.previous_drone_state_before_canceled
+                ticket.previous_drone_state_before_canceled = None
+                ticket.drone_state_updated_at = now
+            elif ticket.drone_state in {DroneState.POSTPONED, DroneState.CANCELED}:
+                ticket.drone_state = DroneState.UAT
+                ticket.drone_state_updated_at = now
 
     def reopen_project(self, project_path: Path, settings: AppSettings) -> Path:
         metadata = self.metadata_store.load(project_path)
@@ -122,6 +141,7 @@ class ProjectService:
         now = local_now()
         metadata.cr_state = reopen_result.next_cr_state
         metadata.cr_state_updated_at = now
+        self._restore_drone_pause_state(metadata, now)
         metadata.updated_at = now
         metadata.history.append(
             HistoryEntry(
@@ -251,6 +271,7 @@ class ProjectService:
         now = local_now()
         metadata.cr_state = CRState.CANCELED
         metadata.cr_state_updated_at = now
+        self._set_drone_pause_state(metadata, DroneState.CANCELED, now)
         metadata.updated_at = now
         metadata.history.append(
             HistoryEntry(
@@ -279,6 +300,7 @@ class ProjectService:
         now = local_now()
         metadata.cr_state = CRState.POSTPONED
         metadata.cr_state_updated_at = now
+        self._set_drone_pause_state(metadata, DroneState.POSTPONED, now)
         metadata.updated_at = now
         metadata.history.append(
             HistoryEntry(

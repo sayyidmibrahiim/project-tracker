@@ -2,15 +2,17 @@ CLAUDE.md
 
 This file provides operational guidance to Claude Code when working in this repository.
 
-Graphify Knowledge Graph (token reduction, optional)
+Graphify Knowledge Graph (token reduction, worktree-safe)
 
-This repo can optionally use a graphify knowledge graph at graphify-out/ (gitignored, rebuildable, AST-only — no API cost) to reduce token usage. The graph is NOT included in this Windows copy and must be rebuilt locally if the `graphify` CLI is installed. If `graphify` is not installed, skip this section and read source files directly. Does not override PRD.md.
+Main graph lives at `D:/Ibrahim/Projects/project_tracker/graphify-out/graph.json`. Claude may run inside `.claude/worktrees/*`; if `./graphify-out/graph.json` is missing, do **not** say graphify is unavailable. Always check the absolute graph path first.
 
-- If graphify-out/ exists: for codebase questions, run `graphify query "<question>"` instead of grepping/reading raw files. Use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts. Returns a scoped subgraph, usually much smaller than raw grep/read.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review when query/path/explain do not surface enough.
-- Read raw files only to modify/debug specific code, when the graph lacks detail, or when graphify is not installed.
-- To build or refresh the graph after modifying code or documentation, run `graphify update .` (AST-only, no API cost). Only if the `graphify` CLI is available on this machine.
-- Graph excludes .venv/ and node_modules/ via .gitignore. redesign_ui/ legacy PyQt6 is included as reference; treat it as legacy per Current Project Mode.
+- Run graphify commands from `D:/Ibrahim/Projects/project_tracker`, not from a worktree.
+- For codebase questions, use `graphify query "<question>"` first when the graph exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+- Use `claude-mem:smart-explore` after graphify for exact code structure lookup.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when query/path/explain do not surface enough.
+- Read raw files only to modify/debug specific code, when graphify lacks detail, or when graphify is not installed.
+- To refresh after modifying code or documentation, run `graphify D:/Ibrahim/Projects/project_tracker --update` or run `graphify update .` from `D:/Ibrahim/Projects/project_tracker`.
+- Graph excludes `.venv/` and `node_modules/` via `.gitignore`. `redesign_ui/` legacy PyQt6 is reference only; treat it as legacy per Current Project Mode.
 
 Highest Priority Rule
 
@@ -563,13 +565,200 @@ RTK (Rust Token Killer) is a Linux-oriented token-optimization CLI. The full RTK
 
 <!-- /rtk-note -->
 
-## graphify
+## Vibe-Code Menu Workflow
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+Work **one menu at a time**. Current menu stays active until the user explicitly approves switching menus.
+
+## Repo-Root Execution Guard (hard rule)
+
+The real project root is `D:/Ibrahim/Projects/project_tracker`. The user launches the app and runs full test/build commands from this root, never from a `.claude/worktrees/*` checkout.
+
+- Always run app/tests/build/graphify against `D:/Ibrahim/Projects/project_tracker`.
+- If Claude is invoked from `.claude/worktrees/*`, do **not** run the app there for runtime comparison; it may compare a stale/different UI and waste tokens.
+- All runtime verification must use the same command the user uses:
+  `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m project_tracker.main`
+- Python tests must use the repo-root venv:
+  `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/ ...`
+- Frontend commands must run from repo root or target repo root:
+  `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check|test|build`
+- Graphify commands must run from `D:/Ibrahim/Projects/project_tracker`, not from a worktree.
+- Config/docs edits (`CLAUDE.md`, `PROJECT_STATUS.md`, `.claude/settings.json`) must target repo-root files, not worktree copies.
+- Write/Edit paths for this project must target `D:/Ibrahim/Projects/project_tracker/...`, never `.claude/worktrees/*/...`.
+
+A PreToolUse hook in `.claude/settings.json` calls `scripts/claude_root_guard.py` and blocks wrong-root app/test/build/graphify commands plus worktree file edits. If it fires, switch to the repo-root command shown in the error. Do not fight the guard.
+
+A SessionStart hook injects this reminder into new sessions so future sessions inherit the rule without the user repeating it.
+
+### Truth order
+
+1. User latest instruction — current pivot direction when explicit.
+2. `PRD.md` — product behavior/rules source of truth.
+3. `PROJECT_STATUS.md` — progress, known gaps, parity status.
+4. `CLAUDE.md` — workflow/tooling/agent rules.
+5. `contoh_UI/project_tracker_dbs_full_prototype_v2_AS_IS_PY_INJECTED.html` — visual/layout reference for AS-IS parity.
+
+### Session lifecycle
+
+- **Start**: read `PROJECT_STATUS.md`, check git/worktree status, check graphify absolute path, recall memory for latest decisions.
+- **During**: invoke only relevant skills/plugins; do not run random skill checklists.
+- **Before code**: graphify first when graph exists → `claude-mem:smart-explore` for precise code lookup.
+- **After code**: run tests/build/app checks for changed area, update `PROJECT_STATUS.md`, refresh graphify when available.
+- **End**: prune stale clean `.claude/worktrees/agent-*` after inspection, report changed files/tests/remaining gaps/next step.
+
+### Do not touch without approval
+
+- `graphify-out/`
+- `contoh_UI/`
+- active harness worktrees
+- active Claude worktrees
+- active feature branches
+- `PRD.md` product rules
+
+### Documentation sync
+
+- Product behavior/rule/user-flow change → update `PRD.md` and `PROJECT_STATUS.md`.
+- Progress/parity/pivot change → update `PROJECT_STATUS.md`.
+- Workflow/tooling/agent rule change → update `CLAUDE.md`.
+- Stable cross-session decision → save memory when appropriate.
+- If docs conflict, report conflict before coding.
+
+### Prompt templates
+
+Use these prompt templates by replacing bracketed fields.
+
+#### Start or continue menu
+
+```text
+/goal lanjut [MENU] sampai sesuai ekspektasi gw.
+
+Context:
+- Current menu: [MENU]
+- Goal now: [TARGET]
+- Visual reference: contoh_UI/project_tracker_dbs_full_prototype_v2_AS_IS_PY_INJECTED.html
+- Logic/rules source: PRD.md
+- Progress source: PROJECT_STATUS.md
+- Important user preference: [PREFERENCE]
 
 Rules:
+- Satu menu only.
+- Use graphify first from D:/Ibrahim/Projects/project_tracker.
+- Use claude-mem:smart-explore for code lookup.
+- Update PROJECT_STATUS.md after each slice.
+- Update PRD.md only if behavior/rule changes.
+- Update CLAUDE.md only if workflow/tooling changes.
+- Run relevant tests/build/app.
+- Report changed files, tests, remaining gaps, next slice.
+```
 
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+#### Fix error
+
+```text
+/goal fix error di [MENU].
+
+Context:
+- Current menu: [MENU]
+- What I was doing: [ACTION_BEFORE_ERROR]
+- Expected result: [EXPECTED]
+- Actual result/error:
+[PASTE_ERROR_OR_LOG]
+
+Rules:
+- Jangan tebak.
+- Reproduce or locate failing path first.
+- Use graphify first from D:/Ibrahim/Projects/project_tracker.
+- Use claude-mem:smart-explore for failing files only.
+- Find root cause, make smallest fix, verify.
+- Do not weaken tests.
+- Update PROJECT_STATUS.md if status/risk changes.
+```
+
+#### Pivot / change direction
+
+```text
+/goal pivot [MENU].
+
+New direction:
+[PERUBAHAN]
+
+Context:
+- Old direction: [OLD_DIRECTION]
+- New expectation: [NEW_EXPECTATION]
+- Keep: [WHAT_STAYS]
+- Drop/change: [WHAT_CHANGES]
+
+Rules:
+- Stop old path first.
+- Compare new direction vs PRD.md, PROJECT_STATUS.md, CLAUDE.md, current code.
+- If product behavior/rule changes, update PRD.md + PROJECT_STATUS.md.
+- If only visual/progress changes, update PROJECT_STATUS.md.
+- If workflow/tooling changes, update CLAUDE.md.
+- Keep change bounded to [MENU].
+- Use graphify first, then smart-explore.
+- Run tests/build/app.
+```
+
+#### Resume new session
+
+```text
+/goal resume Project Tracker vibe-code.
+
+Context:
+- I am working one menu at a time.
+- Last/current menu should be read from PROJECT_STATUS.md.
+- Graphify root: D:/Ibrahim/Projects/project_tracker.
+
+Rules:
+- Read PROJECT_STATUS.md first.
+- Read CLAUDE.md workflow rules.
+- Use graphify absolute path, not current worktree path.
+- Recall memory for latest decisions.
+- Check git/worktree status.
+- Report active menu, last completed slice, dirty files, next safest task.
+- Ask if I want to continue current menu or switch.
+```
+
+#### Wrap up session
+
+```text
+/goal wrap up current vibe-code session.
+
+Context:
+- Current menu: [MENU]
+- Done this session: [DONE]
+- Known gaps: [GAPS]
+
+Rules:
+- Update PROJECT_STATUS.md.
+- Save stable memory if needed.
+- Refresh graphify if available.
+- Inspect/prune stale clean agent worktrees only after inspection.
+- Do not stash/commit unless I say so.
+- Report branch, dirty files, tests run, not tested, next prompt.
+```
+
+#### Final review before switching menu
+
+```text
+/goal final review [MENU] before pindah menu.
+
+Rules:
+- Compare against PRD behavior.
+- Compare against AS-IS visual reference.
+- Use graphify first.
+- Run relevant tests/build/app.
+- List DONE / NOT DONE / USER VISUAL CHECK NEEDED / RISK / NEXT MENU READY.
+- Update PROJECT_STATUS.md.
+```
+
+#### Project hygiene cleanup
+
+```text
+/goal clean project hygiene. No feature work.
+
+Rules:
+- Inspect git status, worktrees, untracked files, graphify health.
+- Remove only stale clean agent worktrees, temp folders, manual logs.
+- Do not delete source files, graphify-out, contoh_UI, active branches, active worktrees.
+- Do not change product behavior.
+- Report removed items, kept risky items, remaining dirty files.
+```

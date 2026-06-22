@@ -47,7 +47,7 @@ test("AS_IS page titles and core sections are present", () => {
   for (const label of ["Second Brain", "Notes", "Link Bank", "Backlinks", "Recent Activity"]) {
     assert.match(SECOND_BRAIN, new RegExp(label));
   }
-  for (const label of ["Report Table", "Total CR", "Folder: UAT_PREPARE", "Folder: PROD_READY", "Folder: IMPLEMENTED", "Folder: POSTPONED"]) {
+  for (const label of ["Total", "UAT Prepare", "Prod Ready", "Implemented", "Postponed"]) {
     assert.match(REPORT, new RegExp(label));
   }
   assert.doesNotMatch(DASHBOARD, /dash-group-cell/);

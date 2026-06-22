@@ -864,9 +864,6 @@
   .pane { display:flex; flex-direction:column; gap:14px; min-width:0; }
   .pd-muted { margin:0; font-size:11px; font-weight:400; color:var(--color-muted); line-height:1.5; }
   @media (max-width:980px) { .split { grid-template-columns:1fr; } }
-  .pd-dl-item { display:flex; flex-direction:column; gap:3px; }
-  .pd-dl-item dt { font-size:9.5px; font-weight:600; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em; }
-  .pd-dl-item dd { margin:0; font-size:12.5px; font-weight:500; color:#1F2937; }
   .pd-section { background:var(--color-workspace-panel); border:1px solid var(--color-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05); padding:18px; }
   .pd-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
   .pd-section-head .pd-section-title { margin:0; }
@@ -899,11 +896,6 @@
   .cr-state-select { padding:5px 9px; font-size:11.5px; font-weight:800; border:1px solid var(--primary-red); border-radius:6px; background:var(--primary-red); color:#fff; outline:none; cursor:pointer; }
   .cr-state-select:focus { box-shadow:0 0 0 2px var(--color-dbs-red-active); }
   .cr-state-select:disabled { opacity:0.55; cursor:not-allowed; }
-  .pd-back-bar { flex: 0 0 auto; display: flex; align-items: center; margin-bottom: 12px; }
-  .pd-back-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 7px; background: #fff; color: var(--color-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
-  .pd-back-btn:hover { border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
-  .pd-icon-back { stroke: var(--color-ink); margin-right: 4px; }
-  .pd-back-btn:hover .pd-icon-back { stroke: var(--color-dbs-red); }
   .pd-drone-detail { margin-top: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-workspace); display: flex; flex-direction: column; gap: 6px; }
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
   .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }

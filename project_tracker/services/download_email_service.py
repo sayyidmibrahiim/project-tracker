@@ -11,21 +11,10 @@ from threading import Event, Thread
 from typing import TYPE_CHECKING
 
 from project_tracker.core.models import DownloadEmailJob, local_now
+from project_tracker.core.signal import Signal
 
 if TYPE_CHECKING:
     from project_tracker.services.notification_service import NotificationService
-
-
-class Signal:
-    def __init__(self) -> None:
-        self._callbacks: list[Callable[..., None]] = []
-
-    def connect(self, callback: Callable[..., None]) -> None:
-        self._callbacks.append(callback)
-
-    def emit(self, *args: object) -> None:
-        for callback in list(self._callbacks):
-            callback(*args)
 
 
 class DownloadEmailWorker:
