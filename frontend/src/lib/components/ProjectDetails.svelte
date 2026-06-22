@@ -225,7 +225,7 @@
     ]);
 
     detail = dResp.ok ? (dResp.data ?? null) : null;
-    isSubproject = detail ? (detail as any).is_subproject || false : false;
+    isSubproject = detail ? detail.is_subproject || false : false;
     subprojects = spResp.ok ? (spResp.data ?? []) : [];
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
@@ -656,7 +656,7 @@
               <h4 class="pd-section-title">Project Identity</h4>
               <div class="pd-meta-edit">
                 <label class="pd-meta-label" for="meta-name">Project Name</label>
-                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
+                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
                 {#if crLinkEditing && !isSubproject}

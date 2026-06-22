@@ -131,6 +131,8 @@ export interface ProjectDetail {
   drone_tickets: DroneTicket[];
   implementation_plan?: string | null;
   history?: HistoryEntry[];
+  is_subproject?: boolean;
+  subprojects?: string[];
 }
 
 /** Mirrors HistoryEntry metadata rows returned by project_get. */
