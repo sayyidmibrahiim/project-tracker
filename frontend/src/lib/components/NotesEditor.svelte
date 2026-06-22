@@ -165,9 +165,10 @@
   // Sync Markdown to HTML editor area on component initialization and path switches
   let lastPath = "";
   $effect(() => {
+    const notesContent = untrack(() => text);
     if (editorEl && projectPath !== lastPath) {
       lastPath = projectPath;
-      editorEl.innerHTML = renderMarkdown(text);
+      editorEl.innerHTML = renderMarkdown(notesContent);
       bindCheckboxListeners();
     }
   });
