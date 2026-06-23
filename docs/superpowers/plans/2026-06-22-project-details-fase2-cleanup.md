@@ -15,6 +15,7 @@
 ## File Structure
 
 **Modified:**
+
 - `frontend/src/lib/components/ProjectDetails.svelte` — update spacing styles, replace left-border accents, replace ASCII icons with inline SVGs.
 - `frontend/tests/project-details-fase1.test.mjs` — update assertions checking for SVGs instead of ASCII.
 
@@ -25,12 +26,14 @@
 We will modify `project-details-fase1.test.mjs` to verify that SVGs are rendered instead of raw ASCII glyphs. Running the tests will fail on these assertions first.
 
 **Files:**
+
 - Modify: `frontend/tests/project-details-fase1.test.mjs`
 - Test: `npm test`
 
 - [ ] **Step 1: Edit assertions in `project-details-fase1.test.mjs`**
 
 Find the block:
+
 ```js
 test("CR Link input mode is shown when cr_link is empty (crLinkEditing gate)", () => {
   assert.match(PD, /crLinkEditing/);
@@ -42,13 +45,17 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
   // Copy uses navigator.clipboard.writeText
   assert.match(PD, /navigator\.clipboard\.writeText\([^)]*cr_link/);
   // Open external uses window.open with noopener/noreferrer
-  assert.match(PD, /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/);
+  assert.match(
+    PD,
+    /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/,
+  );
   // Edit control toggles back to input mode
   assert.match(PD, /crLinkEditing\s*=\s*true/);
 });
 ```
 
 Replace it with assertions checking for SVG nodes with specific title attributes or copy click bindings:
+
 ```js
 test("CR Link input mode is shown when cr_link is empty (crLinkEditing gate)", () => {
   assert.match(PD, /crLinkEditing/);
@@ -60,7 +67,10 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
   // Copy uses navigator.clipboard.writeText
   assert.match(PD, /navigator\.clipboard\.writeText\([^)]*cr_link/);
   // Open external uses window.open with noopener/noreferrer
-  assert.match(PD, /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/);
+  assert.match(
+    PD,
+    /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/,
+  );
   // Edit control toggles back to input mode
   assert.match(PD, /crLinkEditing\s*=\s*true/);
   // Displays copy, open, and edit icons (as SVG nodes now)
@@ -71,6 +81,7 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
 ```
 
 Also find the Command Center header assertion:
+
 ```js
 test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => {
   assert.match(PD, /onNavigateDashboard/);
@@ -79,6 +90,7 @@ test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => 
 ```
 
 Replace with (requires back button arrow to be an inline SVG instead of `←`):
+
 ```js
 test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => {
   assert.match(PD, /onNavigateDashboard/);
@@ -92,6 +104,7 @@ test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => 
 ```bash
 npm test
 ```
+
 Expected: tests fail on the new SVG regex checks (since `ProjectDetails.svelte` still uses unicode `📋`, `↗`, `✎`, and `←`).
 
 - [ ] **Step 3: Commit**
@@ -106,49 +119,123 @@ git commit -m "test(fase2): update assertions for inline SVGs on CR Link & Back 
 ## Task 2: Notion Card Styles Overhaul (Left border removal, spacing, typography)
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm run check`
 
 - [ ] **Step 1: Replace Left-border accent in `.pd-section`**
 
 Find the CSS selector `.pd-section` in `ProjectDetails.svelte`:
+
 ```css
-  .pd-section { background:var(--color-workspace-panel); border:1px solid var(--color-border); border-left:3px solid var(--color-dbs-red); border-radius:10px; box-shadow:var(--shadow-card); padding:14px; }
+.pd-section {
+  background: var(--color-workspace-panel);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-dbs-red);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  padding: 14px;
+}
 ```
 
 Replace with clean 1px borders, rounded 8px corners, thin shadow, and gray ink variables:
+
 ```css
-  .pd-section { background:var(--color-workspace-panel); border:1px solid var(--color-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05); padding:18px; }
+.pd-section {
+  background: var(--color-workspace-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 18px;
+}
 ```
 
 - [ ] **Step 2: Increase Layout gaps (`.split`, `.pane`)**
 
 Find:
+
 ```css
-  .split { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:start; }
-  .pane { display:flex; flex-direction:column; gap:10px; min-width:0; }
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
 ```
 
 Replace with expanded gaps:
+
 ```css
-  .split { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; align-items:start; }
-  .pane { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
 ```
 
 - [ ] **Step 3: Soften Typography Contrast**
 
 Find:
+
 ```css
-  .pd-dl-item dt { font-size:9.5px; font-weight:600; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.05em; }
-  .pd-dl-item dd { margin:0; font-size:12.5px; font-weight:500; color:var(--color-ink-strong); }
-  .pd-meta-label { font-size:9.5px; font-weight:600; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.05em; }
+.pd-dl-item dt {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pd-dl-item dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-ink-strong);
+}
+.pd-meta-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 ```
 
 Replace with soft color variables (#6B7280 for labels, #1F2937 for active values):
+
 ```css
-  .pd-dl-item dt { font-size:9.5px; font-weight:600; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em; }
-  .pd-dl-item dd { margin:0; font-size:12.5px; font-weight:500; color:#1F2937; }
-  .pd-meta-label { font-size:9.5px; font-weight:600; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em; }
+.pd-dl-item dt {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pd-dl-item dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #1f2937;
+}
+.pd-meta-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 ```
 
 - [ ] **Step 4: Verify type check**
@@ -156,6 +243,7 @@ Replace with soft color variables (#6B7280 for labels, #1F2937 for active values
 ```bash
 npm run check
 ```
+
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 5: Commit**
@@ -176,17 +264,20 @@ typography contrast to gray-500."
 We will replace the unicode icons in the HTML with standard, thin-stroke inline SVGs.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Replace `▣` in Command Center Title**
 
 Find:
+
 ```svelte
       <div class="panel-title-row" style="margin:0 18px 0 0;"><span class="panel-title-icon">▣</span><span class="panel-title">Project Command Center</span><span class="panel-subtitle">compact editing workspace</span></div>
 ```
 
 Replace with inline grid SVG:
+
 ```svelte
       <div class="panel-title-row" style="margin:0 18px 0 0;">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
@@ -198,24 +289,33 @@ Replace with inline grid SVG:
 - [ ] **Step 2: Replace `←` in Back to Dashboard button**
 
 Find:
+
 ```svelte
         <span class="pd-back-arrow" aria-hidden="true">←</span>
 ```
 
 Replace with inline arrow-left SVG:
+
 ```svelte
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon-back"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
 ```
 
 Update CSS in style block for `.pd-icon-back`:
+
 ```css
-  .pd-icon-back { stroke: var(--color-ink); margin-right: 4px; }
-  .pd-back-btn:hover .pd-icon-back { stroke: var(--color-dbs-red); }
+.pd-icon-back {
+  stroke: var(--color-ink);
+  margin-right: 4px;
+}
+.pd-back-btn:hover .pd-icon-back {
+  stroke: var(--color-dbs-red);
+}
 ```
 
 - [ ] **Step 3: Replace `📋`, `↗`, and `✎` in CR Link display row**
 
 Find:
+
 ```svelte
                     <button class="pd-icon-btn" type="button" title="Copy CR link" onclick={copyCrLink} aria-label="Copy CR link">📋{#if crLinkCopied} ✓{/if}</button>
                     <button class="pd-icon-btn" type="button" title="Open CR link in browser" onclick={openCrLink} aria-label="Open CR link in browser">↗</button>
@@ -223,6 +323,7 @@ Find:
 ```
 
 Replace buttons content with title-equipped inline SVGs (retaining Svelte callbacks/conditions):
+
 ```svelte
                     <button class="pd-icon-btn" type="button" onclick={copyCrLink} aria-label="Copy CR link">
                       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy CR link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
@@ -239,24 +340,31 @@ Replace buttons content with title-equipped inline SVGs (retaining Svelte callba
 - [ ] **Step 4: Replace warning/spinner indicators in other feedbacks**
 
 Find detail loading banner (warning icon):
+
 ```svelte
       {:else if detailState === "error"}
         <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Detail load failed</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
 ```
+
 Replace `<span class="banner-icon">⚠</span>` with inline warning triangle SVG:
+
 ```svelte
         <span class="banner-icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
         </span>
 ```
+
 Do the same for `listState === "error"` loading banner.
 
 Find CR State saving state spinner (around lines 672–678):
+
 ```svelte
                 {#if crStateSaveState === "saving"}
                   <span class="cr-link-feedback">⏳ Saving…</span>
 ```
+
 Replace with inline spinner SVG:
+
 ```svelte
                 {#if crStateSaveState === "saving"}
                   <span class="cr-link-feedback">
@@ -266,9 +374,22 @@ Replace with inline spinner SVG:
 ```
 
 Add CSS for the spinner rotation in `<style>`:
+
 ```css
-  .pd-spinner { animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 4px; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.pd-spinner {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 ```
 
 - [ ] **Step 5: Run tests — check if Fase 2 assertions turn GREEN**
@@ -276,6 +397,7 @@ Add CSS for the spinner rotation in `<style>`:
 ```bash
 npm test
 ```
+
 Expected: `project-details-fase1.test.mjs` is now 100% GREEN (all SVG assertions match). Parity check has only the pre-existing error.
 
 - [ ] **Step 6: Run type check**
@@ -283,6 +405,7 @@ Expected: `project-details-fase1.test.mjs` is now 100% GREEN (all SVG assertions
 ```bash
 npm run check
 ```
+
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 7: Commit**
@@ -309,6 +432,7 @@ Verify everything remains completely green.
 ```bash
 npm test
 ```
+
 Expected: 1 fail / 136 pass (only pre-existing parity failure).
 
 - [ ] **Step 2: Run type check**
@@ -316,6 +440,7 @@ Expected: 1 fail / 136 pass (only pre-existing parity failure).
 ```bash
 npm run check
 ```
+
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 3: Run production build**
@@ -323,6 +448,7 @@ Expected: 0 errors, 0 warnings.
 ```bash
 npm run build
 ```
+
 Expected: build succeeds.
 
 ---

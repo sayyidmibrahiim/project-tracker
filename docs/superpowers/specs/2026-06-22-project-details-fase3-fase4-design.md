@@ -16,13 +16,16 @@
 ## Design Specification — Fase 3: WYSIWYG Notes & Checklist
 
 ### 1. WYSIWYG Editor Component (`NotesEditor.svelte`)
+
 - The `<textarea>` and `mode` (edit/preview toggle) are **removed**.
 - Render a single `<div contenteditable="true" class="ne-editor-area" bind:this={editorEl}>` which displays rich-text formatting directly.
 - Font is changed to clean proportional sans-serif (`Inter`, same as Notion) instead of monospace JetBrains/Fira.
 - Styles are applied directly to paragraphs, lists, headers, and code tags inside the editor block.
 
 ### 2. Formatting Toolbar
+
 Formatting buttons invoke direct selections and programmatic range wrapping:
+
 - **Bold / Italic / Bullet List / Quote / Link**: Uses standard `document.execCommand` selectors (`bold`, `italic`, `insertUnorderedList`, `formatBlock` with `<blockquote>`, `createLink`).
 - **Heading 1 / Heading 2**: Uses `document.execCommand('formatBlock', false, '<h1>')` and `<h2>`.
 - **Inline Code**: Programmatically wraps the active selection range in a `<code>` node.
@@ -31,6 +34,7 @@ Formatting buttons invoke direct selections and programmatic range wrapping:
   We listen to checking/unchecking events on the checkbox to instantly sync and trigger autosave.
 
 ### 3. Markdown Round-Trip Conversion
+
 To satisfy the backend constraint that notes must remain saved on disk as plain Markdown (`notes.md` / `Notes.md`), the editor converts formats bidirectionally:
 
 - **Markdown to HTML (Editor Load):**
@@ -55,12 +59,14 @@ To satisfy the backend constraint that notes must remain saved on disk as plain 
 ## Design Specification — Fase 4: Sub-project Detail View & Inheritance
 
 ### 1. Backend Path Fixes (`project_tracker/app_web.py`)
+
 To prevent `ValueError` crashes when loading detail views or executing mutations on sub-project folders (`year/STATE/parent/sub`), we change all occurrences of:
 `project_state = ProjectState(path.parent.name)`
 to:
 `project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE`
 
 Locations modified:
+
 - `get_project(self, project_path: Path)` (line 451)
 - `update_cr_link(self, project_path: Path, cr_link: str)` (line 505)
 - `update_cr_state(self, project_path: Path, ...)` (line 646)
@@ -68,11 +74,15 @@ Locations modified:
 - `folder_reopen(self, project_path: Path)` (line 800)
 
 ### 2. Sub-project Recognition in `get_project`
+
 A path is classified as a sub-project if its parent contains a `project_data.json` file.
+
 ```python
 is_subproject = (path.parent / "project_data.json").is_file()
 ```
+
 If `is_subproject` is true:
+
 - We read the parent's `project_data.json` using `self._metadata_store.read(path.parent)`.
 - We inherit CR details and dates from the parent:
   - `metadata.cr_link = parent_meta.cr_link`
@@ -83,10 +93,13 @@ If `is_subproject` is true:
 - Return `"is_subproject": True` in the returned dictionary.
 
 ### 3. Date / State Propagation in `update_project`
+
 If a sub-project's dates or CR link are updated, they are propagated to the parent folder's metadata file (so the parent remains the single source of truth for dates/CRs).
 
 ### 4. UI Adjustments for Sub-project detail view (`ProjectDetails.svelte`)
+
 When the loaded project has `"is_subproject": true`:
+
 - **Disable / Read-only Fields:** Input fields for CR Link, Start datetime, and End datetime are disabled (or render as read-only labels). The CR State dropdown is disabled. A small label `(Inherited from Main Project)` is shown below these fields.
 - **Hide nesting block:** The "Sub Project (DRONE)" section card is completely hidden.
 - **Notes & Files remain editable:** Since notes read/write is path-agnostic, a sub-project automatically reads and writes to `subproject_folder/notes.md`, making its notes distinct from the parent's notes. Files are also listed and managed within `subproject_folder/`.

@@ -15,6 +15,7 @@
 ## File Structure
 
 **Modified:**
+
 - `frontend/src/lib/components/ProjectDetails.svelte` — bulk of changes (Sections 1–5)
 - `frontend/src/lib/components/SubProjectTable.svelte` — refactor to presentational (Section 3)
 - `frontend/src/lib/components/FileActions.svelte` — scroll + hide/lock reserved files (Section 6)
@@ -25,9 +26,11 @@
 - `frontend/tests/project-details-reopen.test.mjs` — keep REOPEN contract assertions intact; they should still pass since `saveCrState` stays (now triggered by onchange)
 
 **Created:**
+
 - `frontend/tests/project-details-fase1.test.mjs` — new test file for Fase 1 behavior (CR Link conditional render, autosave CR state, Back button, master-detail, reserved files)
 
 **Untouched:**
+
 - `frontend/src/lib/components/NotesEditor.svelte` (Fase 3)
 - `frontend/src/lib/types.ts`, `frontend/src/lib/bridge.ts` (no contract changes)
 - All `project_tracker/` backend code, all `tests/` Python tests
@@ -52,9 +55,11 @@
 - [ ] **Step 1: Confirm tests currently pass**
 
 Run from `D:/Ibrahim/Projects/project_tracker/frontend`:
+
 ```bash
 npm test
 ```
+
 Expected: all tests pass. Note any pre-existing failures (should be none on a clean checkout of `prd-v31-migration`).
 
 - [ ] **Step 2: Confirm type check passes**
@@ -62,6 +67,7 @@ Expected: all tests pass. Note any pre-existing failures (should be none on a cl
 ```bash
 npm run check
 ```
+
 Expected: `svelte-check` exits 0 with no errors.
 
 This baseline lets later tasks distinguish "I broke something" from "it was already broken."
@@ -73,6 +79,7 @@ This baseline lets later tasks distinguish "I broke something" from "it was alre
 These source-text assertions reference markup we are about to remove. Update them now, before touching components, so each subsequent component edit produces a clean test delta. Each updated assertion should still pass against the CURRENT source — i.e. only relax/replace assertions whose target stays valid, and DELETE assertions whose target is going away. The new assertions for new behavior land in Task 9.
 
 **Files:**
+
 - Modify: `frontend/tests/dashboard-inline-edit.test.mjs:83-104`
 - Modify: `frontend/tests/components.test.mjs:332`
 - Modify: `frontend/tests/as-is-prototype-parity.test.mjs:44`
@@ -83,6 +90,7 @@ These source-text assertions reference markup we are about to remove. Update the
 Current test asserts removed markup exists. Replace the whole test:
 
 Find this block:
+
 ```js
 test("ProjectDetails source has visible AS_IS selected-subproject drone-ticket flow and implementation plan section", () => {
   assert.match(PROJECT_DETAILS, /screen-details/);
@@ -94,6 +102,7 @@ test("ProjectDetails source has visible AS_IS selected-subproject drone-ticket f
 ```
 
 Replace with (keeps the two assertions whose targets survive, drops the three whose targets are being removed):
+
 ```js
 test("ProjectDetails source has visible AS_IS command center and sub-project box", () => {
   assert.match(PROJECT_DETAILS, /screen-details/);
@@ -109,21 +118,32 @@ test("ProjectDetails source has visible AS_IS command center and sub-project box
 Current test references `selectedSubprojectDrone` which is being removed. Replace:
 
 Find:
+
 ```js
 test("ProjectDetails state dropdowns use legal next-state helpers", () => {
   assert.match(PROJECT_DETAILS, /function\s+legalCrOptionsFor\s*\(/);
   assert.match(PROJECT_DETAILS, /function\s+legalDroneOptionsFor\s*\(/);
-  assert.match(PROJECT_DETAILS, /#each legalCrOptionsFor\(detail\.cr_state\) as opt/);
-  assert.match(PROJECT_DETAILS, /#each legalDroneOptionsFor\(selectedSubprojectDrone\.ticket\.drone_state\) as opt/);
+  assert.match(
+    PROJECT_DETAILS,
+    /#each legalCrOptionsFor\(detail\.cr_state\) as opt/,
+  );
+  assert.match(
+    PROJECT_DETAILS,
+    /#each legalDroneOptionsFor\(selectedSubprojectDrone\.ticket\.drone_state\) as opt/,
+  );
 });
 ```
 
 Replace with (the drone-options each loop now iterates over a per-row drone ticket name lookup, not `selectedSubprojectDrone`):
+
 ```js
 test("ProjectDetails state dropdowns use legal next-state helpers", () => {
   assert.match(PROJECT_DETAILS, /function\s+legalCrOptionsFor\s*\(/);
   assert.match(PROJECT_DETAILS, /function\s+legalDroneOptionsFor\s*\(/);
-  assert.match(PROJECT_DETAILS, /#each legalCrOptionsFor\(detail\.cr_state\) as opt/);
+  assert.match(
+    PROJECT_DETAILS,
+    /#each legalCrOptionsFor\(detail\.cr_state\) as opt/,
+  );
 });
 ```
 
@@ -132,15 +152,17 @@ test("ProjectDetails state dropdowns use legal next-state helpers", () => {
 Current assertion requires `metaPlanEdit` to be passed to `project_update`, which is being removed.
 
 Find:
+
 ```js
-  assert.match(src, /implementation_plan:\s*metaPlanEdit/);
+assert.match(src, /implementation_plan:\s*metaPlanEdit/);
 ```
 
 Replace with:
+
 ```js
-  // Fase 1 removed the Implementation Plan UI; project_update no longer sends implementation_plan.
-  assert.doesNotMatch(src, /implementation_plan:\s*metaPlanEdit/);
-  assert.doesNotMatch(src, /metaPlanEdit/);
+// Fase 1 removed the Implementation Plan UI; project_update no longer sends implementation_plan.
+assert.doesNotMatch(src, /implementation_plan:\s*metaPlanEdit/);
+assert.doesNotMatch(src, /metaPlanEdit/);
 ```
 
 - [ ] **Step 4: Update `components.test.mjs` line 343**
@@ -152,11 +174,13 @@ The generic `Sub Project` regex matches the new title `Sub Project (DRONE)` alre
 Current array includes `"Sub Projects"` (plural). After Fase 1 the title is `Sub Project (DRONE)`.
 
 Find:
+
 ```js
   for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Projects", "Files", "Notes", "Activity History"]) {
 ```
 
 Replace with:
+
 ```js
   for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Project \\(DRONE\\)", "Files", "Notes", "Activity History"]) {
 ```
@@ -166,10 +190,13 @@ Note: parens MUST be double-backslash-escaped. The test builds its regex via `ne
 - [ ] **Step 6: Run tests — expect failures only from the new TODOs that aren't implemented yet**
 
 Run:
+
 ```bash
 npm test
 ```
+
 Expected: the 3 modified tests now FAIL (the component still has the old markup). Specifically:
+
 - `dashboard-inline-edit.test.mjs` "ProjectDetails source has visible AS_IS command center…" FAILs (still has `Implementation Plan`, still has `Save CR State`, does NOT yet have `Sub Project (DRONE)`).
 - `components.test.mjs` datetime test FAILs (source still has `implementation_plan: metaPlanEdit`).
 - `as-is-prototype-parity.test.mjs` "AS_IS page titles" FAILs (still has `Sub Projects`, not `Sub Project (DRONE)`).
@@ -193,12 +220,14 @@ plural 'Sub Projects' title). These go red until the component edits land."
 ## Task 2: Remove Implementation Plan section + metaPlanEdit state (Section 2)
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Remove `metaPlanEdit` state declaration**
 
 In `ProjectDetails.svelte` find (around line 78):
+
 ```svelte
   let metaPlanEdit: string = $state("");
 ```
@@ -208,6 +237,7 @@ Delete the line.
 - [ ] **Step 2: Remove `metaPlanEdit` from `syncMetadataDrafts`**
 
 Find (around lines 168–173):
+
 ```svelte
   function syncMetadataDrafts(nextDetail: ProjectDetail) {
     metaNameEdit = nextDetail.project_name || "";
@@ -218,6 +248,7 @@ Find (around lines 168–173):
 ```
 
 Replace with:
+
 ```svelte
   function syncMetadataDrafts(nextDetail: ProjectDetail) {
     metaNameEdit = nextDetail.project_name || "";
@@ -229,6 +260,7 @@ Replace with:
 - [ ] **Step 3: Remove `metaPlanEdit` from `metadataUnchanged`**
 
 Find (around lines 175–180):
+
 ```svelte
   function metadataUnchanged(current: ProjectDetail): boolean {
     return metaNameEdit === current.project_name
@@ -239,6 +271,7 @@ Find (around lines 175–180):
 ```
 
 Replace with:
+
 ```svelte
   function metadataUnchanged(current: ProjectDetail): boolean {
     return metaNameEdit === current.project_name
@@ -250,6 +283,7 @@ Replace with:
 - [ ] **Step 4: Remove `implementation_plan` from `saveMetadata`**
 
 Find (around lines 330–335):
+
 ```svelte
     const resp = await callBridge("project_update", selectedPath, {
       project_name: metaNameEdit,
@@ -260,6 +294,7 @@ Find (around lines 330–335):
 ```
 
 Replace with:
+
 ```svelte
     const resp = await callBridge("project_update", selectedPath, {
       project_name: metaNameEdit,
@@ -289,9 +324,11 @@ Delete the entire block.
 - [ ] **Step 6: Run tests — `components.test.mjs` datetime test should now PASS**
 
 Run:
+
 ```bash
 npm test
 ```
+
 Expected: the `components.test.mjs` "ProjectDetails source includes datetime-local editors…" test PASSES (no more `metaPlanEdit` reference). The other two Task-1 failing tests still fail (they wait for Tasks 3 and 6).
 
 - [ ] **Step 7: Run type check**
@@ -299,6 +336,7 @@ Expected: the `components.test.mjs` "ProjectDetails source includes datetime-loc
 ```bash
 npm run check
 ```
+
 Expected: 0 errors. If svelte-check complains about `implementation_plan` being a valid field of `project_update`'s payload that is now missing — it shouldn't (we just send fewer fields), but if it does, the payload type is likely an inline object literal, so just remove the key as done in Step 4.
 
 - [ ] **Step 8: Commit**
@@ -321,12 +359,14 @@ notes-like surface for it)."
 This task does the removals; the CR Link conditional render (1.4) is a separate Task 4 because it adds new markup.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Remove the "Selected Sub Project" `<div class="pd-dl-item">`**
 
 Find (around line 632):
+
 ```svelte
                   <div class="pd-dl-item"><dt>Selected Sub Project</dt><dd>{selectedSubproject === "all" ? "Choose one above" : selectedSubproject}</dd></div>
 ```
@@ -340,6 +380,7 @@ Delete the line. The parent `.pd-detail-grid` now has only one child (`CR Number
 ```
 
 Replace with a single full-width item (drop the grid wrapper — it was two-column for two items; now one item doesn't need it):
+
 ```svelte
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
 ```
@@ -377,6 +418,7 @@ Find the `<div class="pd-notes-actions">` block that contains the Save CR State 
 ```
 
 Replace with (button gone; transient feedback kept inline next to the dropdown, but moved out of `pd-notes-actions` since there's no button to align with):
+
 ```svelte
                 {#if crStateSaveState === "saving"}
                   <span class="cr-link-feedback">⏳ Saving…</span>
@@ -388,6 +430,7 @@ Replace with (button gone; transient feedback kept inline next to the dropdown, 
 ```
 
 Now add an `onchange` handler to the CR State `<select>` so it autosaves. Find the CR State select (around line 642):
+
 ```svelte
                     <select id="meta-cr-state" class="cr-state-select" bind:value={crStateEdit} disabled={crStateSaveState === "saving"}>
                       {#each legalCrOptionsFor(detail.cr_state) as opt}
@@ -397,6 +440,7 @@ Now add an `onchange` handler to the CR State `<select>` so it autosaves. Find t
 ```
 
 Replace `bind:value={crStateEdit}` with `value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)}`:
+
 ```svelte
                     <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving"}>
                       {#each legalCrOptionsFor(detail.cr_state) as opt}
@@ -430,6 +474,7 @@ Find (around lines 666–701) the entire `<div class="pd-drone-flow">…</div>` 
 After Step 5 nothing references `selectedSubprojectDrone`, `saveSelectedSubprojectDroneLink`, `saveSelectedSubprojectDroneOwner`, `newDroneLink`, `newDroneSubfolder`, `newDroneOwner`. The drone-state helpers (`saveDroneState`, `droneStateEdits`, `droneStateBusy`, `droneStateError`, `syncDroneStateEdits`, `legalDroneOptionsFor`, `DRONE_STATE_OPTIONS`, `DRONE_NEXT`) are reused by the Sub Project table in Task 6, so KEEP those.
 
 Remove these declarations (around lines 137–141):
+
 ```svelte
   let selectedSubprojectDrone = $derived.by(() => {
     if (!detail || selectedSubproject === "all") return null;
@@ -441,6 +486,7 @@ Remove these declarations (around lines 137–141):
 Remove (around lines 430–450) `saveSelectedSubprojectDroneLink` and `saveSelectedSubprojectDroneOwner` functions.
 
 Remove (around lines 86–89):
+
 ```svelte
   let newDroneLink: string = $state("");
   let newDroneSubfolder: string = $state("");
@@ -448,10 +494,13 @@ Remove (around lines 86–89):
 ```
 
 Also remove their reset lines in `selectProject` (around line 208):
+
 ```svelte
     droneEditIndex = -1; droneError = ""; newDroneLink = ""; newDroneSubfolder = ""; newDroneOwner = "";
 ```
+
 Replace with:
+
 ```svelte
     droneEditIndex = -1; droneError = "";
 ```
@@ -463,10 +512,13 @@ Keep `addDrone` — Task 6 repurposes it via the master-detail "Add Drone Ticket
 - [ ] **Step 7: Run tests — reopen contract must still pass**
 
 Run:
+
 ```bash
 npm test
 ```
+
 Expected:
+
 - `project-details-reopen.test.mjs` ALL PASS (saveCrState + REOPEN routing untouched).
 - `dashboard-inline-edit.test.mjs` "ProjectDetails source has visible AS_IS command center…" still FAILs (it also asserts `Sub Project (DRONE)` which is Task 6; and `doesNotMatch Save CR State` which is now satisfied — but the test only passes when ALL its asserts pass).
 - `as-is-prototype-parity.test.mjs` "AS_IS page titles" still FAILs (waits for Task 6).
@@ -477,6 +529,7 @@ Expected:
 ```bash
 npm run check
 ```
+
 Expected: 0 errors. If errors appear about unused variables that you forgot to remove in Step 6, remove them.
 
 - [ ] **Step 9: Commit**
@@ -498,6 +551,7 @@ git commit -m "feat(fase1): trim Project Identity — drone block, drone state s
 ## Task 4: CR Link conditional render — input ↔ display (Section 1.4)
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `frontend/tests/project-details-fase1.test.mjs` (new file, created in Step 1)
 
@@ -522,10 +576,19 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PD = readFileSync(resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"), "utf8");
-const FA = readFileSync(resolve(__dirname, "../src/lib/components/FileActions.svelte"), "utf8");
+const PD = readFileSync(
+  resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"),
+  "utf8",
+);
+const FA = readFileSync(
+  resolve(__dirname, "../src/lib/components/FileActions.svelte"),
+  "utf8",
+);
 const APP = readFileSync(resolve(__dirname, "../src/App.svelte"), "utf8");
-const SPT = readFileSync(resolve(__dirname, "../src/lib/components/SubProjectTable.svelte"), "utf8");
+const SPT = readFileSync(
+  resolve(__dirname, "../src/lib/components/SubProjectTable.svelte"),
+  "utf8",
+);
 
 // --- CR Link conditional render (Section 1.4) --------------------------------
 
@@ -539,7 +602,10 @@ test("CR Link display mode has copy + open-external + edit controls", () => {
   // Copy uses navigator.clipboard.writeText
   assert.match(PD, /navigator\.clipboard\.writeText\([^)]*cr_link/);
   // Open external uses window.open with noopener/noreferrer
-  assert.match(PD, /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/);
+  assert.match(
+    PD,
+    /window\.open\([^)]+,\s*"_blank",\s*"noopener,noreferrer"\)/,
+  );
   // Edit control toggles back to input mode
   assert.match(PD, /crLinkEditing\s*=\s*true/);
 });
@@ -559,7 +625,10 @@ test("ProjectDetails exposes onNavigateDashboard prop and a back button", () => 
 });
 
 test("App.svelte wires onNavigateDashboard to navigate('dashboard')", () => {
-  assert.match(APP, /onNavigateDashboard=\{\(\)\s*=>\s*navigate\("dashboard"\)\}/);
+  assert.match(
+    APP,
+    /onNavigateDashboard=\{\(\)\s*=>\s*navigate\("dashboard"\)\}/,
+  );
 });
 
 // --- Sub Project box (Section 3) ---------------------------------------------
@@ -602,14 +671,17 @@ test("FileActions rejects Create and Rename to reserved names", () => {
 - [ ] **Step 2: Run the new test file — expect ALL to FAIL**
 
 Run:
+
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected: every assertion fails (none of the new markup exists yet). This is the RED state for Tasks 4–7.
 
 - [ ] **Step 3: Add `crLinkEditing` state and rewire CR Link block**
 
 In `ProjectDetails.svelte`, find the CR Link state declarations (around line 37):
+
 ```svelte
   // ── CR Link edit state ──
   let crLinkEdit: string = $state("");
@@ -619,6 +691,7 @@ In `ProjectDetails.svelte`, find the CR Link state declarations (around line 37)
 ```
 
 Replace with (add `crLinkEditing` boolean + a copy-success toast state):
+
 ```svelte
   // ── CR Link edit state ──
   let crLinkEdit: string = $state("");
@@ -633,11 +706,13 @@ Replace with (add `crLinkEditing` boolean + a copy-success toast state):
 - [ ] **Step 4: Initialize `crLinkEditing` on project select**
 
 In `selectProject`, find (around line 232):
+
 ```svelte
     if (detail) crLinkEdit = detail.cr_link || "";
 ```
 
 Replace with:
+
 ```svelte
     if (detail) {
       crLinkEdit = detail.cr_link || "";
@@ -688,6 +763,7 @@ After the existing `saveCrLink` function (around line 268), add:
 - [ ] **Step 6: Replace the CR Link render block**
 
 Find the existing CR Link block (around lines 634–638):
+
 ```svelte
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
                 <div class="cr-link-row">
@@ -697,6 +773,7 @@ Find the existing CR Link block (around lines 634–638):
 ```
 
 Replace with the conditional render:
+
 ```svelte
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
                 {#if crLinkEditing}
@@ -725,6 +802,7 @@ Replace with the conditional render:
 - [ ] **Step 7: Add styles for the new display row**
 
 In the `<style>` block, add (anywhere; suggest near `.cr-link-row`):
+
 ```svelte
   .pd-cr-link-display { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .pd-cr-link-number { font-size: 12px; font-weight: 700; color: var(--color-ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -735,10 +813,13 @@ In the `<style>` block, add (anywhere; suggest near `.cr-link-row`):
 - [ ] **Step 8: Run tests — CR Link assertions should PASS, others still RED**
 
 Run:
+
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected:
+
 - "CR Link input mode…" PASS
 - "CR Link display mode has copy + open-external + edit controls" PASS
 - "CR State select has onchange autosave hook" PASS (already done in Task 3)
@@ -749,6 +830,7 @@ Expected:
 ```bash
 npm test
 ```
+
 Expected: existing tests still pass (or fail only on the known Task-1 beacons). No new failures.
 
 - [ ] **Step 10: Commit**
@@ -769,6 +851,7 @@ mode. Autosave on blur; stays in input mode on error."
 ## Task 5: Back to Dashboard button (Section 4)
 
 **Files:**
+
 - Modify: `frontend/src/App.svelte`
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
@@ -776,11 +859,13 @@ mode. Autosave on blur; stays in input mode on error."
 - [ ] **Step 1: Add `onNavigateDashboard` prop to ProjectDetails**
 
 Find the prop destructure (around line 13):
+
 ```svelte
   let { initialPath = null, startNew = false }: { initialPath?: string | null; startNew?: boolean } = $props();
 ```
 
 Replace with:
+
 ```svelte
   let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
 ```
@@ -788,6 +873,7 @@ Replace with:
 - [ ] **Step 2: Add the back button bar above Command Center**
 
 Find the very start of the template section (around line 570):
+
 ```svelte
 <section class="screen active" id="screen-details">
   <div class="panel-card" style="flex:0 0 auto;">
@@ -795,6 +881,7 @@ Find the very start of the template section (around line 570):
 ```
 
 Insert the back bar between `<section>` and the first `<div class="panel-card">`:
+
 ```svelte
 <section class="screen active" id="screen-details">
   {#if onNavigateDashboard}
@@ -812,6 +899,7 @@ Insert the back bar between `<section>` and the first `<div class="panel-card">`
 - [ ] **Step 3: Add styles for the back bar**
 
 In the `<style>` block, add:
+
 ```svelte
   .pd-back-bar { flex: 0 0 auto; display: flex; align-items: center; }
   .pd-back-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 7px; background: #fff; color: var(--color-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -822,11 +910,13 @@ In the `<style>` block, add:
 - [ ] **Step 4: Wire `onNavigateDashboard` in App.svelte**
 
 Find (around line 222):
+
 ```svelte
         <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} />
 ```
 
 Replace with:
+
 ```svelte
         <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
 ```
@@ -836,7 +926,9 @@ Replace with:
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected:
+
 - "ProjectDetails exposes onNavigateDashboard prop and a back button" PASS
 - "App.svelte wires onNavigateDashboard to navigate('dashboard')" PASS
 
@@ -846,6 +938,7 @@ Expected:
 npm test
 npm run check
 ```
+
 Expected: no new failures, 0 type errors.
 
 - [ ] **Step 7: Commit**
@@ -866,6 +959,7 @@ Low-emphasis secondary button — navigation, not a project action."
 This is the largest task. It splits into: (a) refactor `SubProjectTable.svelte` to presentational, (b) rewire `ProjectDetails.svelte` to own drone state + master-detail.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/SubProjectTable.svelte`
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
@@ -993,6 +1087,7 @@ Replace the entire file content with:
 - [ ] **Step 2: In ProjectDetails — rename box title and rewire the SubProjectTable usage**
 
 Find (around lines 739–747):
+
 ```svelte
             <div class="pd-section">
               <div class="pd-section-head">
@@ -1010,6 +1105,7 @@ Find (around lines 739–747):
 ```
 
 Replace with:
+
 ```svelte
             <div class="pd-section">
               <div class="pd-section-head">
@@ -1064,6 +1160,7 @@ Replace with:
 - [ ] **Step 3: Add the new state variables and helpers in `<script>`**
 
 After the existing `subprojectBusy`/`subprojectFeedback` declarations (around line 116), add:
+
 ```svelte
   // ── Sub-project master-detail (Fase 1 §3.4) ──
   let selectedSubprojectRow: string | null = $state(null);
@@ -1076,14 +1173,17 @@ After the existing `subprojectBusy`/`subprojectFeedback` declarations (around li
 ```
 
 Replace the existing `droneStateEdits`/`droneStateBusy`/`droneStateError` declarations (around lines 109–111) — these were index-keyed and are now name-keyed. Find:
+
 ```svelte
   let droneStateEdits: Record<number, string> = $state({});
   let droneStateBusy: number = $state(-1);
   let droneStateError: Record<number, string> = $state({});
 ```
+
 Delete those three lines (the name-keyed replacements were added in the block above).
 
 Add the derived detail for the selected row (after `selectedSubprojectRow` declaration):
+
 ```svelte
   let selectedSubprojectRowDetail = $derived.by(() => {
     if (!detail || !selectedSubprojectRow) return null;
@@ -1095,6 +1195,7 @@ Add the derived detail for the selected row (after `selectedSubprojectRow` decla
 - [ ] **Step 4: Add the new handler functions**
 
 After the existing `addSubproject` function (around line 412), add:
+
 ```svelte
   function onSelectSubprojectRow(name: string) {
     selectedSubprojectRow = selectedSubprojectRow === name ? null : name;
@@ -1162,6 +1263,7 @@ Find `addDrone` (around lines 346–357), `saveDroneState` (around lines 414–4
 - [ ] **Step 6: Add style for the drone detail panel**
 
 In `<style>`, add:
+
 ```svelte
   .pd-drone-detail { margin-top: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-workspace); display: flex; flex-direction: column; gap: 6px; }
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
@@ -1172,6 +1274,7 @@ In `<style>`, add:
 ```bash
 npm run check
 ```
+
 Expected: 0 errors. If errors reference `saveDroneState`, `syncDroneStateEdits`, `droneStateEdits`, `droneStateBusy` (old index-keyed), or `addDrone`, you missed a deletion site — re-read Step 5 and the resets in `selectProject`.
 
 - [ ] **Step 8: Run the Fase 1 tests — most should now PASS**
@@ -1179,6 +1282,7 @@ Expected: 0 errors. If errors reference `saveDroneState`, `syncDroneStateEdits`,
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected: all Sub Project / SubProjectTable assertions PASS. Files (Task 7) assertions still FAIL.
 
 - [ ] **Step 9: Run full suite — Task-1 beacons should now be GREEN**
@@ -1186,7 +1290,9 @@ Expected: all Sub Project / SubProjectTable assertions PASS. Files (Task 7) asse
 ```bash
 npm test
 ```
+
 Expected:
+
 - `dashboard-inline-edit.test.mjs` "ProjectDetails source has visible AS_IS command center…" PASS
 - `components.test.mjs` datetime test PASS
 - `as-is-prototype-parity.test.mjs` "AS_IS page titles" PASS
@@ -1212,12 +1318,14 @@ git commit -m "feat(fase1): Sub Project box — rename title, drop Owner column,
 This dropdown's only consumer was the Identity drone block, which Task 3 removed. Per spec Section 3, it's dead and should go.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Remove the Sub Project `<select>` from the Command Center toolbar**
 
 Find (around lines 583–591):
+
 ```svelte
       <label class="pd-command-field pd-command-project" for="pd-subproject-select">
         <span>Sub Project</span>
@@ -1235,16 +1343,21 @@ Delete the entire `<label>` block.
 - [ ] **Step 2: Remove the now-orphaned `selectedSubproject` state and `subprojects` reset that referenced it**
 
 Find (around line 27):
+
 ```svelte
   let selectedSubproject: string = $state("all");
 ```
+
 Delete the line.
 
 In `selectProject` (around line 204), find:
+
 ```svelte
     detail = null; subprojects = []; files = []; notes = ""; selectedSubproject = "all";
 ```
+
 Replace with:
+
 ```svelte
     detail = null; subprojects = []; files = []; notes = "";
 ```
@@ -1257,6 +1370,7 @@ Note: `subprojects` array itself stays — it's the source for `SubProjectTable`
 npm run check
 npm test
 ```
+
 Expected: 0 type errors, all tests still pass.
 
 - [ ] **Step 4: Commit**
@@ -1277,17 +1391,20 @@ selection now happens by clicking a row in the Sub Project table."
 The Identity box no longer has a "Save identity + schedule" button context that's obvious — the existing `saveMetadata` is still wired to the Schedule section's button. Project Name should also autosave on blur for the "feels automatic" requirement (review point 1.2 spirit).
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: visual verification (no new assertion needed; existing tests cover `saveMetadata`)
 
 - [ ] **Step 1: Add `onblur` autosave to the Project Name input**
 
 Find (around line 629):
+
 ```svelte
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} disabled={metaSaveState === "saving"} />
 ```
 
 Replace with:
+
 ```svelte
                 <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
 ```
@@ -1295,6 +1412,7 @@ Replace with:
 - [ ] **Step 2: Add the helper**
 
 After `metadataUnchanged`, add:
+
 ```svelte
   /** Autosave identity on blur if anything changed (name, start, end). */
   async function saveMetadataIfChanged() {
@@ -1310,6 +1428,7 @@ After `metadataUnchanged`, add:
 npm test
 npm run check
 ```
+
 Expected: no regressions.
 
 - [ ] **Step 4: Commit**
@@ -1328,12 +1447,14 @@ Project Name field — saveMetadataIfChanged no-ops when nothing changed."
 ## Task 9: Activity History fixed-height scroll (Section 7.1)
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `frontend/tests/project-details-fase1.test.mjs` (add assertion)
 
 - [ ] **Step 1: Add the failing assertion to the Fase 1 test file**
 
 In `frontend/tests/project-details-fase1.test.mjs`, add at the bottom:
+
 ```js
 // --- Activity History fixed-height scroll (Section 7.1) ---------------------
 
@@ -1349,11 +1470,13 @@ test("Activity History list is wrapped in a fixed-height scroll container", () =
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected: the new "Activity History list…" test FAILs.
 
 - [ ] **Step 3: Wrap the history `<ol>` in a scroll container**
 
 Find (around lines 768–778):
+
 ```svelte
             <div class="pd-section">
               <h4 class="pd-section-title">Activity History</h4>
@@ -1370,6 +1493,7 @@ Find (around lines 768–778):
 ```
 
 Replace with:
+
 ```svelte
             <div class="pd-section">
               <h4 class="pd-section-title">Activity History</h4>
@@ -1390,6 +1514,7 @@ Replace with:
 - [ ] **Step 4: Add the CSS**
 
 In `<style>`, add:
+
 ```svelte
   .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
 ```
@@ -1399,6 +1524,7 @@ In `<style>`, add:
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected: "Activity History list…" PASS.
 
 - [ ] **Step 6: Commit**
@@ -1417,6 +1543,7 @@ has many history entries; matches the visual height of Files/Notes boxes."
 ## Task 10: Files scroll + hide/lock reserved files (Section 6)
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/FileActions.svelte`
 - Test: `frontend/tests/project-details-fase1.test.mjs` (assertions already added in Task 4 Step 1)
 
@@ -1425,6 +1552,7 @@ The Fase 1 test file already has the FileActions assertions (RESERVED_FILES, pro
 - [ ] **Step 1: Add the RESERVED_FILES constant**
 
 In `FileActions.svelte`, after the imports (around line 36), add:
+
 ```svelte
   /** System files managed by the app — hidden from the list and locked from
    *  Create/Rename (Fase 1 §9.2). Case-insensitive: Windows is case-insensitive. */
@@ -1434,6 +1562,7 @@ In `FileActions.svelte`, after the imports (around line 36), add:
 - [ ] **Step 2: Filter reserved files from the rendered list**
 
 Find (around line 282–284):
+
 ```svelte
   <div class="fa-block">
     <span class="fa-block-label">Files</span>
@@ -1445,6 +1574,7 @@ Find (around line 282–284):
 ```
 
 Replace with (introduce `visibleFiles` derived and iterate that):
+
 ```svelte
   <div class="fa-block">
     <span class="fa-block-label">Files</span>
@@ -1456,6 +1586,7 @@ Replace with (introduce `visibleFiles` derived and iterate that):
 ```
 
 Add the derived near the other `$derived` declarations (after `deleteLockMsg`, around line 76):
+
 ```svelte
   let visibleFiles = $derived(files.filter((f) => !RESERVED_FILES.has(f.name.toLowerCase())));
 ```
@@ -1463,6 +1594,7 @@ Add the derived near the other `$derived` declarations (after `deleteLockMsg`, a
 - [ ] **Step 3: Add the scroll CSS to `.fa-file-list`**
 
 Find the existing `.fa-file-list` rule (around line 438):
+
 ```svelte
   .fa-file-list {
     display: flex;
@@ -1475,6 +1607,7 @@ Find the existing `.fa-file-list` rule (around line 438):
 ```
 
 Replace with:
+
 ```svelte
   .fa-file-list {
     display: flex;
@@ -1509,6 +1642,7 @@ Find `createFile` (around lines 105–122). After the `if (!filename)` block, ad
 ```
 
 Apply the same check in `createFromTemplate` (around lines 125–146), after the `if (!templateName)` block:
+
 ```svelte
     if (RESERVED_FILES.has(templateName.toLowerCase())) {
       errorMessage = "notes.md and project_data.json are reserved system files and cannot be created here.";
@@ -1519,6 +1653,7 @@ Apply the same check in `createFromTemplate` (around lines 125–146), after the
 - [ ] **Step 5: Reject Rename to a reserved name**
 
 Find `requestRename` (around lines 175–192). After the `if (trimmed === file.name)` check, add:
+
 ```svelte
     if (RESERVED_FILES.has(trimmed.toLowerCase())) {
       errorMessage = "Cannot rename to a reserved system file name.";
@@ -1531,6 +1666,7 @@ Find `requestRename` (around lines 175–192). After the `if (trimmed === file.n
 ```bash
 node --import ./tests/register-hooks.mjs --test "tests/project-details-fase1.test.mjs"
 ```
+
 Expected: ALL Fase 1 tests now PASS.
 
 - [ ] **Step 7: Run full suite + type check**
@@ -1539,6 +1675,7 @@ Expected: ALL Fase 1 tests now PASS.
 npm test
 npm run check
 ```
+
 Expected: every test green, 0 type errors.
 
 - [ ] **Step 8: Commit**
@@ -1565,6 +1702,7 @@ authoritative guard; this is UX-level foot-gun prevention."
 cd "D:/Ibrahim/Projects/project_tracker/frontend"
 npm test
 ```
+
 Expected: ALL tests pass.
 
 - [ ] **Step 2: Run the type check**
@@ -1572,6 +1710,7 @@ Expected: ALL tests pass.
 ```bash
 npm run check
 ```
+
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 3: Run the production build**
@@ -1579,6 +1718,7 @@ Expected: 0 errors, 0 warnings.
 ```bash
 npm run build
 ```
+
 Expected: vite build succeeds; no errors.
 
 - [ ] **Step 4: Run the Python backend contract guard**
@@ -1587,11 +1727,13 @@ Expected: vite build succeeds; no errors.
 cd "D:/Ibrahim/Projects/project_tracker"
 python -m pytest tests/test_bridge_contract_guard.py -v
 ```
+
 Expected: PASS. Fase 1 introduced no new bridge method names, so this guard must still pass unchanged.
 
 - [ ] **Step 5: Manual smoke test (if a desktop run is available)**
 
 Launch the app, open a project with sub-projects, and verify:
+
 - No "Save CR State" button; changing CR State dropdown saves immediately; changing to POSTPONED/CANCELED shows the ConfirmModal.
 - CR Link shows input when empty, CR number + copy/open/edit when set.
 - "Back to Dashboard" returns to the dashboard.
@@ -1609,6 +1751,7 @@ If smoke test surfaced small CSS or copy fixes, commit them with a clear message
 ## Self-Review notes (run after writing, before handoff)
 
 **Spec coverage check:**
+
 - §1.1 (remove Selected Sub Project) → Task 3 Step 1 ✓
 - §1.2 (remove Save CR State button, autosave) → Task 3 Steps 3–4 ✓
 - §1.3 (remove Drone block) → Task 3 Step 5 ✓

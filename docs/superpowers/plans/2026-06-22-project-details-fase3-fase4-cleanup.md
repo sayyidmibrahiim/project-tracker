@@ -4,7 +4,8 @@
 
 **Goal:** Implement a live, contenteditable WYSIWYG editor for Project Notes with checklist support, bidirectional Markdown conversion, and a customized sub-project detail view featuring date/CR state inheritance from main projects.
 
-**Architecture:** 
+**Architecture:**
+
 - Frontend modifications in `NotesEditor.svelte` (WYSIWYG layout, contenteditable events, HTML-markdown converter) and `ProjectDetails.svelte` (read-only states for sub-project fields, hide sub-project nesting card).
 - Backend updates in `app_web.py` to fix folder-state resolution crashes and return sub-project flags with inherited values.
 - New test file `project-details-fase3-fase4.test.mjs` verifying WYSIWYG notes and sub-project inheritance.
@@ -18,11 +19,13 @@
 ## File Structure
 
 **Modified:**
+
 - `frontend/src/lib/components/NotesEditor.svelte` — replace textarea with contenteditable visual editor, add HTML-to-markdown roundtrip and checklist handlers.
 - `frontend/src/lib/components/ProjectDetails.svelte` — check `is_subproject` flag on select, disable dates/CR state edits, and hide the sub-projects nesting card.
 - `project_tracker/app_web.py` — fix 5 folder-state crash points, detect sub-project paths, and inherit metadata fields from parent projects.
 
 **Created:**
+
 - `frontend/tests/project-details-fase3-fase4.test.mjs` — test suite for HTML-markdown translation, checklist handling, and sub-project inheritance behavior.
 
 ---
@@ -32,12 +35,14 @@
 We will update `app_web.py` to safely resolve `ProjectState` on sub-project folders and merge inherited parent fields in `get_project`/`update_project`.
 
 **Files:**
+
 - Modify: `project_tracker/app_web.py`
 - Test: run pytest using virtual environment
 
 - [ ] **Step 1: Replace all raw `ProjectState(path.parent.name)` calls with `_folder_state_for_path(path)`**
 
 Find and replace all 5 occurrences:
+
 - Line 451: `project_state = ProjectState(path.parent.name)`
 - Line 505: `project_state = ProjectState(path.parent.name)`
 - Line 646: `project_state = ProjectState(path.parent.name)`
@@ -50,6 +55,7 @@ Replace them with:
 - [ ] **Step 2: Add sub-project check and date/CR inheritance in `get_project`**
 
 Find (around lines 444–474):
+
 ```python
         def get_project(self, project_path: Path) -> object:
             """Return project detail from MetadataStore + filesystem."""
@@ -88,6 +94,7 @@ Find (around lines 444–474):
 ```
 
 Replace with:
+
 ```python
         def get_project(self, project_path: Path) -> object:
             """Return project detail from MetadataStore + filesystem."""
@@ -97,10 +104,10 @@ Replace with:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
 
             project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
-            
+
             # Sub-project detection: parent contains project_data.json
             is_subproject = (path.parent / "project_data.json").is_file()
-            
+
             if is_subproject:
                 parent_path = path.parent
                 parent_meta = self._metadata_store.read(parent_path)
@@ -147,6 +154,7 @@ Replace with:
 - [ ] **Step 3: Modify `update_project` to handle sub-project parent propagation**
 
 Find (around lines 680–706):
+
 ```python
         def update_project(self, project_path: Path, data: dict[str, object]) -> object:
             """Update allowed metadata fields and persist. No folder move."""
@@ -178,6 +186,7 @@ Find (around lines 680–706):
 ```
 
 Replace with (propagates updates to parent project metadata if it's a subproject):
+
 ```python
         def update_project(self, project_path: Path, data: dict[str, object]) -> object:
             """Update allowed metadata fields and persist. No folder move."""
@@ -187,14 +196,14 @@ Replace with (propagates updates to parent project metadata if it's a subproject
             metadata = self._metadata_store.read(path)
             if metadata is None:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
-            
+
             is_subproject = (path.parent / "project_data.json").is_file()
 
             if "project_name" in data:
                 metadata.project_name = str(data["project_name"])
             if "implementation_plan" in data:
                 metadata.implementation_plan = str(data["implementation_plan"])
-            
+
             # If dates or CR details are updated on a sub-project, propagate to parent
             if is_subproject:
                 parent_path = path.parent
@@ -215,10 +224,10 @@ Replace with (propagates updates to parent project metadata if it's a subproject
                     metadata.start_datetime = _parse_optional_datetime(data["start_datetime"])
                 if "end_datetime" in data:
                     metadata.end_datetime = _parse_optional_datetime(data["end_datetime"])
-            
+
             metadata.updated_at = local_now()
             self._metadata_store.write(path, metadata)
-            
+
             project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
             return {
                 "project_path": str(path),
@@ -233,6 +242,7 @@ Replace with (propagates updates to parent project metadata if it's a subproject
 ```bash
 "D:/Ibrahim/Projects/project_tracker/.venv/Scripts/pytest" "D:/Ibrahim/Projects/project_tracker/tests/test_core_enums.py" -v
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -249,12 +259,14 @@ git commit -m "fix(fase4): resolve backend crashes on subproject paths & inherit
 We will modify `ProjectDetails.svelte` to check the `is_subproject` flag and adapt fields.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Declare `isSubproject` state variable**
 
 Add declaration in script (around line 24):
+
 ```svelte
   let isSubproject: boolean = $state(false);
 ```
@@ -262,11 +274,14 @@ Add declaration in script (around line 24):
 - [ ] **Step 2: Set `isSubproject` state on project selection**
 
 In `selectProject` find:
+
 ```svelte
     detail = dResp.ok ? (dResp.data ?? null) : null;
     subprojects = spResp.ok ? (spResp.data ?? []) : [];
 ```
+
 Replace with:
+
 ```svelte
     detail = dResp.ok ? (dResp.data ?? null) : null;
     isSubproject = detail ? (detail as any).is_subproject || false : false;
@@ -276,15 +291,19 @@ Replace with:
 - [ ] **Step 3: Disable / Read-only fields in Template when `isSubproject` is true**
 
 Find `crStateEdit` select block:
+
 ```svelte
                     <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving"}>
 ```
+
 Replace with (disabled if subproject):
+
 ```svelte
                     <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving" || isSubproject}>
 ```
 
 Find CR Link `input` and buttons block:
+
 ```svelte
                 {#if crLinkEditing}
                   <input
@@ -297,7 +316,9 @@ Find CR Link `input` and buttons block:
                     disabled={crLinkSaveState === "saving"}
                   />
 ```
+
 Replace input and buttons display to disable editing if subproject:
+
 ```svelte
                 {#if crLinkEditing && !isSubproject}
                   <input
@@ -337,6 +358,7 @@ Replace input and buttons display to disable editing if subproject:
 ```
 
 Find the Start/End datetime inputs in Schedule block:
+
 ```svelte
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-start">
@@ -349,7 +371,9 @@ Find the Start/End datetime inputs in Schedule block:
                   </label>
                 </div>
 ```
+
 Replace with (disabled inputs if subproject + show inherited label):
+
 ```svelte
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-start">
@@ -367,10 +391,13 @@ Replace with (disabled inputs if subproject + show inherited label):
 ```
 
 Disable explicit schedule save button:
+
 ```svelte
                   <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail)}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
 ```
+
 Replace:
+
 ```svelte
                   <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail) || isSubproject}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
 ```
@@ -378,12 +405,15 @@ Replace:
 - [ ] **Step 4: Hide the "Sub Project (DRONE)" box card when `isSubproject` is true**
 
 Find:
+
 ```svelte
             <div class="pd-section">
               <div class="pd-section-head">
                 <h4 class="pd-section-title">Sub Project (DRONE)</h4>
 ```
+
 Replace:
+
 ```svelte
             {#if !isSubproject}
               <div class="pd-section">
@@ -438,8 +468,14 @@ Replace:
 ```
 
 Add CSS for the new label in `<style>` block:
+
 ```css
-  .pd-inherited-label { font-size: 10px; color: var(--color-muted); font-style: italic; margin-top: 2px; }
+.pd-inherited-label {
+  font-size: 10px;
+  color: var(--color-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
 ```
 
 - [ ] **Step 5: Run tests + type check**
@@ -448,6 +484,7 @@ Add CSS for the new label in `<style>` block:
 npm run check
 npm test
 ```
+
 Expected: 0 warnings, tests pass (except pre-existing & new Task 3/4 tests).
 
 - [ ] **Step 6: Commit**
@@ -464,22 +501,26 @@ git commit -m "feat(fase4): disable scheduling/CR edits and hide sub-project tab
 We will modify `NotesEditor.svelte` to implement contenteditable direct editor and HTML-markdown round-trip.
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/NotesEditor.svelte`
 - Test: `npm test`
 
 - [ ] **Step 1: Replace textarea & preview markup with a single contenteditable div**
 
 Read `NotesEditor.svelte` lines 140–220 first:
+
 ```svelte
   // ...
 ```
 
 Let's read lines 150-182:
+
 ```svelte
   // ...
 ```
 
 We will replace the layout (lines 140–182):
+
 ```svelte
   {#if mode === "edit"}
     <textarea
@@ -487,7 +528,9 @@ We will replace the layout (lines 140–182):
 ...
   <div class="ne-status" ...>
 ```
+
 With a single visual editor:
+
 ```svelte
   <div
     class="ne-textarea ne-editor-area"
@@ -502,60 +545,69 @@ With a single visual editor:
 - [ ] **Step 2: Add `htmlToMarkdown` and `markdownToHtml` roundtrip logic**
 
 Add utility function in script section of `NotesEditor.svelte`:
+
 ```ts
-  function htmlToMarkdown(html: string): string {
-    if (!html) return "";
-    let md = html;
-    
-    // Replace blocks
-    md = md.replace(/<h1>(.*?)<\/h1>/gi, "# $1\n\n");
-    md = md.replace(/<h2>(.*?)<\/h2>/gi, "## $1\n\n");
-    md = md.replace(/<h3>(.*?)<\/h3>/gi, "### $1\n\n");
-    md = md.replace(/<blockquote>(.*?)<\/blockquote>/gi, "> $1\n\n");
-    
-    // Checkbox mapping
-    md = md.replace(/<div class="ne-todo-item"><input type="checkbox"[^>]*checked[^>]*>\s*<span>(.*?)<\/span><\/div>/gi, "- [x] $1\n");
-    md = md.replace(/<div class="ne-todo-item"><input type="checkbox"[^>]*>\s*<span>(.*?)<\/span><\/div>/gi, "- [ ] $1\n");
-    
-    // List mapping
-    md = md.replace(/<li>(.*?)<\/li>/gi, "- $1\n");
-    md = md.replace(/<ul[^>]*>/gi, "").replace(/<\/ul>/gi, "\n");
-    
-    // Inline replacements
-    md = md.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
-    md = md.replace(/<b>(.*?)<\/b>/gi, "**$1**");
-    md = md.replace(/<em>(.*?)<\/em>/gi, "*$1*");
-    md = md.replace(/<i>(.*?)<\/i>/gi, "*$1*");
-    md = md.replace(/<code>(.*?)<\/code>/gi, "`$1`");
-    md = md.replace(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)");
-    
-    // Strip other paragraph / div tags
-    md = md.replace(/<p>(.*?)<\/p>/gi, "$1\n\n");
-    md = md.replace(/<div[^>]*>(.*?)<\/div>/gi, "$1\n");
-    md = md.replace(/<br\s*\/?>/gi, "\n");
-    
-    // Clean multiple consecutive newlines
-    md = md.replace(/\n{3,}/g, "\n\n");
-    return md.trim();
-  }
+function htmlToMarkdown(html: string): string {
+  if (!html) return "";
+  let md = html;
+
+  // Replace blocks
+  md = md.replace(/<h1>(.*?)<\/h1>/gi, "# $1\n\n");
+  md = md.replace(/<h2>(.*?)<\/h2>/gi, "## $1\n\n");
+  md = md.replace(/<h3>(.*?)<\/h3>/gi, "### $1\n\n");
+  md = md.replace(/<blockquote>(.*?)<\/blockquote>/gi, "> $1\n\n");
+
+  // Checkbox mapping
+  md = md.replace(
+    /<div class="ne-todo-item"><input type="checkbox"[^>]*checked[^>]*>\s*<span>(.*?)<\/span><\/div>/gi,
+    "- [x] $1\n",
+  );
+  md = md.replace(
+    /<div class="ne-todo-item"><input type="checkbox"[^>]*>\s*<span>(.*?)<\/span><\/div>/gi,
+    "- [ ] $1\n",
+  );
+
+  // List mapping
+  md = md.replace(/<li>(.*?)<\/li>/gi, "- $1\n");
+  md = md.replace(/<ul[^>]*>/gi, "").replace(/<\/ul>/gi, "\n");
+
+  // Inline replacements
+  md = md.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
+  md = md.replace(/<b>(.*?)<\/b>/gi, "**$1**");
+  md = md.replace(/<em>(.*?)<\/em>/gi, "*$1*");
+  md = md.replace(/<i>(.*?)<\/i>/gi, "*$1*");
+  md = md.replace(/<code>(.*?)<\/code>/gi, "`$1`");
+  md = md.replace(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)");
+
+  // Strip other paragraph / div tags
+  md = md.replace(/<p>(.*?)<\/p>/gi, "$1\n\n");
+  md = md.replace(/<div[^>]*>(.*?)<\/div>/gi, "$1\n");
+  md = md.replace(/<br\s*\/?>/gi, "\n");
+
+  // Clean multiple consecutive newlines
+  md = md.replace(/\n{3,}/g, "\n\n");
+  return md.trim();
+}
 ```
 
 We will also use the existing `renderMarkdown` function from `markdown.ts` (which is imported on line 21) to translate Markdown back to rich HTML when project details load:
-```ts
-  let editorEl = $state<HTMLDivElement | null>(null);
 
-  // Sync state on notes load:
-  $effect(() => {
-    if (editorEl) {
-      editorEl.innerHTML = renderMarkdown(text);
-    }
-  });
+```ts
+let editorEl = $state<HTMLDivElement | null>(null);
+
+// Sync state on notes load:
+$effect(() => {
+  if (editorEl) {
+    editorEl.innerHTML = renderMarkdown(text);
+  }
+});
 ```
 
 - [ ] **Step 3: Implement formatting commands in Toolbar**
 
 Replace formatting toolbar buttons to use `document.execCommand` and Svelte-driven selections.
 Find toolbar buttons (lines 146-160):
+
 ```svelte
       <button type="button" class="ne-tbtn" title="Bold" onclick={() => surround("**", "**")}><strong>B</strong></button>
       <button type="button" class="ne-tbtn" title="Italic" onclick={() => surround("*", "*")}><em>I</em></button>
@@ -568,6 +620,7 @@ Find toolbar buttons (lines 146-160):
 ```
 
 Replace with:
+
 ```svelte
       <button type="button" class="ne-tbtn" title="Bold" onclick={() => format('bold')}><strong>B</strong></button>
       <button type="button" class="ne-tbtn" title="Italic" onclick={() => format('italic')}><em>I</em></button>
@@ -581,80 +634,108 @@ Replace with:
 ```
 
 Add these helper formatting functions to `<script>`:
+
 ```ts
-  function format(command: string, value: string = "") {
-    document.execCommand(command, false, value);
-    syncToMarkdown();
-  }
+function format(command: string, value: string = "") {
+  document.execCommand(command, false, value);
+  syncToMarkdown();
+}
 
-  function formatCode() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    const code = document.createElement("code");
-    code.textContent = range.toString();
-    range.deleteContents();
-    range.insertNode(code);
-    syncToMarkdown();
-  }
+function formatCode() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const code = document.createElement("code");
+  code.textContent = range.toString();
+  range.deleteContents();
+  range.insertNode(code);
+  syncToMarkdown();
+}
 
-  function formatLink() {
-    const url = prompt("Enter URL:");
-    if (url) format("createLink", url);
-  }
+function formatLink() {
+  const url = prompt("Enter URL:");
+  if (url) format("createLink", url);
+}
 
-  function formatChecklist() {
-    const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    const fragment = range.createContextualFragment(html);
-    range.insertNode(fragment);
-    
-    // Bind change listener on newly created checkbox
-    setTimeout(bindCheckboxListeners, 50);
-    syncToMarkdown();
-  }
+function formatChecklist() {
+  const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const fragment = range.createContextualFragment(html);
+  range.insertNode(fragment);
 
-  function syncToMarkdown() {
-    if (editorEl) {
-      text = htmlToMarkdown(editorEl.innerHTML);
-      scheduleSave();
-    }
-  }
+  // Bind change listener on newly created checkbox
+  setTimeout(bindCheckboxListeners, 50);
+  syncToMarkdown();
+}
 
-  function onEditorInput() {
-    syncToMarkdown();
+function syncToMarkdown() {
+  if (editorEl) {
+    text = htmlToMarkdown(editorEl.innerHTML);
+    scheduleSave();
   }
+}
 
-  function onEditorBlur() {
-    if (status === "pending") flush();
-  }
+function onEditorInput() {
+  syncToMarkdown();
+}
 
-  function bindCheckboxListeners() {
-    if (!editorEl) return;
-    const boxes = editorEl.querySelectorAll(".ne-todo-checkbox");
-    boxes.forEach(box => {
-      box.removeEventListener("change", syncToMarkdown);
-      box.addEventListener("change", syncToMarkdown);
-    });
-  }
+function onEditorBlur() {
+  if (status === "pending") flush();
+}
 
-  $effect(() => {
-    if (editorEl) {
-      bindCheckboxListeners();
-    }
+function bindCheckboxListeners() {
+  if (!editorEl) return;
+  const boxes = editorEl.querySelectorAll(".ne-todo-checkbox");
+  boxes.forEach((box) => {
+    box.removeEventListener("change", syncToMarkdown);
+    box.addEventListener("change", syncToMarkdown);
   });
+}
+
+$effect(() => {
+  if (editorEl) {
+    bindCheckboxListeners();
+  }
+});
 ```
 
 - [ ] **Step 4: Update styles in `<style>` block**
 
 Replace `.ne-textarea` rules and add `.ne-todo-item` / `.ne-todo-checkbox`:
+
 ```css
-  .ne-textarea { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; font-size:12px; font-family:var(--font); color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; }
-  .ne-textarea:focus { border-color:var(--color-dbs-red); }
-  .ne-todo-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-  .ne-todo-checkbox { width: 14px; height: 14px; cursor: pointer; }
+.ne-textarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: 300px;
+  padding: 10px;
+  background: var(--color-workspace-panel);
+  border: 1px solid #d7dce2;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--color-ink);
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+.ne-textarea:focus {
+  border-color: var(--color-dbs-red);
+}
+.ne-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+.ne-todo-checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
 ```
 
 - [ ] **Step 5: Run tests + check**
@@ -663,6 +744,7 @@ Replace `.ne-textarea` rules and add `.ne-todo-item` / `.ne-todo-checkbox`:
 npm run check
 npm test
 ```
+
 Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 6: Commit**
@@ -679,12 +761,14 @@ git commit -m "feat(fase3): replace raw markdown notes text area with visual con
 We will write `frontend/tests/project-details-fase3-fase4.test.mjs` verifying WYSIWYG notes and sub-project inheritance.
 
 **Files:**
+
 - Create: `frontend/tests/project-details-fase3-fase4.test.mjs`
 - Test: `npm test`
 
 - [ ] **Step 1: Write `project-details-fase3-fase4.test.mjs`**
 
 Create:
+
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -693,8 +777,14 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PD = readFileSync(resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"), "utf8");
-const NE = readFileSync(resolve(__dirname, "../src/lib/components/NotesEditor.svelte"), "utf8");
+const PD = readFileSync(
+  resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"),
+  "utf8",
+);
+const NE = readFileSync(
+  resolve(__dirname, "../src/lib/components/NotesEditor.svelte"),
+  "utf8",
+);
 
 test("NotesEditor uses contenteditable instead of textarea for WYSIWYG", () => {
   assert.match(NE, /contenteditable="true"/);
@@ -720,6 +810,7 @@ test("ProjectDetails disables CR and schedule inputs for sub-projects", () => {
 ```bash
 npm test
 ```
+
 Expected: all tests pass (except pre-existing parity failure).
 
 - [ ] **Step 3: Run production build**
@@ -727,6 +818,7 @@ Expected: all tests pass (except pre-existing parity failure).
 ```bash
 npm run build
 ```
+
 Expected: build succeeds.
 
 - [ ] **Step 4: Commit tests**

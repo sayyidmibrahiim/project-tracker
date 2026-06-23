@@ -15,11 +15,13 @@
 ## Task 1: Command Center — restore Sub Project dropdown, remove subtitle, move Back button
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 
 - [ ] **Step 1: Remove the standalone `.pd-back-bar` block above the panel-card**
 
 Find (around lines 591-599):
+
 ```svelte
 <section class="screen active" id="screen-details">
   {#if onNavigateDashboard}
@@ -34,6 +36,7 @@ Find (around lines 591-599):
 ```
 
 Replace with:
+
 ```svelte
 <section class="screen active" id="screen-details">
   <div class="panel-card" style="flex:0 0 auto;">
@@ -42,6 +45,7 @@ Replace with:
 - [ ] **Step 2: Remove subtitle text `compact editing workspace`**
 
 Find (around line 605):
+
 ```svelte
         <span class="panel-subtitle">compact editing workspace</span>
 ```
@@ -51,6 +55,7 @@ Delete that line.
 - [ ] **Step 3: Add Back button + Sub Project dropdown inside toolbar**
 
 Find (around lines 601-618):
+
 ```svelte
     <div class="toolbar">
       <div class="panel-title-row" style="margin:0 18px 0 0;">
@@ -70,6 +75,7 @@ Find (around lines 601-618):
 ```
 
 Replace with:
+
 ```svelte
     <div class="toolbar">
       <div class="panel-title-row" style="margin:0 18px 0 0;">
@@ -106,6 +112,7 @@ Replace with:
 - [ ] **Step 4: Re-declare `selectedSubproject` state variable**
 
 Add after `let isSubproject: boolean = $state(false);` (around line 24):
+
 ```svelte
   let selectedSubproject: string = $state("all");
 ```
@@ -117,6 +124,7 @@ cd "D:/Ibrahim/Projects/project_tracker/frontend"
 npm run check
 npm test 2>&1 | grep -E "^(not ok|# pass|# fail)"
 ```
+
 Expected: 0 errors. Tests may fail on assertions referencing old Back button layout — note which.
 
 - [ ] **Step 6: Commit**
@@ -132,11 +140,13 @@ git commit -m "fix(polish): restore Sub Project dropdown, move Back button into 
 ## Task 2: Project Identity — remove CR Number row, rename to CR Number, inline CR State
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/ProjectDetails.svelte`
 
 - [ ] **Step 1: Remove CR Number display row**
 
 Find (around line 660):
+
 ```svelte
                 <div class="pd-dl-item"><dt>CR Number</dt><dd>{detail.cr_number || "—"}</dd></div>
 ```
@@ -146,11 +156,13 @@ Delete that line.
 - [ ] **Step 2: Rename "CR Link" label to "CR Number"**
 
 Find (around line 661):
+
 ```svelte
                 <label class="pd-meta-label" for="meta-cr-link">CR Link</label>
 ```
 
 Replace with:
+
 ```svelte
                 <label class="pd-meta-label" for="meta-cr-link">CR Number</label>
 ```
@@ -236,6 +248,7 @@ git commit -m "fix(polish): restructure Identity — CR Number + CR State inline
 ## Task 3: Sub Project Table — Dashboard parity columns, row-click opens folder
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/SubProjectTable.svelte`
 
 - [ ] **Step 1: Update table columns and row-click behavior**
@@ -279,35 +292,70 @@ Replace the entire `<div class="sp-table">` block in `SubProjectTable.svelte` wi
 - [ ] **Step 2: Add `droneLink` back to Row interface**
 
 In the `<script>` section of `SubProjectTable.svelte`, update the `Row` interface:
-```ts
-  interface Row {
-    name: string;
-    droneLink: string;
-    droneState: string;
-  }
 
-  const rows = $derived<Row[]>(
-    subprojects.map((name) => {
-      const drone = droneTickets.find((t) => (t.subfolder_name ?? "") === name);
-      return { name, droneLink: drone?.drone_link ?? "", droneState: drone?.drone_state ?? "" };
-    }),
-  );
+```ts
+interface Row {
+  name: string;
+  droneLink: string;
+  droneState: string;
+}
+
+const rows = $derived<Row[]>(
+  subprojects.map((name) => {
+    const drone = droneTickets.find((t) => (t.subfolder_name ?? "") === name);
+    return {
+      name,
+      droneLink: drone?.drone_link ?? "",
+      droneState: drone?.drone_state ?? "",
+    };
+  }),
+);
 ```
 
 - [ ] **Step 3: Update grid template to 3 columns**
 
 In `<style>`, change:
+
 ```css
-  .sp-tr { display: grid; grid-template-columns: 1fr 1.1fr auto; gap: 8px; align-items: center; padding: 7px 8px; border-top: 1px solid #E5E7EB; font-size: 10px; font-weight: 750; color: var(--color-ink); }
+.sp-tr {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  font-weight: 750;
+  color: var(--color-ink);
+}
 ```
+
 to:
+
 ```css
-  .sp-tr { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr; gap: 8px; align-items: center; padding: 7px 8px; border-top: 1px solid #E5E7EB; font-size: 10px; font-weight: 750; color: var(--color-ink); }
+.sp-tr {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 0.8fr;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  font-weight: 750;
+  color: var(--color-ink);
+}
 ```
 
 Also add:
+
 ```css
-  .sp-link { font-family: monospace; color: var(--color-dbs-red); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-link {
+  font-family: monospace;
+  color: var(--color-dbs-red);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 ```
 
 - [ ] **Step 4: Run check + tests, commit**
@@ -326,107 +374,119 @@ git commit -m "fix(polish): Sub Project table matches Dashboard parity — 3 col
 ## Task 4: Notes — debounced markdown sync + checklist bug fix
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/NotesEditor.svelte`
 
 - [ ] **Step 1: Remove `syncToMarkdown()` from `onEditorInput`**
 
 Find (around lines 141-143):
+
 ```ts
-  function onEditorInput() {
-    syncToMarkdown();
-  }
+function onEditorInput() {
+  syncToMarkdown();
+}
 ```
 
 Replace with:
+
 ```ts
-  function onEditorInput() {
-    scheduleSave();
-  }
+function onEditorInput() {
+  scheduleSave();
+}
 ```
 
 - [ ] **Step 2: Update `scheduleSave` to convert HTML→Markdown on timer fire**
 
 Find (around lines 46-50):
+
 ```ts
-  function scheduleSave() {
-    status = "pending";
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(flush, AUTOSAVE_MS);
-  }
+function scheduleSave() {
+  status = "pending";
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(flush, AUTOSAVE_MS);
+}
 ```
 
 Replace with:
+
 ```ts
-  function scheduleSave() {
-    status = "pending";
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
-      flush();
-    }, AUTOSAVE_MS);
-  }
+function scheduleSave() {
+  status = "pending";
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => {
+    if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
+    flush();
+  }, AUTOSAVE_MS);
+}
 ```
 
 - [ ] **Step 3: Update `onEditorBlur` to convert before flush**
 
 Find (around lines 145-147):
+
 ```ts
-  function onEditorBlur() {
-    if (status === "pending") flush();
-  }
+function onEditorBlur() {
+  if (status === "pending") flush();
+}
 ```
 
 Replace with:
+
 ```ts
-  function onEditorBlur() {
-    if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
-    if (status === "pending" || timer) {
-      if (timer) { clearTimeout(timer); timer = undefined; }
-      flush();
+function onEditorBlur() {
+  if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
+  if (status === "pending" || timer) {
+    if (timer) {
+      clearTimeout(timer);
+      timer = undefined;
     }
+    flush();
   }
+}
 ```
 
 - [ ] **Step 4: Fix checklist insertion — ensure cursor is inside editor**
 
 Find `formatChecklist` (around lines 192-203):
+
 ```ts
-  function formatChecklist() {
-    const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    const fragment = range.createContextualFragment(html);
-    range.insertNode(fragment);
-    
-    // Bind change listener on newly created checkbox
-    setTimeout(bindCheckboxListeners, 50);
-    syncToMarkdown();
-  }
+function formatChecklist() {
+  const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  const fragment = range.createContextualFragment(html);
+  range.insertNode(fragment);
+
+  // Bind change listener on newly created checkbox
+  setTimeout(bindCheckboxListeners, 50);
+  syncToMarkdown();
+}
 ```
 
 Replace with:
+
 ```ts
-  function formatChecklist() {
-    if (!editorEl) return;
-    editorEl.focus();
-    const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) {
+function formatChecklist() {
+  if (!editorEl) return;
+  editorEl.focus();
+  const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) {
+    editorEl.insertAdjacentHTML("beforeend", html);
+  } else {
+    const range = sel.getRangeAt(0);
+    if (!editorEl.contains(range.commonAncestorContainer)) {
       editorEl.insertAdjacentHTML("beforeend", html);
     } else {
-      const range = sel.getRangeAt(0);
-      if (!editorEl.contains(range.commonAncestorContainer)) {
-        editorEl.insertAdjacentHTML("beforeend", html);
-      } else {
-        const fragment = range.createContextualFragment(html);
-        range.insertNode(fragment);
-      }
+      const fragment = range.createContextualFragment(html);
+      range.insertNode(fragment);
     }
-    editorEl.focus();
-    setTimeout(bindCheckboxListeners, 50);
-    scheduleSave();
   }
+  editorEl.focus();
+  setTimeout(bindCheckboxListeners, 50);
+  scheduleSave();
+}
 ```
 
 - [ ] **Step 5: Run check + tests, commit**
@@ -445,12 +505,14 @@ git commit -m "fix(polish): debounced markdown sync prevents cursor jump; checkl
 ## Task 5: Header — calendar icon + button polish
 
 **Files:**
+
 - Modify: `frontend/src/lib/components/Header.svelte`
 - Modify: `frontend/src/styles.css`
 
 - [ ] **Step 1: Replace clock glyph with calendar SVG in Header.svelte**
 
 Find (around lines 121-130):
+
 ```svelte
     <div class="date-time-badge" aria-label={`Current date and time: ${nowText.date} ${nowText.time}`}>
       <span class="datetime-glyph" aria-hidden="true">
@@ -465,6 +527,7 @@ Find (around lines 121-130):
 ```
 
 Replace with:
+
 ```svelte
     <div class="date-time-badge" aria-label={`Current date and time: ${nowText.date} ${nowText.time}`}>
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="datetime-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -478,11 +541,13 @@ Replace with:
 - [ ] **Step 2: Replace search icon glyph with SVG**
 
 Find (around line 158):
+
 ```svelte
         <span class="search-icon">⌕</span>
 ```
 
 Replace with:
+
 ```svelte
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
 ```
@@ -490,11 +555,13 @@ Replace with:
 - [ ] **Step 3: Replace refresh button glyph with SVG**
 
 Find (around line 163):
+
 ```svelte
     <button class="refresh-button" title="Refresh Data" onclick={triggerRefresh}><span class:spinning>↻</span></button>
 ```
 
 Replace with:
+
 ```svelte
     <button class="refresh-button" title="Refresh Data" onclick={triggerRefresh}><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:spinning><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
 ```
@@ -502,11 +569,13 @@ Replace with:
 - [ ] **Step 4: Replace Add Project button text with SVG + text**
 
 Find (around line 161):
+
 ```svelte
       <button class="btn-black" class:hidden={!cfg.add} onclick={() => onAddProject()}>＋ Add Project</button>
 ```
 
 Replace with:
+
 ```svelte
       <button class="btn-black" class:hidden={!cfg.add} onclick={() => onAddProject()}>
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -517,35 +586,105 @@ Replace with:
 - [ ] **Step 5: Polish CSS for header buttons in styles.css**
 
 Find `.btn-black` rule (around line 344 in styles.css):
+
 ```css
-.btn-black { background: var(--black-chrome); color: #fff; border-color: var(--black-chrome); padding: 0 16px; box-shadow: var(--shadow-button); }
+.btn-black {
+  background: var(--black-chrome);
+  color: #fff;
+  border-color: var(--black-chrome);
+  padding: 0 16px;
+  box-shadow: var(--shadow-button);
+}
 ```
 
 Replace with:
+
 ```css
-.btn-black { background: #fff; color: var(--text-strong); border: 1px solid var(--soft-white-border); padding: 0 14px; box-shadow: none; transition: border-color .15s ease, color .15s ease; }
-.btn-black:hover { border-color: var(--primary-red); color: var(--primary-red); }
+.btn-black {
+  background: #fff;
+  color: var(--text-strong);
+  border: 1px solid var(--soft-white-border);
+  padding: 0 14px;
+  box-shadow: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.btn-black:hover {
+  border-color: var(--primary-red);
+  color: var(--primary-red);
+}
 ```
 
 Find `.refresh-button` rule (around line 352):
+
 ```css
-.refresh-button, .btn-refresh { width: 28px; min-width: 28px; height: 26px; background: #fff; color: var(--primary-red); border-color: var(--black-chrome); box-shadow: 0 2px 9px rgba(0,0,0,.30); font-size: 15px; padding: 0; }
+.refresh-button,
+.btn-refresh {
+  width: 28px;
+  min-width: 28px;
+  height: 26px;
+  background: #fff;
+  color: var(--primary-red);
+  border-color: var(--black-chrome);
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.3);
+  font-size: 15px;
+  padding: 0;
+}
 ```
 
 Replace with:
+
 ```css
-.refresh-button, .btn-refresh { width: 30px; min-width: 30px; height: 28px; background: #fff; color: var(--text-strong); border: 1px solid var(--soft-white-border); box-shadow: none; padding: 0; display: inline-flex; align-items: center; justify-content: center; transition: border-color .15s ease, color .15s ease; }
-.refresh-button:hover, .btn-refresh:hover { border-color: var(--primary-red); color: var(--primary-red); }
+.refresh-button,
+.btn-refresh {
+  width: 30px;
+  min-width: 30px;
+  height: 28px;
+  background: #fff;
+  color: var(--text-strong);
+  border: 1px solid var(--soft-white-border);
+  box-shadow: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.refresh-button:hover,
+.btn-refresh:hover {
+  border-color: var(--primary-red);
+  color: var(--primary-red);
+}
 ```
 
 Find `.search-shell .search-icon` rule (around line 326):
+
 ```css
-.search-shell .search-icon, .header-search .search-icon { position: absolute; left: 8px; top: 5px; font-weight: 900; color: var(--text-strong); pointer-events: none; }
+.search-shell .search-icon,
+.header-search .search-icon {
+  position: absolute;
+  left: 8px;
+  top: 5px;
+  font-weight: 900;
+  color: var(--text-strong);
+  pointer-events: none;
+}
 ```
 
 Replace with:
+
 ```css
-.search-shell .search-icon, .header-search .search-icon { position: absolute; left: 8px; top: 5px; color: var(--text-secondary); pointer-events: none; }
+.search-shell .search-icon,
+.header-search .search-icon {
+  position: absolute;
+  left: 8px;
+  top: 5px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
 ```
 
 - [ ] **Step 6: Run check + tests, commit**
@@ -564,18 +703,21 @@ git commit -m "fix(polish): calendar SVG icon, Notion-like button styling for he
 ## Task 6: Update test assertions + final verification
 
 **Files:**
+
 - Modify: `frontend/tests/project-details-fase1.test.mjs`
 
 - [ ] **Step 1: Update assertions for Back button now in toolbar (not pd-back-bar)**
 
 Find in `project-details-fase1.test.mjs`:
+
 ```js
-  assert.match(PD, /<svg[^>]*pd-icon-back/);
+assert.match(PD, /<svg[^>]*pd-icon-back/);
 ```
 
 Replace with:
+
 ```js
-  assert.match(PD, /Back to Dashboard|Back"/);
+assert.match(PD, /Back to Dashboard|Back"/);
 ```
 
 - [ ] **Step 2: Run full suite + build**
@@ -586,6 +728,7 @@ npm run check
 npm test 2>&1 | tail -10
 npm run build 2>&1 | tail -5
 ```
+
 Expected: 0 errors, all tests pass (except pre-existing parity if any), build succeeds.
 
 - [ ] **Step 3: Commit**
@@ -601,6 +744,7 @@ git commit -m "test(polish): update assertions for Back button in toolbar"
 ## Self-Review
 
 **Spec coverage:**
+
 - 1.1 Sub Project dropdown restored → Task 1 Step 3 ✓
 - 1.2 Subtitle removed → Task 1 Step 2 ✓
 - 1.3 Back button moved to toolbar → Task 1 Steps 1+3 ✓
