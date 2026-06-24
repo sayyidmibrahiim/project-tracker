@@ -28,7 +28,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from project_tracker.services.second_brain_service import (
+from services.second_brain_service import (
     SecondBrainItem,
     SecondBrainService,
 )

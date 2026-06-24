@@ -31,7 +31,7 @@ def test_app_web_exposes_create_js_api_factory():
 def test_create_js_api_returns_JsApi_instance():
     """create_js_api() must return a JsApi instance."""
     from project_tracker import app_web
-    from project_tracker.web.js_api import JsApi
+    from web.js_api import JsApi
 
     api = app_web.create_js_api()
     assert isinstance(api, JsApi), (

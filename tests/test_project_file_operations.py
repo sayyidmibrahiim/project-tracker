@@ -37,8 +37,8 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.infrastructure import filesystem as infra_fs
-from project_tracker.infrastructure.settings_store import SettingsStore
+from infrastructure import filesystem as infra_fs
+from infrastructure.settings_store import SettingsStore
 
 
 # ── helpers / fixtures ────────────────────────────────────────────────────

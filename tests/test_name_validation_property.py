@@ -9,9 +9,9 @@ Design Correctness Property 6 (prd-completion design.md):
 
 This property is exercised against both name validators in the codebase:
 
-* ``project_tracker.core.rules.validate_windows_folder_name`` — folder names,
+* ``core.rules.validate_windows_folder_name`` — folder names,
   forbidden chars ``\\ / : * ? " < > |``, raises ``InvalidFolderNameError``.
-* ``project_tracker.infrastructure.filesystem.validate_file_name`` — file
+* ``infrastructure.filesystem.validate_file_name`` — file
   names, forbidden chars ``< > : " / \\ | ? *``, raises
   ``InvalidFileNameError``.
 
@@ -34,16 +34,16 @@ from typing import Callable
 
 import pytest
 
-from project_tracker.core.exceptions import (
+from core.exceptions import (
     InvalidFileNameError,
     InvalidFolderNameError,
 )
-from project_tracker.core.rules import (
+from core.rules import (
     WINDOWS_INVALID_FOLDER_CHARS,
     WINDOWS_RESERVED_NAMES,
     validate_windows_folder_name,
 )
-from project_tracker.infrastructure.filesystem import (
+from infrastructure.filesystem import (
     FILE_NAME_INVALID_CHARS,
     MAX_FILE_NAME_LENGTH,
     validate_file_name,

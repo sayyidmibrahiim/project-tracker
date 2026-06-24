@@ -8,7 +8,7 @@ from pathlib import Path
 def test_create_js_api_wires_linkbank_get_with_temp_store(tmp_path: Path) -> None:
     """create_js_api() must wire LinkBankStore so linkbank_get() returns data."""
     from project_tracker import app_web
-    from project_tracker.infrastructure.link_bank_store import LinkBank, LinkBankStore
+    from infrastructure.link_bank_store import LinkBank, LinkBankStore
 
     link_bank_path = tmp_path / "link_bank.json"
     store = LinkBankStore(link_bank_path)

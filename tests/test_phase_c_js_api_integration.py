@@ -3,8 +3,8 @@
 import importlib
 import sys
 
-from project_tracker.web import js_api
-from project_tracker.web.js_api import JsApi, poll_events
+from web import js_api
+from web.js_api import JsApi, poll_events
 
 
 def test_js_api_surface_keeps_existing_methods_and_new_facades():

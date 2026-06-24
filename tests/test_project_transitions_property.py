@@ -41,21 +41,21 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import (
+from core.enums import CRState, DroneState, ProjectState
+from core.models import (
     AppSettings,
     DroneTicket,
     HistoryEntry,
     ProjectMetadata,
     local_now,
 )
-from project_tracker.core.state_machine import (
+from core.state_machine import (
     PROJECT_STATE_TRANSITIONS,
     REOPEN_ALLOWED_FOLDER_STATES,
 )
-from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from infrastructure.cache_db import CacheDb, rebuild_year_cache
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
 
 # ── transition catalogue ────────────────────────────────────────────────
 # Maps each guarded bridge transition to the Folder_State it targets. ``reopen``
@@ -319,7 +319,7 @@ def test_property_mid_move_failure_rolls_back_with_no_cache_update(
         raise OSError("simulated mid-move failure")
 
     monkeypatch.setattr(
-        "project_tracker.services.project_service.shutil.move", _boom
+        "services.project_service.shutil.move", _boom
     )
 
     result = getattr(api, scenario.transition)(str(project_path))

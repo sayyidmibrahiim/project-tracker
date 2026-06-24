@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.exceptions import PathOutsideBaseError
-from project_tracker.infrastructure import filesystem
+from core.exceptions import PathOutsideBaseError
+from infrastructure import filesystem
 
 
 def test_target_strictly_within_base_is_returned_verbatim(tmp_path: Path) -> None:

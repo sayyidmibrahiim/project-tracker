@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import ProjectState
-from project_tracker.web.js_api import JsApi
+from core.enums import ProjectState
+from web.js_api import JsApi
 
 
 @dataclass(frozen=True)

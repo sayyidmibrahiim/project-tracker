@@ -17,10 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import DroneTicket, ProjectMetadata
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from core.enums import CRState, DroneState, ProjectState
+from core.models import DroneTicket, ProjectMetadata
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
 
 
 @pytest.fixture

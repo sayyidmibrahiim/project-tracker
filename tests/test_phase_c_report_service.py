@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.services.report_service import ReportService
+from core.enums import CRState, ProjectState
+from services.report_service import ReportService
 
 
 @dataclass(frozen=True)

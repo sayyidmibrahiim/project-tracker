@@ -28,8 +28,8 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.exceptions import PathOutsideBaseError
-from project_tracker.infrastructure import filesystem
+from core.exceptions import PathOutsideBaseError
+from infrastructure import filesystem
 
 # Names used to build path segments. Deliberately disjoint from the seeded
 # fixture file names so a generated destination never collides with setup data.

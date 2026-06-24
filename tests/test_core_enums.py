@@ -1,4 +1,4 @@
-from project_tracker.core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, ProjectState
 
 
 def test_project_state_contains_prd_folder_states() -> None:

@@ -5,9 +5,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.web import js_api
-from project_tracker.web.js_api import JsApi
+from core.enums import CRState, ProjectState
+from web import js_api
+from web.js_api import JsApi
 
 
 @dataclass(frozen=True)

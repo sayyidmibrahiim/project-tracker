@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import pytest
 
-from project_tracker.infrastructure.settings_store import SettingsStore
-from project_tracker.services.scheduler_service import (
+from infrastructure.settings_store import SettingsStore
+from services.scheduler_service import (
     SchedulerEntryError,
     SchedulerService,
 )
-from project_tracker.web.js_api import JsApi
+from web.js_api import JsApi
 
 
 class _FakeScheduler:

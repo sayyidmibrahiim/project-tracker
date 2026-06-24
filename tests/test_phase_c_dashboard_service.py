@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import ProjectMetadata
-from project_tracker.core.rules import extract_drone_ticket
-from project_tracker.infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.services.dashboard_service import (
+from core.enums import CRState, DroneState, ProjectState
+from core.models import ProjectMetadata
+from core.rules import extract_drone_ticket
+from infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
+from infrastructure.metadata_store import MetadataStore
+from services.dashboard_service import (
     DashboardData,
     DashboardDroneTicket,
     DashboardProject,

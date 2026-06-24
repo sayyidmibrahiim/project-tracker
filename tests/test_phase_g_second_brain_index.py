@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.infrastructure.settings_store import SettingsStore
+from infrastructure.settings_store import SettingsStore
 
 
 @pytest.fixture

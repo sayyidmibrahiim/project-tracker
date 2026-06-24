@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from project_tracker.core.models import DownloadEmailJob, local_now
-from project_tracker.services.download_email_service import DownloadEmailWorker
+from core.models import DownloadEmailJob, local_now
+from services.download_email_service import DownloadEmailWorker
 
 
 class FakeAttachment:

@@ -44,7 +44,7 @@ def hook(payload: dict) -> dict | None:
                 "stopReason": (
                     "BLOCKED wrong-root run. App/tests/build/graphify must run from "
                     f"{REPO_ROOT}, not .claude/worktrees/*. User runs app with: "
-                    "D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m project_tracker.main. "
+                    "D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main. "
                     "Re-run using repo-root absolute paths or start the session from repo root."
                 ),
             }

@@ -2,9 +2,9 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState
-from project_tracker.core.models import DroneTicket, ProjectMetadata
-from project_tracker.core.rules import (
+from core.enums import CRState, DroneState
+from core.models import DroneTicket, ProjectMetadata
+from core.rules import (
     is_in_deployment_window,
     should_auto_start_cr,
     should_auto_start_drone,

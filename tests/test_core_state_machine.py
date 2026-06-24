@@ -1,8 +1,8 @@
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.exceptions import InvalidTransitionError
-from project_tracker.core.state_machine import (
+from core.enums import CRState, DroneState, ProjectState
+from core.exceptions import InvalidTransitionError
+from core.state_machine import (
     drones_blocking_finish,
     reopen_project_state,
     resolve_auto_move,

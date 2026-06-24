@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.exceptions import (
+from core.exceptions import (
     FileTargetExistsError,
     PathOutsideBaseError,
 )
-from project_tracker.services import second_brain_service as sbs_module
-from project_tracker.services.second_brain_service import (
+from services import second_brain_service as sbs_module
+from services.second_brain_service import (
     SecondBrainItem,
     SecondBrainService,
 )

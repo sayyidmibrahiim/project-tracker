@@ -29,16 +29,16 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState
-from project_tracker.core.models import (
+from core.enums import CRState
+from core.models import (
     AppSettings,
     EmailCategorySettings,
     EmailSettings,
     ProjectMetadata,
 )
-from project_tracker.infrastructure import outlook_client
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from infrastructure import outlook_client
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
 
 # The download / contacts dev-skip and dev-fallback behaviour is the off-Windows
 # guard; on Windows these would execute COM and are covered by the manual gate.
@@ -238,7 +238,7 @@ def test_download_emails_off_windows_is_dev_skipped(env, monkeypatch):
     folder = _make_project(env, metadata=_full_metadata())
 
     # No background worker may be started off-Windows: fail if start_job is hit.
-    from project_tracker.services.download_email_service import DownloadEmailService
+    from services.download_email_service import DownloadEmailService
 
     def _boom(*_args, **_kwargs):  # pragma: no cover - asserts worker not started
         raise AssertionError("download worker must not start off-Windows")

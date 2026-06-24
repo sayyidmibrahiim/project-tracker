@@ -12,7 +12,7 @@
  * Source of truth: PRD §9.5 "Folder State Locking Rules".
  */
 
-/** Folder_State values, mirroring `project_tracker.core.enums.ProjectState`. */
+/** Folder_State values, mirroring `core.enums.ProjectState`. */
 export type FolderState =
   | "UAT_PREPARE"
   | "PROD_READY"

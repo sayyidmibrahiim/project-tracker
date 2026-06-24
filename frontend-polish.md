@@ -37,7 +37,7 @@ For Project Tracker DBS, follow this priority:
 1. `PRD.md` — product and business truth.
 2. `PROJECT_STATUS.md` — migration and implementation status truth.
 3. root `CLAUDE.md` — repository and process rules.
-4. `project_tracker/web/js_api.py` + tests — bridge/API contract truth.
+4. `web/js_api.py` + tests — bridge/API contract truth.
 5. Current frontend files — implementation target.
 6. HTML/PyQt visual references — visual/supporting references.
 7. This `frontend-polish.md` — supplemental polish guide only.

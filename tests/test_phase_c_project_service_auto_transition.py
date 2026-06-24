@@ -3,9 +3,9 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, DroneState
-from project_tracker.core.models import AppSettings, DroneTicket, ProjectMetadata
-from project_tracker.services.project_service import ProjectService
+from core.enums import CRState, DroneState
+from core.models import AppSettings, DroneTicket, ProjectMetadata
+from services.project_service import ProjectService
 
 
 class FakeMetadataStore:

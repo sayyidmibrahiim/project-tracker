@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from project_tracker.web.event_queue import (
+from web.event_queue import (
     clear_events,
     drain_events,
     push_event,

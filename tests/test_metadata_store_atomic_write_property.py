@@ -27,8 +27,8 @@ from typing import Any
 
 import pytest
 
-from project_tracker.core.exceptions import AtomicWriteError
-from project_tracker.infrastructure.metadata_store import atomic_write_json
+from core.exceptions import AtomicWriteError
+from infrastructure.metadata_store import atomic_write_json
 
 # Number of randomized examples explored per property. Kept modest so the suite
 # stays fast while still covering a broad slice of the input space.

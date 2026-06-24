@@ -1,6 +1,6 @@
 """Phase C.4a — SchedulerService foundation tests."""
 
-from project_tracker.services.scheduler_service import SchedulerService
+from services.scheduler_service import SchedulerService
 
 
 class FakeScheduler:

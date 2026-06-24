@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from project_tracker.core.enums import CRState, DroneState
-from project_tracker.core.models import DroneTicket, ProjectMetadata
-from project_tracker.core.rules import (
+from core.enums import CRState, DroneState
+from core.models import DroneTicket, ProjectMetadata
+from core.rules import (
     compute_h10,
     h10_reminder_due,
     validate_cr_approved_requires_drones,

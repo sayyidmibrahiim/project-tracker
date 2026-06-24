@@ -47,13 +47,13 @@ pytestmark = pytest.mark.skipif(
     reason="Validates off-Windows guarded dev path; on the Windows target native automation runs live.",
 )
 
-from project_tracker.infrastructure import outlook_client, teams_client
-from project_tracker.infrastructure.outlook_client import (
+from infrastructure import outlook_client, teams_client
+from infrastructure.outlook_client import (
     create_draft_email,
     get_contacts,
     send_email,
 )
-from project_tracker.infrastructure.teams_client import send_teams_message
+from infrastructure.teams_client import send_teams_message
 
 # Number of randomized examples explored per property. Kept modest so the suite
 # stays fast while still covering a broad slice of the argument space.

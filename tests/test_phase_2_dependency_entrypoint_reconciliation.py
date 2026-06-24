@@ -73,12 +73,12 @@ def test_pyproject_has_pep517_build_system() -> None:
 
 
 def test_project_tracker_main_calls_app_web_run() -> None:
-    source = (ROOT / "project_tracker" / "main.py").read_text(encoding="utf-8")
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
 
     imports_run = any(
         isinstance(node, ast.ImportFrom)
-        and node.module == "project_tracker.app_web"
+        and node.module == "app_web"
         and any(alias.name == "run" for alias in node.names)
         for node in tree.body
     )
@@ -105,6 +105,6 @@ def test_project_tracker_main_calls_app_web_run() -> None:
 def test_pyinstaller_spec_uses_project_tracker_main_entry_script() -> None:
     spec_text = (ROOT / "project_tracker_dbs.spec").read_text(encoding="utf-8")
 
-    assert 'ENTRY_SCRIPT = str(REPO_ROOT / "project_tracker" / "main.py")' in spec_text
+    assert 'ENTRY_SCRIPT = str(REPO_ROOT / "main.py")' in spec_text
     assert "ENTRY_SCRIPT" in spec_text
     assert "Analysis(" in spec_text

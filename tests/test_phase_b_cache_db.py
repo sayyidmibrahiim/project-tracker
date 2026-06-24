@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
+from core.enums import CRState, DroneState, ProjectState
+from infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
 
 
 def _project_row(
@@ -359,7 +359,7 @@ def test_replace_projects_for_year_removes_stale_drone_rows_for_removed_projects
 
 
 def test_notification_insert_and_list_round_trip_preserves_dismissed(tmp_path: Path) -> None:
-    from project_tracker.core.models import Notification, local_now
+    from core.models import Notification, local_now
 
     cache = CacheDb(tmp_path / "cache.sqlite3")
     cache.initialize()
@@ -384,7 +384,7 @@ def test_notification_insert_and_list_round_trip_preserves_dismissed(tmp_path: P
 
 
 def test_notification_set_dismissed_persists(tmp_path: Path) -> None:
-    from project_tracker.core.models import Notification, local_now
+    from core.models import Notification, local_now
 
     cache = CacheDb(tmp_path / "cache.sqlite3")
     cache.initialize()
@@ -408,7 +408,7 @@ def test_notification_set_dismissed_persists(tmp_path: Path) -> None:
 
 
 def test_notification_service_persists_and_reloads_dismissed_state(tmp_path: Path) -> None:
-    from project_tracker.services.notification_service import NotificationService
+    from services.notification_service import NotificationService
 
     db_path = tmp_path / "cache.sqlite3"
     cache = CacheDb(db_path)

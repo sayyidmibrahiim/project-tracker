@@ -311,7 +311,7 @@ Verification:
 - `.\.venv\Scripts\python.exe -m pytest tests/test_scheduler_entries_unit.py -q` — PASS (`12 passed`).
 - `.\.venv\Scripts\python.exe -m pytest tests/test_phase_d_app_web_svelte_static_serving.py -q` — PASS (`6 passed`).
 - `.\.venv\Scripts\python.exe -m pytest tests/ -q` — PASS (`1725 passed, 20 skipped`).
-- `.\.venv\Scripts\python.exe -m project_tracker.main` live HTTP probe — PASS (`/index.html` 200, built app HTML present, JS asset 200).
+- `.\.venv\Scripts\python.exe -m main` live HTTP probe — PASS (`/index.html` 200, built app HTML present, JS asset 200).
 
 Next: Phase 2 dependency & entry-point reconciliation.
 
@@ -327,7 +327,7 @@ Status: completed / verified on Windows dev machine.
   reference-only under `redesign_ui/` and is excluded from PyInstaller.
 - Minimal PEP 517 build metadata added to `pyproject.toml`.
 - P0-4: canonical app entry point reaffirmed as
-  `.\.venv\Scripts\python.exe -m project_tracker.main`, which calls
+  `.\.venv\Scripts\python.exe -m main`, which calls
   `project_tracker.app_web.run()`. PyInstaller continues to use
   `project_tracker/main.py` as `ENTRY_SCRIPT`.
 - PRD conflict noted: PRD §3.2 still shows root `app_web.py` examples; current
@@ -343,7 +343,7 @@ Verification:
 - `.\.venv\Scripts\python.exe -m py_compile project_tracker\app_web.py project_tracker\web\js_api.py project_tracker\main.py scripts\package.py` — PASS.
 - `.\.venv\Scripts\python.exe -m pytest tests\test_phase_2_dependency_entrypoint_reconciliation.py -q` — PASS (`6 passed`).
 - `.\.venv\Scripts\python.exe -m pytest tests\ -q` — PASS (`1731 passed, 20 skipped`).
-- `.\.venv\Scripts\python.exe -m project_tracker.main` live HTTP probe — PASS (`/index.html` 200, JS asset 200).
+- `.\.venv\Scripts\python.exe -m main` live HTTP probe — PASS (`/index.html` 200, JS asset 200).
 
 Next: Phase 3 per cleanup/audit queue.
 
@@ -366,7 +366,7 @@ Verification:
 - `.\.venv\Scripts\python.exe -m pytest tests\ -q` — PASS (`1732 passed, 20 skipped`).
 - `npm --prefix frontend run build` — PASS (`vite build` completed in 3.35s).
 - `npm --prefix frontend run check` — PASS (`110 FILES 0 ERRORS 0 WARNINGS`).
-- `.\.venv\Scripts\python.exe -m project_tracker.main` live HTTP probe — PASS (`/index.html` 200, JS asset 200).
+- `.\.venv\Scripts\python.exe -m main` live HTTP probe — PASS (`/index.html` 200, JS asset 200).
 - `graphify update .` — PASS (`graph.json` and `GRAPH_REPORT.md` updated; HTML skipped because graph has 5462 nodes > 5000 limit).
 
 Next: Phase 4 cleanup queue.

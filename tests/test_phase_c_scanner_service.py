@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.core.models import ProjectMetadata
-from project_tracker.infrastructure.cache_db import CacheDb, CachedProjectRow
-from project_tracker.infrastructure.metadata_store import METADATA_FILE, MetadataStore
-from project_tracker.services.scanner_service import ScannerService, ScanYearResult
+from core.enums import CRState, ProjectState
+from core.models import ProjectMetadata
+from infrastructure.cache_db import CacheDb, CachedProjectRow
+from infrastructure.metadata_store import METADATA_FILE, MetadataStore
+from services.scanner_service import ScannerService, ScanYearResult
 
 
 def _cache(tmp_path: Path) -> CacheDb:

@@ -20,13 +20,13 @@ from __future__ import annotations
 import sys
 import types
 
-from project_tracker.infrastructure import teams_client
-from project_tracker.infrastructure.teams_client import (
+from infrastructure import teams_client
+from infrastructure.teams_client import (
     DEFAULT_COUNTDOWN_SECONDS,
     normalize_countdown_seconds,
     send_teams_message,
 )
-from project_tracker.services.teams_service import (
+from services.teams_service import (
     TeamsMessage,
     TeamsService,
     build_message_text,

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.models import Notification
-from project_tracker.services.notification_service import NotificationService
-from project_tracker.web.event_queue import clear_events, drain_events
+from core.models import Notification
+from services.notification_service import NotificationService
+from web.event_queue import clear_events, drain_events
 
 
 @pytest.fixture(autouse=True)

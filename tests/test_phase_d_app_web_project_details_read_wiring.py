@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.core.models import ProjectMetadata
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from core.enums import CRState, ProjectState
+from core.models import ProjectMetadata
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ def test_folder_move_still_deferred(js_api):
 
 def test_project_open_folder_wired_and_returns_ok(js_api, temp_project, monkeypatch):
     """project_open_folder delegates to filesystem.open_folder."""
-    from project_tracker.infrastructure import filesystem
+    from infrastructure import filesystem
 
     opened: list[Path] = []
     monkeypatch.setattr(filesystem, "open_folder", lambda path: opened.append(Path(path)))

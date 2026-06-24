@@ -25,13 +25,13 @@ import random
 
 import pytest
 
-from project_tracker.infrastructure.cache_db import CacheDb
-from project_tracker.infrastructure.settings_store import SettingsStore
-from project_tracker.services.automation_service import (
+from infrastructure.cache_db import CacheDb
+from infrastructure.settings_store import SettingsStore
+from services.automation_service import (
     SUPPORTED_ACTION_TYPES,
     AutomationService,
 )
-from project_tracker.web.js_api import JsApi
+from web.js_api import JsApi
 
 
 # ---------------------------------------------------------------------------

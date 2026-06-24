@@ -22,18 +22,18 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.exceptions import InvalidTransitionError
-from project_tracker.core.models import (
+from core.enums import CRState, DroneState, ProjectState
+from core.exceptions import InvalidTransitionError
+from core.models import (
     AppSettings,
     DroneTicket,
     ProjectMetadata,
     local_now,
 )
-from project_tracker.core.rules import TransitionGuardResult
-from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.services.project_service import ProjectService
+from core.rules import TransitionGuardResult
+from infrastructure.cache_db import CacheDb, rebuild_year_cache
+from infrastructure.metadata_store import MetadataStore
+from services.project_service import ProjectService
 
 YEAR = "2026"
 PROJECT_NAME = "PROJECT_A"

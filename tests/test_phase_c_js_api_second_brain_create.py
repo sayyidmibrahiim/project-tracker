@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.services.second_brain_service import SecondBrainService
-from project_tracker.web.js_api import JsApi
+from services.second_brain_service import SecondBrainService
+from web.js_api import JsApi
 
 
 def _service_with_root(tmp_root: Path) -> SecondBrainService:

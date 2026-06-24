@@ -318,7 +318,7 @@ npm --prefix frontend run build
 
 Run the desktop app (pywebview, from repository root):
 
-.\.venv\Scripts\python.exe -m project_tracker.main
+.\.venv\Scripts\python.exe -m main
 
 The production frontend is served from web/static/ (built by `npm --prefix frontend run build`). A prebuilt web/static/ is included in this copy, so the app runs immediately after installing Python deps. Rebuild it whenever frontend source changes.
 
@@ -465,9 +465,9 @@ Target architecture:
 
 frontend/ Svelte UI
 -> pywebview JsApi bridge
--> project_tracker/services/
--> project_tracker/core/
--> project_tracker/infrastructure/
+-> services/
+-> core/
+-> infrastructure/
 
 Dependency rules:
 
@@ -576,7 +576,7 @@ The real project root is `D:/Ibrahim/Projects/project_tracker`. The user launche
 - Always run app/tests/build/graphify against `D:/Ibrahim/Projects/project_tracker`.
 - If Claude is invoked from `.claude/worktrees/*`, do **not** run the app there for runtime comparison; it may compare a stale/different UI and waste tokens.
 - All runtime verification must use the same command the user uses:
-  `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m project_tracker.main`
+  `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main`
 - Python tests must use the repo-root venv:
   `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/ ...`
 - Frontend commands must run from repo root or target repo root:

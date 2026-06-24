@@ -36,7 +36,7 @@ if sys.platform != "win32":
 # directory containing this spec file (the repo root).
 REPO_ROOT = Path(SPECPATH).resolve()  # noqa: F821  (SPECPATH injected by PyInstaller)
 
-ENTRY_SCRIPT = str(REPO_ROOT / "project_tracker" / "main.py")
+ENTRY_SCRIPT = str(REPO_ROOT / "main.py")
 STATIC_DIR = REPO_ROOT / "web" / "static"
 ASSETS_DIR = REPO_ROOT / "assets"
 

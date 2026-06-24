@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from project_tracker.core.enums import ProjectState
-from project_tracker.infrastructure.settings_store import SettingsStore
+from core.enums import ProjectState
+from infrastructure.settings_store import SettingsStore
 
 
 def _api_with_root(tmp_path: Path):

@@ -1,6 +1,6 @@
 """Phase C.5f — JsApi scheduler facade tests (TDD: RED first)."""
 
-from project_tracker.web.js_api import JsApi
+from web.js_api import JsApi
 
 
 class FakeSchedulerService:

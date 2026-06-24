@@ -6,13 +6,13 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.core.models import AppSettings, ProjectMetadata
-from project_tracker.infrastructure import filesystem
-from project_tracker.infrastructure.filesystem import ensure_year_structure, scan_year
-from project_tracker.infrastructure.link_bank_store import LinkBank, LinkBankStore
-from project_tracker.infrastructure.metadata_store import METADATA_FILE, MetadataStore
-from project_tracker.infrastructure.settings_store import SETTINGS_FILE, SettingsStore
+from core.enums import CRState, ProjectState
+from core.models import AppSettings, ProjectMetadata
+from infrastructure import filesystem
+from infrastructure.filesystem import ensure_year_structure, scan_year
+from infrastructure.link_bank_store import LinkBank, LinkBankStore
+from infrastructure.metadata_store import METADATA_FILE, MetadataStore
+from infrastructure.settings_store import SETTINGS_FILE, SettingsStore
 
 import pytest
 

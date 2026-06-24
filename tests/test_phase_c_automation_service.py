@@ -2,7 +2,7 @@
 
 import pytest
 
-from project_tracker.services.automation_service import (
+from services.automation_service import (
     AutomationRuleResult,
     AutomationService,
 )

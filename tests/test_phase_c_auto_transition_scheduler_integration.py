@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from project_tracker.core.enums import CRState
-from project_tracker.core.models import AppSettings
-from project_tracker.services.auto_transition_service import AutoTransitionService
-from project_tracker.web.event_queue import clear_events, drain_events
+from core.enums import CRState
+from core.models import AppSettings
+from services.auto_transition_service import AutoTransitionService
+from web.event_queue import clear_events, drain_events
 
 
 @pytest.fixture(autouse=True)

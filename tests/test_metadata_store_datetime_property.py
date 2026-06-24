@@ -30,14 +30,14 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, DroneState
-from project_tracker.core.models import (
+from core.enums import CRState, DroneState
+from core.models import (
     DroneTicket,
     HistoryEntry,
     ProjectMetadata,
     local_now,
 )
-from project_tracker.infrastructure.metadata_store import MetadataStore
+from infrastructure.metadata_store import MetadataStore
 
 # Number of randomly generated examples per property run.
 EXAMPLE_COUNT = 300

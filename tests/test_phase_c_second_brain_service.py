@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.services.second_brain_service import (
+from services.second_brain_service import (
     SecondBrainItem,
     SecondBrainService,
 )

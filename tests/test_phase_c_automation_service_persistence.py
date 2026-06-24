@@ -8,8 +8,8 @@ later tasks.
 
 from pathlib import Path
 
-from project_tracker.infrastructure.cache_db import CacheDb
-from project_tracker.services.automation_service import AutomationService
+from infrastructure.cache_db import CacheDb
+from services.automation_service import AutomationService
 
 
 def _rules() -> list[dict[str, object]]:

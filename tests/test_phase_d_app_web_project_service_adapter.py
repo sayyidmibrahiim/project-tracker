@@ -51,7 +51,7 @@ def test_project_list_returns_ok_with_cache(js_api_with_project):
 def test_project_list_delegates_to_dashboard_service():
     """project_list(year) delegates to DashboardService.list_projects(year)."""
     from project_tracker import app_web
-    from project_tracker.services.dashboard_service import DashboardProject
+    from services.dashboard_service import DashboardProject
 
     # Inject dashboard service with known data
     fake_project = DashboardProject(

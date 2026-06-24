@@ -4,10 +4,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.models import DroneTicket, ProjectMetadata
-from project_tracker.infrastructure.cache_db import cached_drone_rows_from_scan, cached_project_row_from_scan
-from project_tracker.infrastructure.filesystem import ScannedProject
+from core.enums import CRState, DroneState, ProjectState
+from core.models import DroneTicket, ProjectMetadata
+from infrastructure.cache_db import cached_drone_rows_from_scan, cached_project_row_from_scan
+from infrastructure.filesystem import ScannedProject
 
 
 def _scanned_project(

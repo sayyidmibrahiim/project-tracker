@@ -12,13 +12,13 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_outlook_client_imports_without_windows_dependencies() -> None:
-    from project_tracker.infrastructure import outlook_client
+    from infrastructure import outlook_client
 
     assert outlook_client.IS_WINDOWS is False
 
 
 def test_outlook_create_draft_email_returns_dev_skipped_bridge_response(tmp_path: Path) -> None:
-    from project_tracker.infrastructure.outlook_client import create_draft_email
+    from infrastructure.outlook_client import create_draft_email
 
     result = create_draft_email(
         to="dev@example.local",
@@ -39,7 +39,7 @@ def test_outlook_create_draft_email_returns_dev_skipped_bridge_response(tmp_path
 
 
 def test_outlook_get_contacts_returns_dev_contact_bridge_response() -> None:
-    from project_tracker.infrastructure.outlook_client import get_contacts
+    from infrastructure.outlook_client import get_contacts
 
     result = get_contacts()
 
@@ -51,13 +51,13 @@ def test_outlook_get_contacts_returns_dev_contact_bridge_response() -> None:
 
 
 def test_teams_client_imports_without_windows_dependencies() -> None:
-    from project_tracker.infrastructure import teams_client
+    from infrastructure import teams_client
 
     assert teams_client.IS_WINDOWS is False
 
 
 def test_teams_send_message_returns_dev_skipped_bridge_response() -> None:
-    from project_tracker.infrastructure.teams_client import send_teams_message
+    from infrastructure.teams_client import send_teams_message
 
     result = send_teams_message("Deployment ready", teams_auto_send=False)
 
@@ -87,7 +87,7 @@ def test_com_thread_initializes_and_uninitializes_in_try_finally() -> None:
     fake_pythoncom.CoInitialize = lambda: calls.append("init")  # type: ignore[attr-defined]
     fake_pythoncom.CoUninitialize = lambda: calls.append("uninit")  # type: ignore[attr-defined]
 
-    from project_tracker.infrastructure import outlook_client
+    from infrastructure import outlook_client
 
     sys.modules["pythoncom"] = fake_pythoncom
     try:
@@ -115,7 +115,7 @@ def test_com_thread_success_returns_ok_bridge_response() -> None:
     fake_pythoncom.CoInitialize = lambda: calls.append("init")  # type: ignore[attr-defined]
     fake_pythoncom.CoUninitialize = lambda: calls.append("uninit")  # type: ignore[attr-defined]
 
-    from project_tracker.infrastructure import outlook_client
+    from infrastructure import outlook_client
 
     sys.modules["pythoncom"] = fake_pythoncom
     try:

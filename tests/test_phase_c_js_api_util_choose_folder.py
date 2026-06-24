@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_tracker.web.js_api import JsApi
+from web.js_api import JsApi
 
 
 def _api() -> JsApi:

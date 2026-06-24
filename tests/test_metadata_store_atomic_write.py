@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.exceptions import AtomicWriteError
-from project_tracker.core.models import ProjectMetadata
-from project_tracker.infrastructure.metadata_store import (
+from core.exceptions import AtomicWriteError
+from core.models import ProjectMetadata
+from infrastructure.metadata_store import (
     METADATA_FILE,
     MetadataStore,
     atomic_write_json,

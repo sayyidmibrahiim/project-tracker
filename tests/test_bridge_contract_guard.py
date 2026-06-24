@@ -28,7 +28,7 @@ import pytest
 # tests assert that re-importing ``js_api`` keeps ``sys.modules`` free of
 # ``webview``; an eager import here would make the suite order-dependent.
 
-from project_tracker.infrastructure.settings_store import SettingsStore
+from infrastructure.settings_store import SettingsStore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_SRC = REPO_ROOT / "frontend" / "src"
@@ -68,7 +68,7 @@ def _purge_webview_imports():
         # ``app_web`` as an attribute, so we must clear that too for the next
         # ``from project_tracker import app_web`` to actually re-execute the
         # module body and pick up a freshly reloaded ``JsApi`` class.
-        sys.modules.pop("project_tracker.app_web", None)
+        sys.modules.pop("app_web", None)
         pkg = sys.modules.get("project_tracker")
         if pkg is not None and hasattr(pkg, "app_web"):
             try:
@@ -93,7 +93,7 @@ def _collect_call_bridge_names() -> set[str]:
 
 
 def _api(tmp_path):
-    from project_tracker.app_web import create_js_api  # lazy: keep sys.modules clean
+    from app_web import create_js_api  # lazy: keep sys.modules clean
 
     return create_js_api(
         db_path=tmp_path / "cache.sqlite",

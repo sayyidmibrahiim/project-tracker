@@ -22,13 +22,13 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from project_tracker.core.models import Notification, local_now
-from project_tracker.infrastructure.cache_db import (
+from core.models import Notification, local_now
+from infrastructure.cache_db import (
     AutomationRuleLogRow,
     CacheDb,
 )
-from project_tracker.services.automation_service import AutomationService
-from project_tracker.services.notification_service import NotificationService
+from services.automation_service import AutomationService
+from services.notification_service import NotificationService
 
 
 # --------------------------------------------------------------------------- #

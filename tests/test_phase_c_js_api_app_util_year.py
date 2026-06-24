@@ -4,8 +4,8 @@ import importlib
 import sys
 from pathlib import Path
 
-from project_tracker.web import js_api
-from project_tracker.web.js_api import JsApi
+from web import js_api
+from web.js_api import JsApi
 
 
 class FakeYearService:

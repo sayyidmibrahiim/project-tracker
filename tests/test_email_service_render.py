@@ -7,14 +7,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState
-from project_tracker.core.models import (
+from core.enums import CRState, DroneState
+from core.models import (
     AppSettings,
     DroneTicket,
     EmailCategorySettings,
     ProjectMetadata,
 )
-from project_tracker.services.email_service import (
+from services.email_service import (
     REQUIRED_PLACEHOLDERS,
     EmailService,
     TemplateConditionsNotMetError,

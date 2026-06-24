@@ -21,10 +21,10 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState
-from project_tracker.core.models import ProjectMetadata, local_now
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
+from core.enums import CRState
+from core.models import ProjectMetadata, local_now
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
 
 
 @pytest.fixture

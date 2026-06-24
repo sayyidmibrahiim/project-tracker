@@ -59,7 +59,7 @@ export interface DashboardRowDrone {
   owner: string;
 }
 
-/** Mirrors project_tracker.services.dashboard_service.DashboardProject (after _to_frontend_safe). */
+/** Mirrors services.dashboard_service.DashboardProject (after _to_frontend_safe). */
 export interface DashboardProject {
   project_path: string;
   year: string;
@@ -79,7 +79,7 @@ export interface DashboardProject {
   drone_tickets: DashboardRowDrone[];
 }
 
-/** Mirrors project_tracker.services.dashboard_service.DashboardSummary. */
+/** Mirrors services.dashboard_service.DashboardSummary. */
 export interface DashboardSummary {
   total_projects: number;
   by_project_state: Record<string, number>;
@@ -88,7 +88,7 @@ export interface DashboardSummary {
   total_drone_tickets: number;
 }
 
-/** Mirrors project_tracker.services.dashboard_service.DashboardData. */
+/** Mirrors services.dashboard_service.DashboardData. */
 export interface DashboardData {
   projects: DashboardProject[];
   summary: DashboardSummary;

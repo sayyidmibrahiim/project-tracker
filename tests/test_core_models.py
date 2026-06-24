@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from project_tracker.core.models import AppSettings, DroneTicket, ProjectMetadata, datetime_from_json, datetime_to_json
+from core.models import AppSettings, DroneTicket, ProjectMetadata, datetime_from_json, datetime_to_json
 
 
 def test_project_metadata_does_not_serialize_project_state() -> None:

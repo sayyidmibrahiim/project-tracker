@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from project_tracker.core.models import AppSettings
-from project_tracker.infrastructure import settings_store as settings_store_module
-from project_tracker.infrastructure.settings_store import SETTINGS_FILE, SettingsStore
+from core.models import AppSettings
+from infrastructure import settings_store as settings_store_module
+from infrastructure.settings_store import SETTINGS_FILE, SettingsStore
 
 # A representative Windows path: drive letter + backslash separators.
 WINDOWS_ROOT = r"C:\Users\foo\Projects"
@@ -52,7 +52,7 @@ def test_settings_store_persists_windows_paths_verbatim(tmp_path: Path, monkeypa
         raising=False,
     )
     # Patch the source attribute too, since write() imports it lazily.
-    import project_tracker.infrastructure.filesystem as filesystem_module
+    import infrastructure.filesystem as filesystem_module
 
     monkeypatch.setattr(
         filesystem_module,
@@ -78,7 +78,7 @@ def test_settings_store_persists_windows_paths_verbatim(tmp_path: Path, monkeypa
 
 def test_settings_json_on_disk_keeps_backslashes_and_drive_letter(tmp_path: Path, monkeypatch) -> None:
     """The persisted JSON must contain Windows separators, not POSIX ones."""
-    import project_tracker.infrastructure.filesystem as filesystem_module
+    import infrastructure.filesystem as filesystem_module
 
     monkeypatch.setattr(filesystem_module, "ensure_year_structure", lambda *args, **kwargs: None)
 

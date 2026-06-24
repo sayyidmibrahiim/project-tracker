@@ -1,4 +1,4 @@
-from project_tracker.core.rules import extract_cr_number, extract_drone_ticket
+from core.rules import extract_cr_number, extract_drone_ticket
 
 
 def test_extract_cr_number_from_query_param() -> None:

@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, DroneState, ProjectState
-from project_tracker.core.exceptions import InvalidTransitionError
-from project_tracker.core.models import AppSettings, DroneTicket, ProjectMetadata
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.services.project_service import ProjectService
+from core.enums import CRState, DroneState, ProjectState
+from core.exceptions import InvalidTransitionError
+from core.models import AppSettings, DroneTicket, ProjectMetadata
+from infrastructure.metadata_store import MetadataStore
+from services.project_service import ProjectService
 
 
 def create_project(tmp_path: Path, folder_state: ProjectState, cr_state: CRState) -> Path:

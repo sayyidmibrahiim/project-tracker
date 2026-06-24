@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_link
+from infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_link
 
 
 # ── Unit: _normalize_link ──────────────────────────────────────────────
@@ -112,7 +112,7 @@ def js_api(tmp_path: Path):
     store.write(store.read())
     # Lazy import: app_web imports webview; module-level import here would
     # pollute sys.modules and break phase_c "import_does_not_require_pywebview" tests.
-    from project_tracker.app_web import create_js_api
+    from app_web import create_js_api
 
     return create_js_api(linkbank_store=store)
 

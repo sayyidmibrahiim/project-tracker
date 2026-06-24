@@ -7,9 +7,9 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from project_tracker.web import js_api
-from project_tracker.web.event_queue import clear_events, push_event
-from project_tracker.web.js_api import BridgeResponse, fail, ok, poll_events
+from web import js_api
+from web.event_queue import clear_events, push_event
+from web.js_api import BridgeResponse, fail, ok, poll_events
 
 
 def test_ok_default_returns_success_shape():

@@ -22,11 +22,11 @@ from pathlib import Path
 
 import pytest
 
-from project_tracker.core.enums import CRState, ProjectState
-from project_tracker.core.models import ProjectMetadata, local_now
-from project_tracker.infrastructure.metadata_store import MetadataStore
-from project_tracker.infrastructure.settings_store import SettingsStore
-from project_tracker.web.event_queue import clear_events, drain_events
+from core.enums import CRState, ProjectState
+from core.models import ProjectMetadata, local_now
+from infrastructure.metadata_store import MetadataStore
+from infrastructure.settings_store import SettingsStore
+from web.event_queue import clear_events, drain_events
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +55,7 @@ def _purge_webview_imports():
         for name in added:
             if name == "webview" or name.startswith("webview."):
                 sys.modules.pop(name, None)
-        sys.modules.pop("project_tracker.app_web", None)
+        sys.modules.pop("app_web", None)
         pkg = sys.modules.get("project_tracker")
         if pkg is not None and hasattr(pkg, "app_web"):
             try:
@@ -194,8 +194,8 @@ def test_apply_auto_move_blocked_guard_returns_banner_and_does_not_move(
 # ── Task 7 — wiring G1 + history + auto-move into the inline updates ──
 
 
-from project_tracker.core.enums import DroneState  # noqa: E402
-from project_tracker.core.models import DroneTicket  # noqa: E402
+from core.enums import DroneState  # noqa: E402
+from core.models import DroneTicket  # noqa: E402
 
 
 @pytest.fixture
@@ -414,7 +414,7 @@ def test_update_drone_field_only_edit_does_not_move(
 # ── Task 8 — H-10 reminder evaluation on dashboard load ──
 
 
-from project_tracker.infrastructure.cache_db import CacheDb, rebuild_year_cache  # noqa: E402
+from infrastructure.cache_db import CacheDb, rebuild_year_cache  # noqa: E402
 
 
 def _h10_undismissed(api) -> list[object]:
