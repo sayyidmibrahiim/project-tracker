@@ -20,5 +20,11 @@ _app_stderr.txt
 _app_live_*.log
 .phase4_*.log
 
+# Harness worktrees (files only, git linkage removed)
+.harness-worktrees/
+
+# Windows reserved device name artifact
+/nul
+
 # Root-level accidental metadata; canonical metadata is per-project project_data.json.
 /project_data.json
