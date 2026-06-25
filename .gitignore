@@ -28,3 +28,6 @@ _app_live_*.log
 
 # Root-level accidental metadata; canonical metadata is per-project project_data.json.
 /project_data.json
+
+# Archive
+_docs/_archive/
