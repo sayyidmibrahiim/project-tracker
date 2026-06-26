@@ -18,7 +18,7 @@ Shared element approved in one menu → update across all menus that use it.
 ## Tech Stack (Locked)
 
 - **Frontend:** Svelte, TypeScript, Vite, Tailwind (local build only, no CDN)
-- **Backend:** Python 3.12+, modular monolith
+- **Backend:** Python 3.12+, layered monolith
 - **Desktop:** pywebview frameless + custom titlebar, WebView2
 - **Data:** Filesystem + `project_data.json` = canonical. SQLite = rebuildable cache only.
 - **Jobs:** APScheduler (in-process)
@@ -81,6 +81,15 @@ After merge → update \_docs/PROGRESS.md. If behavior changed → update PRD.md
 
 Any UI work → mockup/preview first → user approves → code → manual checklist → user tests → fix → approve.
 Read `_docs/DESIGN_RULES.md` for design system when doing frontend.
+
+## Slice Completion Checklist (Mandatory)
+
+Every completed slice → produce FORM CHECKLIST for user:
+- Buttons: all states (default, hover, active, disabled, loading)
+- Responsive: test at 3+ window sizes
+- Input/validation: required fields, edge cases, error messages
+- Consistency: matches `_docs/DESIGN_RULES.md` tokens
+- Way to test: exact steps user follows to verify
 
 ## Documentation Sync
 
