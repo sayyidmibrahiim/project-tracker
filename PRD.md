@@ -10,13 +10,17 @@
 
 ---
 
-## About This Document
-
-This PRD is built from full analysis of all prototype `.py` files, UI feature documentation, the old PRD v2.0, and confirmed decisions from multi-model consultation (Claude, Grok, Perplexity, ChatGPT).
-
-The PyQt6 prototype files are **UX and interaction reference only**. Production is implemented as a **pywebview desktop shell** serving a **Svelte + TypeScript + Vite** frontend, communicating with a Python backend through a typed `JsApi` bridge.
-
-Every menu must have a documented user flow. Every feature must trace back to this document. If code and PRD conflict, update this PRD first.
+<!-- TOC: use offset/limit to read sections, don't full-load -->
+<!-- §1 Purpose ~L23  §2 Constraints ~L41  §3 Stack ~L78  §4 Arch ~L143 -->
+<!-- §5 DevEnv ~L201  §6 Design ~L214  §7 FS Model ~L305  §8 Data ~L404 -->
+<!-- §9 State ~L606  §10 Shell ~L777  §11 Dashboard ~L830  §12 ProjDet ~L998 -->
+<!-- §13 SecBrain ~L1179  §14 LinkBank ~L1319  §15 Report ~L1426 -->
+<!-- §16 Automations ~L1497  §17 Settings ~L1836  §18 Notifs ~L1913 -->
+<!-- §19 Bridge ~L1956  §20 WinInteg ~L2029  §21 JsApi ~L2118 -->
+<!-- §22 SQLite ~L2278  §23 FileOps ~L2386  §24 Packaging ~L2436 -->
+<!-- §25 Phases ~L2479  §26 Acceptance ~L2622  §28 Calibration ~L2696 -->
+<!-- §29 Handoff ~L2710 -->
+<!-- §"About" + §27 ADRs archived → _docs/_archive/PRD_history.md -->
 
 ---
 
@@ -2695,81 +2699,7 @@ Verify: app installs and runs on clean Windows machine.
 
 ## 27. Architecture Decision Records (ADRs)
 
-### ADR-001: Frontend Framework — Svelte + TypeScript + Vite
-
-**Decision:** Use Svelte + TypeScript + Vite for the frontend instead of Vanilla JS/HTML.
-
-**Context:** The application has complex UI state across 6 pages: live updating tables, nested splitter panels, multi-step dialogs, search with real-time filtering, and polling-based event sync. Vanilla JS becomes difficult to maintain at this complexity level.
-
-**Alternatives considered:**
-
-- Vanilla JS + HTML (simpler, no build step, sufficient for simple apps)
-- React + Vite (heavier runtime, more boilerplate)
-- Vue 3 + Vite (valid alternative, slightly larger ecosystem than Svelte)
-- SvelteKit (too much convention overhead for a single-page pywebview app)
-
-**Rationale:**
-
-- Svelte compiles to minimal vanilla JS — no runtime overhead.
-- TypeScript provides type safety for the Python bridge contract.
-- Vite provides fast dev-server mode for Linux development.
-- Svelte Stores sufficient for state management (state machine lives in Python).
-- Component model makes complex panels maintainable.
-- Requires build step, but `serve_folder` makes pywebview integration clean.
-
-**Status:** Locked.
-
----
-
-### ADR-002: SQLite as Rebuildable Cache
-
-**Decision:** Use SQLite as a rebuildable local cache for project index, notifications, scheduler entries, and rule logs.
-
-**Context:** Filesystem scan on every filter/sort operation would be slow with many projects. Old PRD excluded SQLite entirely, but this created friction for search, notifications, and scheduler state.
-
-**Constraints:**
-
-- SQLite is NOT the source of truth. Filesystem + JSON files remain canonical.
-- SQLite must be rebuildable from a full filesystem scan at any time.
-- The rebuild must be transparent to the user (triggered automatically on corruption or first run).
-
-**Status:** Locked.
-
----
-
-### ADR-003: APScheduler for Background Tasks
-
-**Decision:** Use APScheduler 3.x for all background periodic and one-time scheduled tasks.
-
-**Context:** Auto IN-PROGRESS detection, scheduler alarms, and Rules Engine polling all need reliable background execution. Old PRD used Qt’s QTimer, which no longer applies.
-
-**APScheduler provides:** cron, interval, and date triggers; job stores (SQLite compatible); pause/resume per job; clean shutdown.
-
-**Status:** Locked.
-
----
-
-### ADR-004: Event Queue Pattern for Background → Frontend
-
-**Decision:** Use `queue.Queue` (Python threading) + JS polling every 1.5s as the primary event delivery mechanism.
-
-**Context:** `webview.evaluate_js()` from background threads is unreliable across pywebview versions and operating systems. Polling is predictable and testable.
-
-**Secondary channel:** `evaluate_js()` from main-thread context used only for immediate high-priority events (alarm fires, auto IN-PROGRESS).
-
-**Status:** Locked.
-
----
-
-### ADR-005: Tauri v2 as Future Migration Path
-
-**Decision:** Tauri v2 + Svelte + Python sidecar is recorded as a future migration option. It is NOT part of MVP.
-
-**Context:** Tauri v2 supports Python sidecars and provides a lighter, more secure desktop shell than pywebview. However, it requires a more complex build setup, different Python integration pattern, and the ecosystem is still maturing.
-
-**When to revisit:** After MVP is stable, if pywebview WebView2 limitations become blockers.
-
-**Status:** Future/ADR only.
+> Archived to `_docs/_archive/PRD_history.md`. ADR-001 through ADR-005 (Svelte, SQLite cache, APScheduler, Event Queue, Tauri future) — all status Locked/Future.
 
 ---
 
