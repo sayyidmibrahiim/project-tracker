@@ -67,4 +67,4 @@ core      → nothing (pure domain, no imports from other layers)
 - Old `frontend/*.html`: reference only unless part of new Svelte frontend
 - Use legacy files to understand user flows, screen components, interactions
 - Do not delete legacy files without user approval
-- A screen is NOT migrated until connected to real data + verified + tracked in PROJECT_STATUS.md
+- A screen is NOT migrated until connected to real data + verified + tracked in \_docs/PROGRESS.md

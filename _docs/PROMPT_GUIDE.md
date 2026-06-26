@@ -18,7 +18,7 @@ Context:
 
 Do:
 1. /agentmemory:recall — get latest decisions, current menu, approved designs
-2. Read PROJECT_STATUS.md
+2. Read _docs/PROGRESS.md
 3. git status + git branch
 4. graphify check (absolute path)
 5. Report: active menu, last slice done, dirty files, next safest task
@@ -49,7 +49,7 @@ Rules:
 - Satu menu only
 - Design mockup dulu, gw approve baru code
 - graphify first from D:/Ibrahim/Projects/project_tracker
-- Update PROJECT_STATUS.md after each slice
+- Update _docs/PROGRESS.md after each slice
 - Generate manual checklist setelah code
 - Report: changed files, tests run, not tested, next slice
 ```
@@ -110,7 +110,7 @@ Rules:
 - Find root cause → smallest fix → verify
 - Jangan weaken tests
 - Generate checklist setelah fix
-- Update PROJECT_STATUS.md kalau status/risk berubah
+- Update _docs/PROGRESS.md kalau status/risk berubah
 ```
 
 ---
@@ -253,7 +253,7 @@ Rules:
 - Compare vs _reference/ visual reference
 - Run relevant tests + build
 - List: DONE / NOT DONE / USER CHECK NEEDED / RISK / NEXT MENU READY
-- Update PROJECT_STATUS.md
+- Update _docs/PROGRESS.md
 - Save memory: approved design decisions for this menu
 ```
 
@@ -281,9 +281,9 @@ Skills:
 
 Rules:
 - Stop old path first
-- Compare new direction vs PRD.md, PROJECT_STATUS.md, current code
-- If product behavior changes → update PRD.md + PROJECT_STATUS.md
-- If only visual changes → update PROJECT_STATUS.md
+- Compare new direction vs PRD.md, _docs/PROGRESS.md, current code
+- If product behavior changes → update PRD.md + _docs/PROGRESS.md
+- If only visual changes → update _docs/PROGRESS.md
 - Keep change bounded to [NAMA_MENU]
 - graphify first → smart-explore
 ```
@@ -323,7 +323,7 @@ Context:
 - Known gaps: [YANG BELUM SELESAI]
 
 Rules:
-- Update PROJECT_STATUS.md
+- Update _docs/PROGRESS.md
 - /agentmemory:remember — save stable decisions
 - Refresh graphify if available
 - Jangan commit/stash kecuali gw bilang

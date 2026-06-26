@@ -35,7 +35,7 @@ Do not redesign the entire app unless explicitly requested.
 For Project Tracker DBS, follow this priority:
 
 1. `PRD.md` — product and business truth.
-2. `PROJECT_STATUS.md` — migration and implementation status truth.
+2. `_docs/PROGRESS.md` — migration and implementation status truth.
 3. root `CLAUDE.md` — repository and process rules.
 4. `web/js_api.py` + tests — bridge/API contract truth.
 5. Current frontend files — implementation target.

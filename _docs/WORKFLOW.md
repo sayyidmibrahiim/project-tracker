@@ -37,7 +37,7 @@ After coding:
 1. Run relevant tests
 2. Run frontend build if frontend changed
 3. Generate manual checklist for user
-4. Update PROJECT_STATUS.md
+4. Update \_docs/PROGRESS.md
 5. Refresh graphify if installed
 6. Report: changed files, commands run, not tested, remaining risks
 
@@ -128,7 +128,7 @@ Generate this after every code completion:
 8. User runs app, checks checklist
 9. User gives feedback → Claude fixes
 10. User approves → merge to main
-11. Update PROJECT_STATUS.md, PRD.md if behavior changed
+11. Update _docs/PROGRESS.md, PRD.md if behavior changed
 ```
 
 ## Shared Element Protocol

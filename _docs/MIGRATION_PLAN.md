@@ -16,7 +16,7 @@ Each phase needs explicit approval and verification before moving to the next ph
 
 ### Allowed Files
 
-- `PROJECT_STATUS.md`
+- `_docs/PROGRESS.md`
 - `MIGRATION_PLAN.md`
 - `redesign_ui/_REFERENCE_ONLY.md`
 
@@ -31,7 +31,7 @@ Each phase needs explicit approval and verification before moving to the next ph
 
 ### Exit Criteria
 
-- `PROJECT_STATUS.md` records current migration status.
+- `_docs/PROGRESS.md` records current migration status.
 - `MIGRATION_PLAN.md` records phase order, entry criteria, and exit criteria.
 - `redesign_ui/_REFERENCE_ONLY.md` clarifies PyQt6/reference/static-HTML boundaries.
 - Git diff shows only Phase 0 allowed files changed.
@@ -39,7 +39,7 @@ Each phase needs explicit approval and verification before moving to the next ph
 
 ### Slice 0 Truth Reset Addendum — 2026-06-08
 
-This addendum supersedes stale phase-status wording when it conflicts with `PROJECT_STATUS.md` current summary. It does not supersede `PRD.md` v3.1.
+This addendum supersedes stale phase-status wording when it conflicts with `_docs/PROGRESS.md` current summary. It does not supersede `PRD.md` v3.1.
 
 Purpose:
 
@@ -61,7 +61,7 @@ Current PRD-to-release acceptance matrix:
 
 | Area                         | Category       | Required next action                                                                         |
 | ---------------------------- | -------------- | -------------------------------------------------------------------------------------------- |
-| PRD/status truth             | docs-only      | Keep `PROJECT_STATUS.md` current after every verified slice.                                 |
+| PRD/status truth             | docs-only      | Keep `_docs/PROGRESS.md` current after every verified slice.                                 |
 | Dependency/runtime alignment | safe-slice     | Re-check `pyproject.toml`, `requirements.txt`, frontend package metadata before packaging.   |
 | Bridge/API contract          | linux-verified | Keep `test_bridge_contract_guard.py` green after frontend/bridge edits.                      |
 | Main project userflow        | safe-slice     | Run manual Windows disposable-workspace flow before release.                                 |
