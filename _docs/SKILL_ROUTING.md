@@ -6,7 +6,7 @@ Use skills intentionally. Max 2-3 per task. Do not invoke unrelated skills.
 
 | Task Type             | Primary Skill                                | Secondary                                    | When                            |
 | --------------------- | -------------------------------------------- | -------------------------------------------- | ------------------------------- |
-| **UI/UX Design**      | `frontend-design`                            | `ui-ux-pro-max`                              | Any visual/design work          |
+| **UI/UX Design**      | `frontend-design`                            | `ui-ux-pro-max`, `impeccable`                | Any visual/design work          |
 | **Design Polish**     | `frontend-polish`                            | —                                            | After initial design is working |
 | **Svelte/TS Code**    | `context7-mcp` (Svelte docs)                 | `fullstack-dev-skills:typescript-pro`        | Frontend implementation         |
 | **Python Backend**    | `fullstack-dev-skills:python-pro`            | —                                            | Backend services, domain logic  |
