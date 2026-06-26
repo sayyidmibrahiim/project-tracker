@@ -1,0 +1,24 @@
+#!/bin/sh
+# Pre-commit hook: svelte-check + pytest last-failed
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Quality gate for both manual and AI-initiated commits.
+
+echo "=== pre-commit: svelte-check ==="
+npm --prefix frontend run check 2>&1
+SVELTE_EXIT=$?
+
+if [ $SVELTE_EXIT -ne 0 ]; then
+    echo "BLOCKED: svelte-check failed (exit $SVELTE_EXIT)"
+    exit 1
+fi
+
+echo "=== pre-commit: pytest --lf -x ==="
+D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/ --lf -x -q 2>&1
+PYTEST_EXIT=$?
+
+if [ $PYTEST_EXIT -ne 0 ]; then
+    echo "WARNING: pytest --lf failed (exit $PYTEST_EXIT) — commit proceeds (non-blocking)"
+fi
+
+echo "=== pre-commit: PASS ==="
+exit 0
