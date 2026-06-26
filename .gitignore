@@ -23,6 +23,14 @@ _app_live_*.log
 # Harness worktrees (files only, git linkage removed)
 .harness-worktrees/
 
+# Runtime caches & test fixtures
+.impeccable/
+tmp/
+tmp_pytest/
+
+# Nested package shadow (stale, root __init__.py is the real package)
+project_tracker/
+
 # Windows reserved device name artifact
 /nul
 
