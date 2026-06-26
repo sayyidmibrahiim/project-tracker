@@ -13,13 +13,13 @@ Branch: `prd-v31-migration`. PRD.md v3.1 = product truth.
 
 ## Pending PRD-Completion Slices
 
-| Slice | Area | Status |
-|-------|------|--------|
+| Slice          | Area                                                          | Status  |
+| -------------- | ------------------------------------------------------------- | ------- |
 | 15.4/15.5/15.7 | Outlook off-Windows property test (P10), unit tests, frontend | Pending |
-| 17.2-17.4 | Teams JsApi methods, tests, frontend | Pending |
-| 19.2-19.4 | Scheduler JsApi methods, tests, frontend tab | Pending |
-| 21.2-21.5 | Rules JsApi methods, P8 test, frontend CRUD/logs | Pending |
-| 23.1-23.3 | Bridge contract reconciliation, P7 shape test | Pending |
+| 17.2-17.4      | Teams JsApi methods, tests, frontend                          | Pending |
+| 19.2-19.4      | Scheduler JsApi methods, tests, frontend tab                  | Pending |
+| 21.2-21.5      | Rules JsApi methods, P8 test, frontend CRUD/logs              | Pending |
+| 23.1-23.3      | Bridge contract reconciliation, P7 shape test                 | Pending |
 
 ## Last 3 Completed Slices
 
@@ -29,11 +29,11 @@ Branch: `prd-v31-migration`. PRD.md v3.1 = product truth.
 
 ## Pre-existing Test Failures (baseline)
 
-| Test | Root Cause | Blocks Cleanup? |
-|------|-----------|-----------------|
-| `test_file_open_dev_skipped_off_windows` (x2) | Missing `pytest.skip` guard on Windows | No |
-| `test_create_js_api_returns_JsApi_instance` | Import path shadow (intermittent in full suite) | No |
-| `test_run_creates_window_with_js_api...` | Same import path shadow | No |
+| Test                                          | Root Cause                                      | Blocks Cleanup? |
+| --------------------------------------------- | ----------------------------------------------- | --------------- |
+| `test_file_open_dev_skipped_off_windows` (x2) | Missing `pytest.skip` guard on Windows          | No              |
+| `test_create_js_api_returns_JsApi_instance`   | Import path shadow (intermittent in full suite) | No              |
+| `test_run_creates_window_with_js_api...`      | Same import path shadow                         | No              |
 
 ## Verification (latest)
 

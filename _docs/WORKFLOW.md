@@ -37,7 +37,7 @@ After coding:
 1. Run relevant tests
 2. Run frontend build if frontend changed
 3. Generate manual checklist for user
-4. Update _docs/PROGRESS.md
+4. Update \_docs/PROGRESS.md
 5. Refresh graphify if installed
 6. Report: changed files, commands run, not tested, remaining risks
 

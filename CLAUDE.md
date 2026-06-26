@@ -6,7 +6,7 @@ Desktop productivity app. Svelte+TS+Vite+Tailwind frontend, Python 3.12+ backend
 
 1. User's latest instruction — current pivot when explicit
 2. PRD.md — product behavior/rules source of truth
-3. _docs/PROGRESS.md — progress, gaps, parity
+3. \_docs/PROGRESS.md — progress, gaps, parity
 4. This file — workflow/tooling rules
 5. `_reference/` HTML prototype — visual/layout reference for AS-IS parity
 
@@ -64,18 +64,18 @@ Use `graphify query/path/explain` before raw file reads. Refresh after code chan
 
 ## Session Lifecycle
 
-| Phase           | Actions                                                                                                    |
-| --------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Start**       | Recall memory → read _docs/PROGRESS.md → git status → graphify check                                       |
-| **Before code** | graphify first → smart-explore for code lookup                                                             |
-| **After code**  | Test/build changed area → update _docs/PROGRESS.md → refresh graphify → generate manual checklist for user |
-| **End**         | Report: changed files, tests run, not tested, next task. Save stable decisions to memory.                  |
+| Phase           | Actions                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Start**       | Recall memory → read \_docs/PROGRESS.md → git status → graphify check                                       |
+| **Before code** | graphify first → smart-explore for code lookup                                                              |
+| **After code**  | Test/build changed area → update \_docs/PROGRESS.md → refresh graphify → generate manual checklist for user |
+| **End**         | Report: changed files, tests run, not tested, next task. Save stable decisions to memory.                   |
 
 ## Branch Workflow
 
 Every change = new branch from main: `{type}/{menu}-{desc}`.
 Types: `feat/` `fix/` `design/` `refactor/`. Merge only after user manual check + approval.
-After merge → update _docs/PROGRESS.md. If behavior changed → update PRD.md too.
+After merge → update \_docs/PROGRESS.md. If behavior changed → update PRD.md too.
 
 ## Design-First Rule
 
@@ -84,7 +84,7 @@ Read `_docs/DESIGN_RULES.md` for design system when doing frontend.
 
 ## Documentation Sync
 
-Product behavior change → PRD.md + _docs/PROGRESS.md. Progress change → _docs/PROGRESS.md.
+Product behavior change → PRD.md + \_docs/PROGRESS.md. Progress change → \_docs/PROGRESS.md.
 Workflow/tooling change → CLAUDE.md. Stable decision → save memory.
 
 ## Do Not Touch Without Approval
