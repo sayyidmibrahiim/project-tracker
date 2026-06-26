@@ -39,3 +39,6 @@ project_tracker/
 
 # Archive
 _docs/_archive/
+
+# Local AI/tool artifacts
+.mimocode/
