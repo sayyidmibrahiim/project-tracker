@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(graphify query *)",
+      "Bash(rtk git *)",
+      "Bash(git diff *)",
+      "Bash(git status *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"D:/Ibrahim/Projects/project_tracker/scripts/claude_root_guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking Project Tracker repo root..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"D:/Ibrahim/Projects/project_tracker/scripts/claude_pretool_guard.py\"",
+            "timeout": 120,
+            "statusMessage": "Checking git command safety..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import json; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'ROOT GUARD ACTIVE: Project Tracker app/tests/build/graphify must run from D:/Ibrahim/Projects/project_tracker, not .claude/worktrees/*. User launch command is D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main. Use absolute repo-root paths for runtime verification.'}}))\"",
+            "timeout": 10,
+            "statusMessage": "Loading Project Tracker root guard..."
+          }
+        ]
+      }
+    ]
+  }
+}
