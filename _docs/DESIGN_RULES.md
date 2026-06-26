@@ -10,22 +10,22 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 ```css
 :root {
-  --black-chrome: #0A0A0B;
+  --black-chrome: #0a0a0b;
   --surface-dark: #141416;
-  --dark-border: #2C2C30;
-  --main-bg: #FFFFFF;
-  --card-white: #FFFFFF;
-  --light-border: #E5E7EB;
-  --input-border: #D7D7DC;
+  --dark-border: #2c2c30;
+  --main-bg: #ffffff;
+  --card-white: #ffffff;
+  --light-border: #e5e7eb;
+  --input-border: #d7d7dc;
   --text-primary: #171717;
   --text-strong: #111111;
-  --text-secondary: #6B7280;
-  --text-muted: #A1A1AA;
-  --primary-red: #B91C1C;
-  --red-hover: #991B1B;
-  --active-red: #DC2626;
-  --soft-pink-surface: #FFF1F4;
-  --soft-pink-border: #FFD4DF;
+  --text-secondary: #6b7280;
+  --text-muted: #a1a1aa;
+  --primary-red: #b91c1c;
+  --red-hover: #991b1b;
+  --active-red: #dc2626;
+  --soft-pink-surface: #fff1f4;
+  --soft-pink-border: #ffd4df;
   --font: Inter, "Segoe UI", Arial, sans-serif;
   --header-h: 58px;
   --control-h: 26px;
@@ -57,14 +57,14 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 ## Shared Elements
 
-| Element | Components |
-|---------|------------|
-| Shell chrome | `Header.svelte`, `Sidebar.svelte` |
-| Primary data view | `Dashboard.svelte`, `ProjectDetails.svelte`, `Report.svelte` |
-| Actions | `ProjectActions.svelte`, `ProjectTransitions.svelte`, `FileActions.svelte` |
+| Element           | Components                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| Shell chrome      | `Header.svelte`, `Sidebar.svelte`                                                                |
+| Primary data view | `Dashboard.svelte`, `ProjectDetails.svelte`, `Report.svelte`                                     |
+| Actions           | `ProjectActions.svelte`, `ProjectTransitions.svelte`, `FileActions.svelte`                       |
 | Automation panels | `RulesActions.svelte`, `SchedulerActions.svelte`, `TeamsActions.svelte`, `OutlookActions.svelte` |
-| Dialogs/hints | `ConfirmModal.svelte`, `DisabledHint.svelte`, `EmailTemplateDialog.svelte` |
-| Editors/forms | `NewProjectForm.svelte`, `NotesEditor.svelte`, `Settings.svelte` |
+| Dialogs/hints     | `ConfirmModal.svelte`, `DisabledHint.svelte`, `EmailTemplateDialog.svelte`                       |
+| Editors/forms     | `NewProjectForm.svelte`, `NotesEditor.svelte`, `Settings.svelte`                                 |
 
 ## Accessibility Floor
 

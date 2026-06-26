@@ -6,7 +6,7 @@ Desktop productivity app. Svelte+TS+Vite+Tailwind frontend, Python 3.12+ backend
 
 1. User's latest instruction — current pivot when explicit
 2. PRD.md — product behavior/rules source of truth (read via offset/limit per section, never full-load; see TOC comments at top of PRD.md)
-3. _docs/PROGRESS.md — progress, gaps, parity
+3. \_docs/PROGRESS.md — progress, gaps, parity
 4. This file — workflow/tooling rules
 5. `_reference/` HTML prototype — visual/layout reference for AS-IS parity
 
@@ -85,6 +85,7 @@ Read `_docs/DESIGN_RULES.md` for design system when doing frontend.
 ## Slice Completion Checklist (Mandatory)
 
 Every completed slice → produce FORM CHECKLIST for user:
+
 - Buttons: all states (default, hover, active, disabled, loading)
 - Responsive: test at 3+ window sizes
 - Input/validation: required fields, edge cases, error messages
