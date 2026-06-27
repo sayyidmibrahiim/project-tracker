@@ -16,12 +16,12 @@ Use skills intentionally. Max 2-3 per task. Do not invoke unrelated skills.
 | **Code Review**       | `code-review`                                | `ponytail-review`                            | Before merge                    |
 | **Simplification**    | `simplify`                                   | `ponytail-audit`                             | After working implementation    |
 | **Git Ops**           | `caveman:caveman-commit`                     | `superpowers:finishing-a-development-branch` | Commits, branch management      |
-| **Memory**            | `agentmemory:recall`                         | `agentmemory:remember`                       | Session start, stable decisions |
+| **Memory**            | `claude-mem`                                 | —                                            | Session start, stable decisions |
 | **Codebase Query**    | `graphify`                                   | —                                            | Before reading raw files        |
 | **CLAUDE.md Changes** | `claude-md-management:revise-claude-md`      | —                                            | Updating this file              |
 | **Verification**      | `superpowers:verification-before-completion` | `verify`                                     | After implementation            |
 | **Security**          | `fullstack-dev-skills:security-reviewer`     | `fullstack-dev-skills:secure-code-guardian`  | COM, file ops, automation       |
-| **New Session**       | `agentmemory:recall`                         | `graphify`                                   | Every session start             |
+| **New Session**       | `claude-mem`                                 | `graphify`                                   | Every session start             |
 
 ## Context7 Triggers
 
@@ -34,6 +34,19 @@ Use `context7-mcp` (resolve library → query docs) before implementing with:
 - APScheduler (job scheduling, triggers)
 - Any unfamiliar or version-sensitive library
 
+## Integration Routing
+
+| Integration  | Type        | Owner                                           | Windows state                                  | Trigger                                        |
+| ------------ | ----------- | ----------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| caveman      | Plugin      | Response style compression                      | Auto-loaded; ultra is session-level            | Operational summaries/reviews                  |
+| context-mode | Plugin      | Tool output compression + in-session continuity | Enabled plugin path only                       | Large output, ctx search/stats, resume/compact |
+| claude-mem   | Plugin      | Cross-session recall                            | Enabled; worker required                       | Prior decisions/preferences                    |
+| agentmemory  | Plugin      | Disabled alternate memory layer                 | Disabled to avoid duplicate capture/injection  | Only switch back with user approval            |
+| graphify     | CLI + skill | Code graph/blast radius                         | Use `graphify`, no leading slash in PowerShell | Cross-file/shared impact                       |
+| RTK          | CLI         | Manual command compression                      | Manual-only; no native Windows auto-rewrite    | Explicit `rtk ...` commands                    |
+
+Sensitive paths stay denied for all integrations: `.env`, `*.env.*`, `secrets/`, credentials, `*.pem`, `*.key`.
+
 ## Anti-Patterns
 
 - Do NOT invoke all skills "just to be safe" — each costs tokens
@@ -41,3 +54,6 @@ Use `context7-mcp` (resolve library → query docs) before implementing with:
 - Do NOT use frontend-design for backend-only work
 - Do NOT use code-review before implementation is working
 - Do NOT use simplify on code that's not yet verified
+- Do NOT enable both `claude-mem` and `agentmemory` capture/injection at once
+- Do NOT install context-mode plugin and MCP-only path together
+- Do NOT claim RTK auto-rewrite works in native Windows

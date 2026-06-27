@@ -1,0 +1,28 @@
+# Generated / external artifacts
+.graphifyignore
+graphify-out/
+.harness-worktrees/
+.claude/
+.agents/
+.hermes/
+.rtk/
+
+# Dependencies / caches
+.venv/
+node_modules/
+__pycache__/
+.pytest_cache/
+.cache/
+dist/
+build/
+out/
+coverage/
+web/static/
+
+# Sensitive
+.env
+.env.*
+**/secrets/**
+**/*credentials*
+**/*.pem
+**/*.key

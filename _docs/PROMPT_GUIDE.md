@@ -356,6 +356,18 @@ Rules:
 
 ---
 
+## Quick Reference — Integrations
+
+| Need               | Use           | Catatan Windows                                         |
+| ------------------ | ------------- | ------------------------------------------------------- |
+| Style ringkas      | caveman ultra | Session-level; normal mode untuk teks stakeholder       |
+| Output tool besar  | context-mode  | Plugin otomatis; jangan bikin hook kompresi sendiri     |
+| Memory lintas sesi | agentmemory   | claude-mem disabled kecuali switch disetujui            |
+| Blast radius code  | graphify      | `graphify query`, bukan `/graphify .` di PowerShell     |
+| CLI verbose manual | RTK           | `rtk ...` manual-only; auto-rewrite cuma WSL/Unix shell |
+
+---
+
 ## Tips Hemat Token
 
 1. **Pakai prompt yang spesifik** — "ubah warna sidebar jadi lebih gelap" > "improve the design"
