@@ -66,7 +66,7 @@ Use `graphify query/path/explain` before raw file reads. Refresh after code chan
 
 - **caveman:** response style only; ultra is session-level, not product behavior.
 - **context-mode:** owns tool/CLI output compression + in-session continuity; do not add duplicate compression hooks.
-- **agentmemory:** active cross-session recall. `claude-mem` stays disabled unless user approves switching memory layer.
+- **claude-mem:** active cross-session recall. `agentmemory` stays disabled to avoid duplicate capture/injection.
 - **graphify:** on-demand graph for blast radius/cross-file lookup; source code remains authority.
 - **RTK:** manual-only on native Windows (`rtk ...`); do not claim auto-rewrite outside WSL/Unix shell.
 

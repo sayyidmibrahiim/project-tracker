@@ -13,10 +13,10 @@ Use only integrations needed for current task. Do not health-check all tools eve
 | ------------ | --------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------ |
 | caveman      | Response style compression                          | Operational updates, reviews, bug triage, evidence summaries         | Stakeholder prose, UI copy, legal/safety text                |
 | context-mode | Tool/CLI output compression + in-session continuity | Large command output, compaction/resume continuity, ctx search/stats | Do not duplicate via custom output hooks or MCP-only install |
-| agentmemory  | Cross-session recall                                | Prior decisions, user preferences, old bugs, conventions             | Current code facts; verify source instead                    |
+| claude-mem   | Cross-session recall                                | Prior decisions, user preferences, old bugs, conventions             | Current code facts; verify source instead                    |
 | graphify     | Code graph / blast radius                           | Cross-file impact, dependency paths, shared UI/backend propagation   | Single obvious file, stale graph until refreshed             |
 | RTK          | Optional manual CLI compression                     | Explicit `rtk ...` commands on native Windows                        | Never claim auto-rewrite on native Windows                   |
-| claude-mem   | Disabled alternate memory layer                     | Only if user approves switching from agentmemory                     | Do not run alongside agentmemory                             |
+| agentmemory  | Disabled alternate memory layer                     | Only if user approves switching from claude-mem                      | Do not run alongside claude-mem                              |
 
 ## Windows rules
 
