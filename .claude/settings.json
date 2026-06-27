@@ -4,7 +4,21 @@
       "Bash(graphify query *)",
       "Bash(rtk git *)",
       "Bash(git diff *)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check)",
+      "Bash(node --import ./tests/register-hooks.mjs --test tests/dashboard-inline-edit.test.mjs tests/components.test.mjs tests/dashboard-reopen.test.mjs)",
+      "Bash(command -v graphify)",
+      "Bash(graphify update *)",
+      "Bash(npm --prefix frontend run check)",
+      "Bash(npm --prefix frontend run build)",
+      "Bash(D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)"
     ]
   },
   "hooks": {

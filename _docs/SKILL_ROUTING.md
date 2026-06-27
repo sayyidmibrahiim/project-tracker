@@ -34,6 +34,19 @@ Use `context7-mcp` (resolve library → query docs) before implementing with:
 - APScheduler (job scheduling, triggers)
 - Any unfamiliar or version-sensitive library
 
+## Integration Routing
+
+| Integration  | Type        | Owner                                           | Windows state                                  | Trigger                                        |
+| ------------ | ----------- | ----------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| caveman      | Plugin      | Response style compression                      | Auto-loaded; ultra is session-level            | Operational summaries/reviews                  |
+| context-mode | Plugin      | Tool output compression + in-session continuity | Enabled plugin path only                       | Large output, ctx search/stats, resume/compact |
+| agentmemory  | Plugin      | Cross-session recall                            | Enabled                                        | Prior decisions/preferences                    |
+| claude-mem   | Plugin      | Alternate cross-session memory                  | Installed but disabled                         | Only switch with user approval                 |
+| graphify     | CLI + skill | Code graph/blast radius                         | Use `graphify`, no leading slash in PowerShell | Cross-file/shared impact                       |
+| RTK          | CLI         | Manual command compression                      | Manual-only; no native Windows auto-rewrite    | Explicit `rtk ...` commands                    |
+
+Sensitive paths stay denied for all integrations: `.env`, `*.env.*`, `secrets/`, credentials, `*.pem`, `*.key`.
+
 ## Anti-Patterns
 
 - Do NOT invoke all skills "just to be safe" — each costs tokens
@@ -41,3 +54,6 @@ Use `context7-mcp` (resolve library → query docs) before implementing with:
 - Do NOT use frontend-design for backend-only work
 - Do NOT use code-review before implementation is working
 - Do NOT use simplify on code that's not yet verified
+- Do NOT enable both `agentmemory` and `claude-mem` capture/injection at once
+- Do NOT install context-mode plugin and MCP-only path together
+- Do NOT claim RTK auto-rewrite works in native Windows
