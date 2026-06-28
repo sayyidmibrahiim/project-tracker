@@ -17,7 +17,7 @@ Context:
 - Working one menu at a time
 
 Do:
-1. /agentmemory:recall — get latest decisions, current menu, approved designs
+1. claude-mem:recall — get latest decisions, current menu, approved designs
 2. Read _docs/PROGRESS.md
 3. git status + git branch
 4. graphify check (absolute path)
@@ -324,7 +324,7 @@ Context:
 
 Rules:
 - Update _docs/PROGRESS.md
-- /agentmemory:remember — save stable decisions
+- claude-mem:remember — save stable decisions
 - Refresh graphify if available
 - Jangan commit/stash kecuali gw bilang
 - Report: branch, dirty files, tests run, not tested, next prompt
@@ -347,8 +347,8 @@ Rules:
 | Test-first     | `/superpowers:test-driven-development`        |
 | Simplify       | `/simplify`                                   |
 | Commit         | `/caveman:caveman-commit`                     |
-| Memory save    | `/agentmemory:remember`                       |
-| Memory load    | `/agentmemory:recall`                         |
+| Memory save    | `claude-mem:remember`                        |
+| Memory load    | `claude-mem:recall`                          |
 | Codebase query | `/graphify`                                   |
 | Verify done    | `/superpowers:verification-before-completion` |
 | Run app        | `/verify` atau `/run`                         |
@@ -362,7 +362,7 @@ Rules:
 | ------------------ | ------------- | ------------------------------------------------------- |
 | Style ringkas      | caveman ultra | Session-level; normal mode untuk teks stakeholder       |
 | Output tool besar  | context-mode  | Plugin otomatis; jangan bikin hook kompresi sendiri     |
-| Memory lintas sesi | agentmemory   | claude-mem disabled kecuali switch disetujui            |
+| Memory lintas sesi | claude-mem    | claude-mem is the one active tool                       |
 | Blast radius code  | graphify      | `graphify query`, bukan `/graphify .` di PowerShell     |
 | CLI verbose manual | RTK           | `rtk ...` manual-only; auto-rewrite cuma WSL/Unix shell |
 

@@ -7,7 +7,8 @@ main (stable, tested)
   ├── feat/{menu}-{desc}        # New feature
   ├── fix/{menu}-{desc}         # Bug fix
   ├── design/{menu}-{desc}      # Design/UI change
-  └── refactor/{menu}-{desc}    # Code restructure, no behavior change
+  ├── refactor/{menu}-{desc}    # Code restructure, no behavior change
+  └── chore/{desc}              # Config/docs/tooling, no product code change
 ```
 
 - Branch from main, merge back to main
@@ -40,6 +41,24 @@ After coding:
 4. Update \_docs/PROGRESS.md
 5. Refresh graphify if installed
 6. Report: changed files, commands run, not tested, remaining risks
+
+## Done Gate
+
+Code selesai ≠ slice selesai (see [CLAUDE.md §Branch Workflow](../CLAUDE.md#branch-workflow)). Slice selesai HANYA setelah user manual verify + approve merge.
+
+## Verification Matrix
+
+Run targeted verification based on change type (JANGAN full suite by default):
+
+| Change Type | Verification Command |
+|-------------|---------------------|
+| Frontend-only (Svelte/TS) | `npm --prefix frontend run build` + `npm --prefix frontend run check` |
+| Backend-only (Python) | `pytest tests/ -v -k <related_test_file_or_pattern>` |
+| Bridge (services ↔ frontend) | Contract tests: `pytest tests/ -v -k "test_bridge"` |
+| UI/Dock/Design change | Manual checklist (generate and hand to user) |
+| Full suite | On-demand only: `/fullcheck` or explicit `pytest tests/ -v` |
+
+> Full suite is NOT the default. Only run full suite when explicitly requested (`/fullcheck`) or when a change touches both frontend and backend in non-trivial ways.
 
 ## Testing Strategy
 
@@ -99,7 +118,7 @@ Generate this after every code completion:
 - [ ] Window 800×600 — layout not broken
 - [ ] Window 1024×768 — layout comfortable
 - [ ] Window 1920×1080 — layout fills space well
-- [ ] Sidebar collapse works at narrow width
+- [ ] Bottom dock auto-hide/reveal works at all widths (legacy sidebar behavior is bottom dock)
 
 ### Interaction
 

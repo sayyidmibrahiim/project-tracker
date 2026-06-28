@@ -34,7 +34,7 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 ## Color Use
 
-- Dark chrome: title/header/sidebar/navigation only.
+- Dark chrome: title/header/bottom dock/navigation only.
 - White canvas: main workspace, cards, tables, forms.
 - DBS red `#B91C1C`: primary action, active state, important status, 1–2 accents per panel.
 - Soft pink tokens: selected/active background tints, not bulk surfaces.
@@ -59,12 +59,18 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 | Element           | Components                                                                                       |
 | ----------------- | ------------------------------------------------------------------------------------------------ |
-| Shell chrome      | `Header.svelte`, `Sidebar.svelte`                                                                |
+| Shell chrome      | `Header.svelte`, `Sidebar.svelte` (IS the bottom dock; legacy name, was once a left sidebar)     |
 | Primary data view | `Dashboard.svelte`, `ProjectDetails.svelte`, `Report.svelte`                                     |
 | Actions           | `ProjectActions.svelte`, `ProjectTransitions.svelte`, `FileActions.svelte`                       |
 | Automation panels | `RulesActions.svelte`, `SchedulerActions.svelte`, `TeamsActions.svelte`, `OutlookActions.svelte` |
 | Dialogs/hints     | `ConfirmModal.svelte`, `DisabledHint.svelte`, `EmailTemplateDialog.svelte`                       |
 | Editors/forms     | `NewProjectForm.svelte`, `NotesEditor.svelte`, `Settings.svelte`                                 |
+
+## Color Rules
+
+- **All new colors MUST be defined as CSS variables in `frontend/src/styles.css` `:root`.**
+- **No raw hex values in component `<style>` blocks.** Exception: temporary fallback during palette migration.
+- See `_docs/BACKLOG.md` for list of components currently violating this rule (migration task).
 
 ## Accessibility Floor
 

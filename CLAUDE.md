@@ -66,26 +66,41 @@ Use `graphify query/path/explain` before raw file reads. Refresh after code chan
 
 - **caveman:** response style only; ultra is session-level, not product behavior.
 - **context-mode:** owns tool/CLI output compression + in-session continuity; do not add duplicate compression hooks.
-- **claude-mem:** active cross-session recall. `agentmemory` stays disabled to avoid duplicate capture/injection.
+- **claude-mem:** active cross-session recall. Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
 - **graphify:** on-demand graph for blast radius/cross-file lookup; source code remains authority.
 - **RTK:** manual-only on native Windows (`rtk ...`); do not claim auto-rewrite outside WSL/Unix shell.
 
 Full routing → `.claude/rules/integration-routing.md` and `_docs/SKILL_ROUTING.md`.
 
+## Session vs Turn
+
+Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
+`graphify` → only before code lookups / blast-radius checks, not every turn.
+
 ## Session Lifecycle
 
 | Phase           | Actions                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Start**       | Recall memory → read \_docs/PROGRESS.md → git status → graphify check                                       |
-| **Before code** | graphify first → smart-explore for code lookup                                                              |
+| **Start**       | Once per session: recall memory → read \_docs/PROGRESS.md → git status                                      |
+| **Before code** | Use graphify before code lookup/blast-radius checks, not every turn                                         |
 | **After code**  | Test/build changed area → update \_docs/PROGRESS.md → refresh graphify → generate manual checklist for user |
 | **End**         | Report: changed files, tests run, not tested, next task. Save stable decisions to memory.                   |
 
 ## Branch Workflow
 
-Every change = new branch from main: `{type}/{menu}-{desc}`.
-Types: `feat/` `fix/` `design/` `refactor/`. Merge only after user manual check + approval.
+Read-only/audit = no branch. Docs-only = `chore/` branch allowed. User-level settings = no repo branch. Code change = branch from main: `{type}/{menu}-{desc}`.
+Types: `feat/` `fix/` `design/` `refactor/` `chore/`. Merge only after user manual check + approval.
+Code done ≠ slice done. Slice done only after user manual verification + merge approval.
 After merge → update \_docs/PROGRESS.md. If behavior changed → update PRD.md too.
+
+## Smallest Diff
+
+Delete > edit > add. No new file, abstraction, config, or dependency unless existing place cannot hold it.
+File ownership/routing → `_docs/FILE_ROUTING.md`; workflow detail → `_docs/WORKFLOW.md`.
+
+## PRD Section Routing
+
+Dashboard → PRD §11. Project Details → §12. Drone/CR state → §9. Folder state/filesystem → §7. Global shell/navigation → §10.
 
 ## Design-First Rule
 

@@ -300,7 +300,7 @@ Scrollbars:   thin (4px), pink accent handle
 - Use `clamp()` for font sizes where needed.
 - Major panels use resizable splitters (CSS resize or library).
 - All list/table panels scroll internally; no page-level overflow.
-- Sidebar supports expanded (default) and collapsed (icon-only) modes.
+- **Sidebar:** `Sidebar.svelte` implements the **bottom dock** (see §10.3). The name is legacy. There is no persistent left sidebar.
 - Header controls use `min-w` to prevent clipping on small screens.
 - Empty-area click must clear selection in tables/trees/lists.
 
@@ -1920,17 +1920,19 @@ User opens Settings
 
 Lightweight operational alerts visible at all times without leaving the current page.
 
-### 18.2 Notification Panel (Sidebar)
+### 18.2 Notification Panel (Bottom Dock)
+
+Notifications are accessible from the bottom dock (see §10.3). A dock button with unread badge shows the notification count. Click/hover opens a compact popover above the dock.
 
 ```
-EXPANDED SIDEBAR:
-  Bell icon + "Notifications" label + [✕ Dismiss All]
+DOCK NOTIFICATION BUTTON:
+  Bell icon button with unread count badge
+  Hover/click → compact popover above dock
+
+POPOVER:
   Scrollable list of notification cards (newest first)
   Empty state: "No notifications yet."
-
-COLLAPSED SIDEBAR:
-  Bell icon button with unread count badge
-  Click → expand sidebar to see notifications
+  Close when cursor leaves popover
 ```
 
 ### 18.3 Notification Types
