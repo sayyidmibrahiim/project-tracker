@@ -23,9 +23,9 @@ Branch: `prd-v31-migration`. PRD.md v3.1 = product truth.
 
 ## Last 3 Completed Slices
 
-1. **Dashboard Master-Detail Redesign** (2026-06-23): 38/62 master-detail layout, inline edits, DBS primary red tokens, layout tests updated.
-2. **Claude Design System Migration** (2026-06-22): Global CSS props migrated to warm-editorial palette across all Svelte components. 1759 backend + 140 frontend tests pass.
-3. **Dashboard Professional Polish** (2026-06-22): Header/controls/table/dock refinements, CR/Drone link display with copy/open, reduced-motion transitions.
+1. **Config/Docs Cleanup** (2026-06-29): Nav truth unified (bottom dock), agentmemory removed from all routing docs, CLAUDE.md lifecycle + SKILL_ROUTING.md single-route clarity, FILE_ROUTING.md + DECISIONS.md as tracked files, stale references cleaned. 0 product code changed.
+2. **Dashboard Master-Detail Redesign** (2026-06-23): 38/62 master-detail layout, inline edits, DBS primary red tokens, layout tests updated.
+3. **Claude Design System Migration** (2026-06-22): Global CSS props migrated to warm-editorial palette across all Svelte components. 1759 backend + 140 frontend tests pass.
 
 ## Pre-existing Test Failures (baseline)
 
