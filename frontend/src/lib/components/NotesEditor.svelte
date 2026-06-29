@@ -265,12 +265,10 @@
     if (status === "pending" || timer) { if (timer) { clearTimeout(timer); timer = undefined; } flush(); }
   }
 
-  function bindCheckboxListeners() {
-    if (!editorEl) return;
-    editorEl.querySelectorAll(".ne-todo-checkbox").forEach(box => {
-      box.removeEventListener("change", syncToMarkdown);
-      box.addEventListener("change", syncToMarkdown);
-    });
+  /** Delegated change handler — fires for checklist toggles and re-serializes. */
+  function onEditorChange(e: Event) {
+    const t = e.target as HTMLElement | null;
+    if (t && t.classList.contains("ne-todo-checkbox")) syncToMarkdown();
   }
 
   // ── Active state detection ──
@@ -500,7 +498,6 @@
       }
     }
     editorEl.focus();
-    setTimeout(bindCheckboxListeners, 50);
     scheduleSave();
     tick().then(updateFormatState);
   }
@@ -578,7 +575,6 @@
     if (editorEl && projectPath !== lastPath) {
       lastPath = projectPath;
       editorEl.innerHTML = renderMarkdown(notesContent);
-      bindCheckboxListeners();
     }
   });
 
@@ -587,6 +583,7 @@
       stateDetectBound = true;
       editorEl.addEventListener('keyup', updateFormatState);
       editorEl.addEventListener('mouseup', updateFormatState);
+      editorEl.addEventListener('change', onEditorChange);
       document.addEventListener('selectionchange', updateFormatState);
       window.addEventListener('click', onWindowClick);
     }
@@ -749,6 +746,8 @@
   .ne-tbtn { min-width:26px; height:24px; padding:0 6px; border:1px solid var(--soft-white-border); border-radius:5px; background:var(--card-white); color:var(--color-ink); font-size:10px; font-weight:850; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:2px; white-space:nowrap; }
   .ne-tbtn:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-tbtn.active { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .ne-tbtn:active { transform:scale(0.94); background:var(--soft-pink-surface); border-color:var(--color-dbs-red); }
+  .ne-tselect:active { transform:none; }
   .ne-tbtn s { color:inherit; text-decoration:line-through; }
   .ne-tselect { min-width:68px; width:auto; padding:0 16px 0 6px; appearance:none; font-size:9px; background-image:linear-gradient(45deg,transparent 50%,var(--text-strong) 50%),linear-gradient(135deg,var(--text-strong) 50%,transparent 50%); background-position:calc(100% - 6px) 10px,calc(100% - 2px) 10px; background-size:4px 4px,4px 4px; background-repeat:no-repeat; background-color:var(--card-white); }
   .ne-fsbtn { min-width:30px; padding:0; }
