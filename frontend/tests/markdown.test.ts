@@ -59,3 +59,65 @@ test("escapeHtml escapes the significant characters", () => {
 test("empty input renders empty string", () => {
   assert.equal(renderMarkdown(""), "");
 });
+
+// ── New patterns added so every toolbar format round-trips through notes.md ──
+
+test("renders strikethrough", () => {
+  assert.match(renderMarkdown("~~done~~"), /<s>done<\/s>/);
+});
+
+test("renders ordered lists", () => {
+  const html = renderMarkdown("1. one\n2. two");
+  assert.match(html, /<ol>/);
+  assert.match(html, /<li>one<\/li>/);
+  assert.match(html, /<li>two<\/li>/);
+  assert.match(html, /<\/ol>/);
+});
+
+test("renders images", () => {
+  assert.match(renderMarkdown("![pic](https://example.com/a.png)"), /<img src="https:\/\/example\.com\/a\.png" alt="pic" \/>/);
+});
+
+test("renders pipe tables with a header separator", () => {
+  const html = renderMarkdown("| h1 | h2 |\n| --- | --- |\n| a | b |");
+  assert.match(html, /<table>/);
+  assert.match(html, /<thead><tr><th>h1<\/th><th>h2<\/th><\/tr><\/thead>/);
+  assert.match(html, /<tbody><tr><td>a<\/td><td>b<\/td><\/tr><\/tbody>/);
+});
+
+// ── Selective sanitization: whitelisted formatting HTML passes through ──
+
+test("passes whitelisted formatting HTML through unescaped", () => {
+  assert.match(renderMarkdown("<u>under</u>"), /<u>under<\/u>/);
+  assert.match(renderMarkdown("<sub>2</sub>"), /<sub>2<\/sub>/);
+  assert.match(renderMarkdown("<sup>2</sup>"), /<sup>2<\/sup>/);
+  assert.match(renderMarkdown("<s>old</s>"), /<s>old<\/s>/);
+});
+
+test("preserves inline style attributes on span/p", () => {
+  assert.match(renderMarkdown('<span style="color:red">red</span>'), /<span style="color: red">red<\/span>/);
+  assert.match(renderMarkdown('<p style="text-align:center">c</p>'), /<p style="text-align: center">c<\/p>/);
+});
+
+test("drops dangerous style tokens (url/expression/javascript)", () => {
+  // The dangerous declaration must be stripped, leaving the tag inert.
+  const html = renderMarkdown('<span style="background:url(javascript:alert(1))">x</span>');
+  assert.doesNotMatch(html, /javascript:alert/);
+  assert.doesNotMatch(html, /url\(/);
+});
+
+test("drops image src with an unsafe scheme", () => {
+  const html = renderMarkdown("![x](javascript:alert(1))");
+  // An img whose src is dropped is omitted entirely.
+  assert.doesNotMatch(html, /javascript:/);
+});
+
+// ── XSS whitelist boundary: still escapes non-whitelisted tags ──
+
+test("escapes <script> but passes <u> (selective, not permissive)", () => {
+  const html = renderMarkdown("<script>alert(1)</script> and <u>safe</u>");
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /<u>safe<\/u>/);
+});
+
