@@ -45,6 +45,17 @@
   let emojiOpen = $state(false);
   let fontSelVal = $state('');
   let sizeSelVal = $state('');
+  // Inline link dialog (replaces unreliable WebView2 prompt()).
+  let linkOpen = $state(false);
+  let linkUrl = $state('');
+  let linkEditing = $state(false);
+  let linkAnchor = $state<HTMLAnchorElement | null>(null);
+  let linkRange: Range | null = null;
+  // Inline image dialog.
+  let imgOpen = $state(false);
+  let imgUrl = $state('');
+  let imgAlt = $state('');
+  let imgRange: Range | null = null;
 
   const FONTS = [
     { label: 'Sans-serif', value: 'Inter, sans-serif' },
@@ -142,6 +153,7 @@
 
   function closeAllPopovers() {
     colorOpen = false; tableOpen = false; emojiOpen = false;
+    linkOpen = false; imgOpen = false;
   }
 
   function onWindowClick(e: MouseEvent) {
@@ -437,49 +449,149 @@
     tick().then(updateFormatState);
   }
 
+  // ── Selection save/restore (prompt()-free dialogs steal focus from the editor) ──
+
+  function saveSelection(): Range | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0).cloneRange();
+    return editorEl?.contains(range.commonAncestorContainer) ? range : null;
+  }
+
+  function restoreSelection(range: Range | null) {
+    if (!range) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // ── Link dialog (create / edit / remove) ──
+
   function formatLink() {
     if (!editorEl) return;
     editorEl.focus();
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
 
+    // Editing an existing <a>?
     let el = sel.anchorNode as HTMLElement | null;
     if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
     while (el && el !== editorEl && el.tagName.toLowerCase() !== 'a') el = el.parentElement;
-
     if (el && el.tagName.toLowerCase() === 'a') {
       const a = el as HTMLAnchorElement;
-      const currentUrl = a.getAttribute('href') || '';
-      const action = prompt("Edit URL (press OK to update, Cancel to remove link):", currentUrl);
-      if (action === null) {
-        const parent = a.parentNode;
-        if (parent) {
-          const text = document.createTextNode(a.textContent || '');
-          parent.replaceChild(text, a);
-          const range = document.createRange();
-          range.selectNodeContents(parent);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      } else if (action !== currentUrl) {
-        a.setAttribute('href', action);
-      }
-      scheduleSave();
-      tick().then(updateFormatState);
+      linkAnchor = a;
+      linkEditing = true;
+      linkUrl = a.getAttribute('href') || '';
+      linkRange = null;
+      openLinkDialog();
       return;
     }
 
+    // Creating a new link: require a non-empty selection.
     if (sel.isCollapsed) return;
-    const url = prompt("Enter URL:");
-    if (!url) return;
-    const range = sel.getRangeAt(0);
-    const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.textContent = range.toString();
-    range.deleteContents();
-    range.insertNode(a);
+    linkAnchor = null;
+    linkEditing = false;
+    linkUrl = '';
+    linkRange = saveSelection();
+    if (!linkRange) return;
+    openLinkDialog();
+  }
+
+  function openLinkDialog() {
+    closeAllPopovers();
+    linkOpen = true;
+    tick().then(() => document.getElementById('ne-link-input')?.focus());
+  }
+
+  function closeLinkDialog() {
+    linkOpen = false;
+    linkUrl = '';
+    linkAnchor = null;
+    linkEditing = false;
+    linkRange = null;
+  }
+
+  function confirmLink() {
+    const url = linkUrl.trim();
+    if (linkEditing && linkAnchor) {
+      if (url) {
+        linkAnchor.setAttribute('href', url);
+      } else {
+        // Empty URL while editing = remove the link.
+        removeLink(linkAnchor);
+      }
+    } else if (url && linkRange) {
+      // Build <a> manually (no deprecated execCommand createLink).
+      editorEl?.focus();
+      restoreSelection(linkRange);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.textContent = linkRange.toString();
+      linkRange.deleteContents();
+      linkRange.insertNode(a);
+    }
+    linkOpen = false;
     scheduleSave();
     tick().then(updateFormatState);
+  }
+
+  function removeLink(a: HTMLAnchorElement | null) {
+    if (!a) return;
+    const parent = a.parentNode;
+    if (!parent) return;
+    const text = document.createTextNode(a.textContent || '');
+    parent.replaceChild(text, a);
+  }
+
+  function onLinkKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); confirmLink(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeLinkDialog(); }
+  }
+
+  // ── Image dialog ──
+
+  function formatImage() {
+    if (!editorEl) return;
+    editorEl.focus();
+    imgUrl = '';
+    imgAlt = '';
+    imgRange = saveSelection();
+    closeAllPopovers();
+    imgOpen = true;
+    tick().then(() => document.getElementById('ne-img-input')?.focus());
+  }
+
+  function closeImageDialog() {
+    imgOpen = false;
+    imgUrl = '';
+    imgAlt = '';
+    imgRange = null;
+  }
+
+  function confirmImage() {
+    const url = imgUrl.trim();
+    if (url) {
+      editorEl?.focus();
+      if (imgRange) restoreSelection(imgRange);
+      const img = document.createElement('img');
+      img.setAttribute('src', url);
+      img.setAttribute('alt', imgAlt.trim());
+      img.style.maxWidth = '100%';
+      if (imgRange && !imgRange.collapsed) imgRange.deleteContents();
+      if (imgRange) imgRange.insertNode(img);
+      else if (editorEl) editorEl.appendChild(img);
+      const space = document.createTextNode('\u00A0');
+      img.parentNode?.insertBefore(space, img.nextSibling);
+    }
+    imgOpen = false;
+    scheduleSave();
+    tick().then(updateFormatState);
+  }
+
+  function onImageKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); confirmImage(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeImageDialog(); }
   }
 
   function formatChecklist() {
@@ -498,28 +610,6 @@
       }
     }
     editorEl.focus();
-    scheduleSave();
-    tick().then(updateFormatState);
-  }
-
-  function formatImage() {
-    if (!editorEl) return;
-    editorEl.focus();
-    const url = prompt("Enter image URL:");
-    if (!url) return;
-    const alt = prompt("Enter image description (alt text):") || '';
-    const img = document.createElement('img');
-    img.setAttribute('src', url);
-    img.setAttribute('alt', alt);
-    img.style.maxWidth = '100%';
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      sel.getRangeAt(0).insertNode(img);
-    } else {
-      editorEl.appendChild(img);
-    }
-    const space = document.createTextNode('\u00A0');
-    img.parentNode?.insertBefore(space, img.nextSibling);
     scheduleSave();
     tick().then(updateFormatState);
   }
@@ -674,7 +764,22 @@
       <span class="ne-sep"></span>
 
       <!-- Row: Link HR Table Image Emoji -->
-      <button type="button" class="ne-tbtn" class:active={fs.link} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
+      <div class="ne-popover-wrap">
+        <button type="button" class="ne-tbtn" class:active={fs.link} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
+        {#if linkOpen}
+          <div class="ne-popover ne-link-pop">
+            <label class="ne-field-label" for="ne-link-input">{linkEditing ? 'Edit URL' : 'Link URL'}</label>
+            <input id="ne-link-input" class="ne-input" type="url" bind:value={linkUrl} placeholder="https://example.com" onkeydown={onLinkKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
+            <div class="ne-dialog-actions">
+              {#if linkEditing}
+                <button type="button" class="ne-tbtn ne-act-btn" title="Remove link" onmousedown={(e) => { e.preventDefault(); removeLink(linkAnchor); linkOpen=false; scheduleSave(); tick().then(updateFormatState); }}>Remove</button>
+              {/if}
+              <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeLinkDialog(); }}>Cancel</button>
+              <button type="button" class="ne-tbtn ne-act-btn" title="Apply" onmousedown={(e) => { e.preventDefault(); confirmLink(); }}>OK</button>
+            </div>
+          </div>
+        {/if}
+      </div>
       <button type="button" class="ne-tbtn" title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); formatSimple('insertHorizontalRule'); }}>HR</button>
       <div class="ne-popover-wrap">
         <button type="button" class="ne-tbtn" title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}>⊞</button>
@@ -692,7 +797,21 @@
           </div>
         {/if}
       </div>
-      <button type="button" class="ne-tbtn" title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
+      <div class="ne-popover-wrap">
+        <button type="button" class="ne-tbtn" title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
+        {#if imgOpen}
+          <div class="ne-popover ne-link-pop">
+            <label class="ne-field-label" for="ne-img-input">Image URL</label>
+            <input id="ne-img-input" class="ne-input" type="url" bind:value={imgUrl} placeholder="https://example.com/img.png" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
+            <label class="ne-field-label" for="ne-img-alt" style="margin-top:4px">Description (alt)</label>
+            <input id="ne-img-alt" class="ne-input" type="text" bind:value={imgAlt} placeholder="Optional alt text" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
+            <div class="ne-dialog-actions">
+              <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeImageDialog(); }}>Cancel</button>
+              <button type="button" class="ne-tbtn ne-act-btn" title="Insert" onmousedown={(e) => { e.preventDefault(); confirmImage(); }}>Insert</button>
+            </div>
+          </div>
+        {/if}
+      </div>
       <div class="ne-popover-wrap">
         <button type="button" class="ne-tbtn ne-emoji-trigger" title="Emoji" onmousedown={(e) => { e.preventDefault(); emojiOpen=!emojiOpen; colorOpen=false; tableOpen=false; }}>😊</button>
         {#if emojiOpen}
@@ -764,6 +883,12 @@
   .ne-tcell.ne-thover { background:var(--color-dbs-red); border-color:var(--color-dbs-red); }
   .ne-table-label { text-align:center; font-size:9px; font-weight:800; color:var(--color-muted); margin:4px 0; }
   .ne-insert-btn { width:100%; margin-top:2px; }
+  .ne-link-pop { left:auto; right:0; transform:none; padding:8px; width:200px; display:flex; flex-direction:column; gap:2px; }
+  .ne-field-label { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
+  .ne-input { width:100%; padding:4px 6px; border:1px solid var(--soft-white-border); border-radius:4px; font-size:11px; font-family:var(--font); color:var(--color-ink); background:var(--card-white); outline:none; }
+  .ne-input:focus { border-color:var(--color-dbs-red); }
+  .ne-dialog-actions { display:flex; gap:4px; justify-content:flex-end; margin-top:6px; }
+  .ne-act-btn { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-emoji-btn { font-size:16px; width:22px; height:22px; border:0; background:transparent; cursor:pointer; border-radius:3px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
   .ne-emoji-btn:hover { background:var(--soft-pink-surface); }
   .ne-textarea { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:var(--font); color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; }
