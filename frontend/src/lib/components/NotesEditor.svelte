@@ -152,6 +152,19 @@
 
   // ── HTML-to-Markdown ──
 
+  /** Escape characters that would break a markdown/HTML attribute value. */
+  function escapeAttr(v: string): string {
+    return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  /** Pull text-align out of an element's inline style or align attribute. */
+  function extractAlign(el: HTMLElement): string {
+    const attr = el.getAttribute("align");
+    if (attr) return attr.toLowerCase();
+    const m = (el.getAttribute("style") || "").match(/text-align:\s*([^;]+)/i);
+    return m ? m[1].trim().toLowerCase() : "";
+  }
+
   function domToMarkdown(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
     if (node.nodeType !== Node.ELEMENT_NODE) return "";
@@ -179,28 +192,56 @@
       case "s": case "strike": return `~~${children}~~`;
       case "sub": return `<sub>${children}</sub>`;
       case "sup": return `<sup>${children}</sup>`;
+      case "pre":
+        // Code block: emit as a fenced block so renderMarkdown lifts it back.
+        return '```\n' + (el.textContent || '') + '\n```\n\n';
       case "code": return `\`${children}\``;
       case "a": return `[${children}](${el.getAttribute("href") || ""})`;
-      case "p": return `${children.trim()}\n\n`;
-      case "div": return `${children}\n`;
+      case "p": {
+        const align = extractAlign(el);
+        const trimmed = children.trim();
+        if (align) return `<p style="text-align:${align}">${trimmed}</p>\n\n`;
+        return `${trimmed}\n\n`;
+      }
+      case "div": {
+        const dAlign = extractAlign(el);
+        if (dAlign) return `<div style="text-align:${dAlign}">${children}</div>\n`;
+        return `${children}\n`;
+      }
       case "hr": return "---\n\n";
       case "br": return "\n";
-      case "table":
-        const rows = Array.from(el.querySelectorAll('tr')).map(tr => {
-          const cells = Array.from(tr.querySelectorAll('td,th')).map(c => c.textContent?.trim() || '').join(' | ');
-          return `| ${cells} |`;
-        }).join('\n');
-        return `${rows}\n\n`;
+      case "img": {
+        const src = el.getAttribute('src') || '';
+        const alt = el.getAttribute('alt') || '';
+        return `![${alt}](${src})`;
+      }
+      case "table": {
+        // Render a GFM pipe table with a separator row after the header.
+        const allRows = Array.from(el.querySelectorAll('tr'));
+        if (allRows.length === 0) return children;
+        const cellText = (c: Element) => (c.textContent || '').replace(/\|/g, '\\|').trim();
+        const rowText = (tr: Element) => `| ${Array.from(tr.querySelectorAll('td,th')).map(cellText).join(' | ')} |`;
+        const header = allRows[0];
+        const cols = header.querySelectorAll('td,th').length;
+        const sep = `| ${Array.from({ length: cols || 1 }, () => '---').join(' | ')} |`;
+        const body = allRows.slice(1).map(rowText).join('\n');
+        return `${rowText(header)}\n${sep}${body ? '\n' + body : ''}\n\n`;
+      }
       case "tr": case "td": case "th": case "tbody": case "thead": case "caption": return children;
-      case "font": return children;
-      case "span":
-        const style = el.getAttribute('style') || '';
-        if (style.includes('font-size') || style.includes('font-family') || style.includes('color') || style.includes('background-color')) {
-          const m: string[] = [];
-          if (style.includes('background-color')) { const c = style.match(/background-color:\s*([^;]+)/)?.[1]; if (c) m.push(`bg${c}`); }
-          if (m.length) return `<span style="${style}">${children}</span>`;
-        }
+      case "font": {
+        // Preserve legacy <font color/face> that execCommand may produce.
+        const attrs: string[] = [];
+        const fc = el.getAttribute('color'); if (fc) attrs.push(`color="${escapeAttr(fc)}"`);
+        const ff = el.getAttribute('face'); if (ff) attrs.push(`face="${escapeAttr(ff)}"`);
+        if (attrs.length) return `<font ${attrs.join(' ')}>${children}</font>`;
         return children;
+      }
+      case "span": {
+        // Preserve ALL inline styles (color, background, font-size/family, …).
+        const style = el.getAttribute('style') || '';
+        if (style.trim()) return `<span style="${escapeAttr(style)}">${children}</span>`;
+        return children;
+      }
       default: return children;
     }
   }
