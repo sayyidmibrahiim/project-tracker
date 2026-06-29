@@ -14,11 +14,11 @@ Branch: `design/titlebar` (pending merge).
 
 ## Pending (Phase 2 — Backend/Logic)
 
-| Area                    | Status |
-| ----------------------- | ------ |
-| Backend integration     | Not started |
-| Logic & data flow       | Not started |
-| Windows verify          | Not started |
+| Area                | Status      |
+| ------------------- | ----------- |
+| Backend integration | Not started |
+| Logic & data flow   | Not started |
+| Windows verify      | Not started |
 
 ## Last 3 Completed Slices
 

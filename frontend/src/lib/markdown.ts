@@ -67,6 +67,12 @@ export function renderMarkdown(src: string): string {
   };
 
   for (const line of lines) {
+    // Horizontal rule ---
+    if (/^---\s*$/.test(line.trim())) {
+      closeList();
+      out.push('<hr />');
+      continue;
+    }
     // Fenced code block fences toggle raw-text capture.
     if (/^```/.test(line.trim())) {
       if (inCode) {
