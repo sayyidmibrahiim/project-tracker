@@ -1,14 +1,12 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
 
   let {
     currentPage,
     selectedYear,
-    searchQuery,
     years = [],
     showDashboardControls = false,
     onYearChange,
-    onSearchChange,
     onRefresh,
     onAddProject = () => {},
     onAddYear = async () => null,
@@ -16,11 +14,9 @@
   }: {
     currentPage: string;
     selectedYear: string;
-    searchQuery: string;
     years?: string[];
     showDashboardControls?: boolean;
     onYearChange: (year: string) => void;
-    onSearchChange: (q: string) => void;
     onRefresh: () => void;
     onAddProject?: () => void;
     onAddYear?: (year: string) => Promise<string | null>;
@@ -35,6 +31,17 @@
   let addYearWarn = $derived(Number(addYearValue) > currentYear + 2);
   let lastAddYearToken = 0;
 
+  const pageTitle: Record<string, string> = {
+    dashboard: "Dashboard",
+    "project-detail": "Project Details",
+    "second-brain": "Second Brain",
+    report: "Report",
+    automations: "Automations",
+    settings: "Settings",
+  };
+
+  let title = $derived(pageTitle[currentPage] ?? "");
+
   $effect(() => {
     if (openAddYearToken > lastAddYearToken) {
       lastAddYearToken = openAddYearToken;
@@ -44,29 +51,7 @@
     }
   });
 
-  const headerConfig: Record<string, { title: string; rich: boolean; search: boolean; add: boolean; placeholder: string }> = {
-    dashboard: { title: "Dashboard.", rich: true, search: true, add: true, placeholder: "Search projects here..." },
-    "project-detail": { title: "Project Details.", rich: true, search: true, add: true, placeholder: "Search project details..." },
-    "second-brain": { title: "Second Brain.", rich: false, search: false, add: false, placeholder: "" },
-    report: { title: "Report.", rich: false, search: false, add: false, placeholder: "" },
-    automations: { title: "Automations.", rich: false, search: false, add: false, placeholder: "" },
-    settings: { title: "Settings.", rich: false, search: false, add: false, placeholder: "" },
-  };
-
-  let cfg = $derived(headerConfig[currentPage] ?? headerConfig.dashboard);
-
-  function nowParts(): { date: string; time: string } {
-    const d = new Date();
-    return {
-      date: d.toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }),
-      time: d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-    };
-  }
-
-  let nowText = $state(nowParts());
-  let clockTimer: ReturnType<typeof setInterval> | undefined;
   let spinning = $state(false);
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   function triggerRefresh() {
     onRefresh();
@@ -96,40 +81,17 @@
     onYearChange((e.target as HTMLSelectElement).value);
   }
 
-  function handleSearchInput(e: Event) {
-    const value = (e.target as HTMLInputElement).value;
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => onSearchChange(value), 200);
-  }
-
-  onMount(() => {
-    clockTimer = setInterval(() => (nowText = nowParts()), 1000);
-  });
-  onDestroy(() => {
-    if (clockTimer) clearInterval(clockTimer);
-    if (searchTimer) clearTimeout(searchTimer);
-  });
+  onDestroy(() => {});
 </script>
 
 <header class="app-header">
   <div class="header-title-box">
-    <div class="page-title-divider"></div>
-    <h1 class="page-title">{cfg.title}</h1>
+    <h1 class="page-title">{title}</h1>
   </div>
 
-  <div class="header-title-box header-center">
-    <div class="date-time-badge" aria-label={`Current date and time: ${nowText.date} ${nowText.time}`}>
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="datetime-icon" style="color: var(--color-ink-strong); margin-right: 6px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-      <span class="datetime-copy">
-        <span class="datetime-date">{nowText.date}</span>
-        <span class="datetime-time">{nowText.time}</span>
-      </span>
-    </div>
-  </div>
-
-  <div class="header-action-box header-actions" class:hidden={!cfg.rich}>
-    {#if cfg.rich}
-      <div class="header-year" class:hidden={!showDashboardControls}>
+  <div class="header-right">
+    {#if showDashboardControls}
+      <div class="header-year">
         <select class="combo" aria-label="Year" value={selectedYear} onchange={handleYearInput}>
           <option value="all">All years</option>
           {#each years as y}
@@ -151,11 +113,7 @@
           </div>
         {/if}
       </div>
-      <div class="search-shell" class:hidden={!cfg.search}>
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input class="input" placeholder={cfg.placeholder} value={searchQuery} oninput={handleSearchInput} />
-      </div>
-      <button class="btn-black" class:hidden={!cfg.add} onclick={() => onAddProject()}>
+      <button class="btn-black" onclick={() => onAddProject()}>
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         Add Project
       </button>

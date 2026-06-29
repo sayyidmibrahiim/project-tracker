@@ -44,6 +44,8 @@
   // Inline-edit transient state
   let savingKeys: string[] = $state([]);
   let actionError: string = $state("");
+  let crEditing: Record<string, boolean> = $state({});
+  let droneEditing: Record<string, boolean> = $state({});
   type PendingState = { kind: "cr" | "drone" | "reopen"; path: string; index: number; next: string; name: string };
   let pendingState: PendingState | null = $state(null);
 
@@ -400,20 +402,25 @@
 </script>
 
 <section class="screen active" id="screen-dashboard">
-  {#if loadState !== "idle"}
-    <!-- Status filter bar -->
-    <div class="dashboard-status-bar">
-      <div class="dash-filter-tabs" aria-label="Dashboard status filters">
-        {#each statuses as s}
-          <button class="status-tab" class:active={activeStatus === s.key} onclick={() => (activeStatus = s.key)}>
-            {s.label} ({s.count})
-          </button>
-        {/each}
-      </div>
-      <button class="dash-reset-filter" type="button" disabled={activeStatus === "all"} onclick={() => (activeStatus = "all")} title="Clear status filter">Clear</button>
-      <span class="project-count">{filteredProjects.length} project(s)</span>
+  <div class="page-header">
+    <div class="page-header-left">
+      <span class="page-header-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      <h2 class="page-header-title">Dashboard</h2>
     </div>
-  {/if}
+    <div class="page-header-actions">
+      {#if loadState !== "idle"}
+        <div class="dashboard-status-bar" aria-label="Dashboard status filters">
+          {#each statuses as s}
+            <button class="status-tab" class:active={activeStatus === s.key} onclick={() => (activeStatus = s.key)}>
+              {s.label} ({s.count})
+            </button>
+          {/each}
+          <button class="dash-reset-filter" type="button" disabled={activeStatus === "all"} onclick={() => (activeStatus = "all")} title="Clear status filter">Clear</button>
+          <span class="project-count">{filteredProjects.length} project(s)</span>
+        </div>
+      {/if}
+    </div>
+  </div>
 
   {#if actionError}
     <div class="dash-action-error" role="alert"><span aria-hidden="true">!</span> {actionError}</div>
@@ -503,7 +510,7 @@
   />
   </div>
 
-  <!-- Drone Ticket (inline paste + open link) -->
+  <!-- Drone Ticket (inline paste + open link + edit) -->
   <div class="table-cell">
   <div class="stack-lines">
   {#if rows.length === 0}
@@ -511,11 +518,19 @@
   {:else}
   {#each rows as d}
   {@const droneKey = d.existingIndex >= 0 ? d.existingIndex : d.subfolder_name ?? "new"}
+  {@const dEditKey = `${p.project_path}:${droneKey}`}
   <div class="stack-line dash-link-cell">
-  {#if d.drone_link}
+  {#if d.drone_link && !droneEditing[dEditKey]}
   <span class="dash-id-label saved" title={d.drone_link}>{d.drone_ticket || "Drone Link"}</span>
-  <button class="dash-icon-btn" type="button" title="Copy Drone link" aria-label="Copy Drone link" onclick={() => copyRichLink(d.drone_link, d.drone_ticket || "Drone Link")}>⧉</button>
-  <a class="dash-icon-btn" href={d.drone_link} target="_blank" rel="noopener noreferrer" title="Open Drone link" aria-label="Open Drone link">↗</a>
+  <button class="dash-icon-btn" type="button" title="Copy Drone link" aria-label="Copy Drone link" onclick={() => copyRichLink(d.drone_link, d.drone_ticket || "Drone Link")}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+  </button>
+  <a class="dash-icon-btn" href={d.drone_link} target="_blank" rel="noopener noreferrer" title="Open Drone link" aria-label="Open Drone link">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+  </a>
+  <button class="dash-icon-btn" type="button" title="Edit Drone link" aria-label="Edit Drone link" onclick={() => droneEditing = {...droneEditing, [dEditKey]: true}}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+  </button>
   {:else}
   <input
   class="link-edit"
@@ -523,7 +538,10 @@
   placeholder={d.subfolder_name ? `Paste drone URL for ${d.subfolder_name}…` : "Paste drone URL…"}
   title={d.subfolder_name || "Drone ticket"}
   onkeydown={onInputKey}
-  onblur={(e) => saveDroneLink(p, d, (e.currentTarget as HTMLInputElement).value)}
+  onblur={(e) => {
+    droneEditing = {...droneEditing, [dEditKey]: false};
+    saveDroneLink(p, d, (e.currentTarget as HTMLInputElement).value);
+  }}
   disabled={isSaving(`${p.project_path}:dronelink:${droneKey}`)}
   />
   {/if}
@@ -558,13 +576,20 @@
   </div>
   </div>
 
-  <!-- CR Number (inline paste + open link) -->
+  <!-- CR Number (inline paste + open link + edit) -->
   <div class="table-cell">
   <div class="dash-link-cell">
-  {#if p.cr_link}
+  {#if p.cr_link && !crEditing[p.project_path]}
   <span class="dash-id-label saved" title={p.cr_link}>{p.cr_number || "CR Link"}</span>
-  <button class="dash-icon-btn" type="button" title="Copy CR link" aria-label="Copy CR link" onclick={() => copyRichLink(p.cr_link, p.cr_number || "CR Link")}>⧉</button>
-  <a class="dash-icon-btn" href={p.cr_link} target="_blank" rel="noopener noreferrer" title="Open CR link" aria-label="Open CR link">↗</a>
+  <button class="dash-icon-btn" type="button" title="Copy CR link" aria-label="Copy CR link" onclick={() => copyRichLink(p.cr_link, p.cr_number || "CR Link")}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+  </button>
+  <a class="dash-icon-btn" href={p.cr_link} target="_blank" rel="noopener noreferrer" title="Open CR link" aria-label="Open CR link">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+  </a>
+  <button class="dash-icon-btn" type="button" title="Edit CR link" aria-label="Edit CR link" onclick={() => crEditing = {...crEditing, [p.project_path]: true}}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+  </button>
   {:else}
   <input
   class="link-edit"
@@ -572,7 +597,10 @@
   placeholder="Paste CR URL…"
   title="CR link"
   onkeydown={onInputKey}
-  onblur={(e) => saveCrLink(p, (e.currentTarget as HTMLInputElement).value)}
+  onblur={(e) => {
+    crEditing = {...crEditing, [p.project_path]: false};
+    saveCrLink(p, (e.currentTarget as HTMLInputElement).value);
+  }}
   disabled={isSaving(`${p.project_path}:crlink`)}
   />
   {/if}
@@ -625,7 +653,7 @@
 {/if}
 
 <style>
-  .dashboard-status-bar { background:#fff; border:1px solid var(--light-border); border-radius:7px; padding:6px; display:flex; align-items:center; gap:6px; min-width:0; overflow-x:auto; flex:0 0 auto; }
+  .dashboard-status-bar { display:flex; align-items:center; gap:6px; min-width:0; }
   .dash-filter-tabs { display:flex; align-items:center; gap:4px; min-width:0; }
   .dash-reset-filter { height:26px; border:1px solid transparent; border-radius:5px; background:#fff; color:var(--text-secondary); font-weight:900; padding:0 9px; }
   .dash-reset-filter:hover:not(:disabled) { background:var(--row-alt); border-color:var(--light-border); color:var(--text-strong); }

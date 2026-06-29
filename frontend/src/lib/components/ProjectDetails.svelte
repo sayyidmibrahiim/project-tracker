@@ -104,6 +104,8 @@
   let droneLinkEdit: string = $state("");
   let droneLinkBusy: boolean = $state(false);
   let droneLinkError: string = $state("");
+  let droneLinkEditing: boolean = $state(false);
+  let droneLinkCopied: boolean = $state(false);
   // Drone state busy/error keyed by sub-project NAME (not drone ticket index) — Fase 1 §3.4.
   let droneStateBusyName: string | null = $state(null);
   let droneStateErrorName: Record<string, string> = $state({});
@@ -206,6 +208,8 @@
     droneLinkEdit = "";
     droneLinkBusy = false;
     droneLinkError = "";
+    droneLinkEditing = false;
+    droneLinkCopied = false;
     droneStateBusyName = null;
     droneStateErrorName = {};
     newSubprojectName = ""; subprojectBusy = false; subprojectFeedback = ""; subprojectFeedbackKind = "idle";
@@ -399,6 +403,8 @@
     selectedSubprojectRow = selectedSubprojectRow === name ? null : name;
     droneLinkEdit = selectedSubprojectRowDetail?.ticket?.drone_link ?? "";
     droneLinkError = "";
+    droneLinkEditing = false;
+    droneLinkCopied = false;
   }
 
   function openSubprojectFolder(name: string) {
@@ -454,6 +460,22 @@
     await reloadSubprojects();
   }
 
+  async function saveDroneLinkFromTable(name: string, link: string) {
+    if (!detail || !selectedPath) return;
+    const next = link.trim();
+    const index = detail.drone_tickets.findIndex((t) => (t.subfolder_name ?? "") === name);
+    droneLinkBusy = true; droneLinkError = "";
+    let resp: any;
+    if (index >= 0) {
+      resp = await callBridge("drone_update", selectedPath, index, { drone_link: next });
+    } else {
+      resp = await callBridge("drone_add", selectedPath, { drone_link: next, subfolder_name: name, owner: "" });
+    }
+    droneLinkBusy = false;
+    if (!resp.ok) { droneLinkError = resp.error.message; return; }
+    await refreshDetail();
+  }
+
   async function saveDroneLinkFromPanel() {
     if (!detail || !selectedPath || !selectedSubprojectRowDetail) return;
     if (selectedSubprojectRowDetail.index < 0 || !selectedSubprojectRowDetail.ticket) return;
@@ -475,6 +497,39 @@
     const resp = await callBridge("drone_add", selectedPath, { drone_link: next, subfolder_name: selectedSubprojectRow, owner: "" });
     droneLinkBusy = false;
     if (!resp.ok) { droneLinkError = resp.error.message; return; }
+    await refreshDetail();
+  }
+
+  function editDroneLink() {
+    if (!selectedSubprojectRowDetail?.ticket) return;
+    droneLinkEdit = selectedSubprojectRowDetail.ticket.drone_link || "";
+    droneLinkEditing = true;
+  }
+
+  async function copyDroneLink() {
+    if (!selectedSubprojectRowDetail?.ticket?.drone_link) return;
+    try {
+      await navigator.clipboard.writeText(selectedSubprojectRowDetail.ticket.drone_link);
+      droneLinkCopied = true;
+      setTimeout(() => { droneLinkCopied = false; }, 2000);
+    } catch { /* ignore */ }
+  }
+
+  async function saveDroneLinkFromInput() {
+    if (!detail || !selectedPath || !selectedSubprojectRowDetail) return;
+    if (selectedSubprojectRowDetail.index < 0 || !selectedSubprojectRowDetail.ticket) {
+      // No existing ticket — add
+      await addDroneForSelectedRow();
+      return;
+    }
+    const next = droneLinkEdit.trim();
+    const current = selectedSubprojectRowDetail.ticket.drone_link ?? "";
+    if (next === current) { droneLinkEditing = false; return; }
+    droneLinkBusy = true; droneLinkError = "";
+    const resp = await callBridge("drone_update", selectedPath, selectedSubprojectRowDetail.index, { drone_link: next });
+    droneLinkBusy = false;
+    if (!resp.ok) { droneLinkError = resp.error.message; return; }
+    droneLinkEditing = false;
     await refreshDetail();
   }
 
@@ -590,15 +645,15 @@
 </script>
 
 <section class="screen active" id="screen-details">
-  <div class="panel-card" style="flex:0 0 auto;">
-    <div class="toolbar">
-      <div class="panel-title-row" style="margin:0 18px 0 0;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-        <span class="panel-title">Project Command Center</span>
-      </div>
+  <div class="page-header">
+    <div class="page-header-left">
+      <span class="page-header-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+      <h2 class="page-header-title">Project Details</h2>
+    </div>
+    <div class="page-header-actions">
       {#if onNavigateDashboard}
         <button type="button" class="pd-command-btn" onclick={() => onNavigateDashboard?.()} title="Back to Dashboard">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 5 12"></polyline></svg>
           Back
         </button>
       {/if}
@@ -624,13 +679,12 @@
       <button class="pd-command-btn" type="button" onclick={openProjectFolder} disabled={!selectedPath || topActionState === "saving"}>Open</button>
       <button class="pd-command-btn pd-command-danger" type="button" onclick={requestTopDelete} disabled={!selectedPath || topActionState === "saving"}>Delete</button>
     </div>
-    {#if topActionState === "error"}
-      <p class="cr-link-feedback cr-link-err">✗ {topActionError}</p>
-    {:else if topActionState === "success"}
-      <p class="cr-link-feedback cr-link-ok">✓ Done</p>
-    {/if}
   </div>
-
+  {#if topActionState === "error"}
+    <p class="cr-link-feedback cr-link-err">✗ {topActionError}</p>
+  {:else if topActionState === "success"}
+    <p class="cr-link-feedback cr-link-ok">✓ Done</p>
+  {/if}
   <div class="pd-body">
     <div class="pd-detail-panel">
       {#if mode === "new"}
@@ -771,26 +825,44 @@
                   onChangeDroneState={onChangeSubprojectDroneState}
                   onOpenFolder={openSubprojectFolder}
                   {legalDroneOptionsFor}
+                  onSaveDroneLink={saveDroneLinkFromTable}
                 />
                 {#if selectedSubprojectRowDetail}
                   {@const ticket = selectedSubprojectRowDetail.ticket}
                   <div class="pd-drone-detail">
                     <h5 class="pd-drone-detail-title">{selectedSubprojectRow} · Drone Ticket</h5>
-                    <label class="pd-meta-field" for="row-drone-link">
-                      <span class="pd-meta-label">Drone URL</span>
-                      <input
-                        id="row-drone-link"
-                        class="cr-link-input"
-                        type="url"
-                        placeholder="Paste drone URL…"
-                        value={droneLinkEdit}
-                        oninput={(e) => (droneLinkEdit = (e.currentTarget as HTMLInputElement).value)}
-                        onblur={saveDroneLinkFromPanel}
-                        disabled={droneLinkBusy}
-                      />
-                    </label>
-                    {#if !ticket}
-                      <button class="cr-link-save-btn" type="button" onclick={addDroneForSelectedRow} disabled={droneLinkBusy || !droneLinkEdit.trim()}>Add Drone Ticket</button>
+                    {#if !droneLinkEditing && ticket?.drone_link}
+                      <div class="pd-cr-link-display">
+                        <span class="pd-cr-link-number">{ticket.drone_ticket || ticket.drone_link || "—"}</span>
+                        <button class="pd-icon-btn" type="button" onclick={copyDroneLink} aria-label="Copy Drone link">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Copy Drone link</title><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                          {#if droneLinkCopied}<span style="font-size:9.5px;color:var(--tag-green-ink);margin-left:2px;">✓</span>{/if}
+                        </button>
+                        <button class="pd-icon-btn" type="button" onclick={() => window.open(ticket.drone_link, "_blank", "noopener,noreferrer")} aria-label="Open Drone link in browser">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open Drone link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        </button>
+                        <button class="pd-icon-btn" type="button" onclick={editDroneLink} aria-label="Edit Drone link">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit Drone link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                      </div>
+                    {:else}
+                      <label class="pd-meta-field" for="row-drone-link">
+                        <span class="pd-meta-label">Drone URL</span>
+                        <input
+                          id="row-drone-link"
+                          class="cr-link-input"
+                          type="url"
+                          placeholder="Paste drone URL…"
+                          value={droneLinkEdit}
+                          onkeydown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }}
+                          oninput={(e) => (droneLinkEdit = (e.currentTarget as HTMLInputElement).value)}
+                          onblur={saveDroneLinkFromInput}
+                          disabled={droneLinkBusy}
+                        />
+                      </label>
+                      {#if !ticket}
+                        <button class="cr-link-save-btn" type="button" onclick={addDroneForSelectedRow} disabled={droneLinkBusy || !droneLinkEdit.trim()}>Add Drone Ticket</button>
+                      {/if}
                     {/if}
                     {#if droneLinkError}
                       <span class="cr-link-feedback cr-link-err">✗ {droneLinkError}</span>

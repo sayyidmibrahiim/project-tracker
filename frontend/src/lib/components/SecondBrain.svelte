@@ -218,9 +218,14 @@
 </script>
 
 <section class="screen active" id="screen-secondbrain">
-  <div class="workspace-tab-inner">
-    <div class="workspace-title"><span class="panel-title-icon">◆</span><div><strong>Second Brain</strong><span>notes and link bank workspace</span></div></div>
-    <div class="tab-buttons"><button class="status-tab" class:active={activeTab === "notes"} onclick={() => onTabSwitch("notes")}>Notes</button><button class="status-tab" class:active={activeTab === "linkbank"} onclick={() => onTabSwitch("linkbank")}>Link Bank</button></div>
+  <div class="page-header">
+    <div class="page-header-left">
+      <span class="page-header-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+      <h2 class="page-header-title">Second Brain</h2>
+    </div>
+    <div class="page-header-actions">
+      <div class="tab-buttons"><button class="status-tab" class:active={activeTab === "notes"} onclick={() => onTabSwitch("notes")}>Notes</button><button class="status-tab" class:active={activeTab === "linkbank"} onclick={() => onTabSwitch("linkbank")}>Link Bank</button></div>
+    </div>
   </div>
 
   {#if activeTab === "notes"}
@@ -241,9 +246,6 @@
 </section>
 
 <style>
-  .workspace-title { display:flex; align-items:center; gap:8px; }
-  .workspace-title strong { display:block; font-size:12px; font-weight:900; color:var(--color-ink); }
-  .workspace-title span:last-child { display:block; font-size:10px; color:var(--color-muted); font-weight:700; }
   .tab-buttons, .toolbar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .small { width:130px; }
   .tree-pane { flex:0 0 290px; }

@@ -153,10 +153,16 @@
     <div class="toast toast-error">✗ Save failed: {saveError}</div>
   {/if}
 
+  <div class="page-header">
+    <div class="page-header-left">
+      <span class="page-header-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+      <h2 class="page-header-title">Settings</h2>
+    </div>
+  </div>
+
   <div class="splitter">
     <div class="pane">
       <div class="panel-card accent">
-        <div class="panel-title-row"><span class="panel-title-icon">⚙</span><span class="panel-title">Settings</span><span class="panel-subtitle">application preferences</span></div>
 
         <div class="panel-card accent">
           <div class="panel-title-row"><span class="panel-title-icon">▣</span><span class="panel-title">General</span></div>

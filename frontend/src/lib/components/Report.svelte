@@ -131,8 +131,12 @@
 </script>
 
 <section class="screen active" id="screen-report">
-  <div class="filter-frame">
-    <div class="status-inner">
+  <div class="page-header">
+    <div class="page-header-left">
+      <span class="page-header-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+      <h2 class="page-header-title">Report</h2>
+    </div>
+    <div class="page-header-actions">
       <label class="field-label" for="report-year">Year</label>
       <select id="report-year" class="combo" bind:value={yearFilter}>
         <option value="all">All Years</option>

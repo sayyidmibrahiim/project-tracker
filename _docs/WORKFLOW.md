@@ -50,13 +50,13 @@ Code selesai ≠ slice selesai (see [CLAUDE.md §Branch Workflow](../CLAUDE.md#b
 
 Run targeted verification based on change type (JANGAN full suite by default):
 
-| Change Type | Verification Command |
-|-------------|---------------------|
-| Frontend-only (Svelte/TS) | `npm --prefix frontend run build` + `npm --prefix frontend run check` |
-| Backend-only (Python) | `pytest tests/ -v -k <related_test_file_or_pattern>` |
-| Bridge (services ↔ frontend) | Contract tests: `pytest tests/ -v -k "test_bridge"` |
-| UI/Dock/Design change | Manual checklist (generate and hand to user) |
-| Full suite | On-demand only: `/fullcheck` or explicit `pytest tests/ -v` |
+| Change Type                  | Verification Command                                                  |
+| ---------------------------- | --------------------------------------------------------------------- |
+| Frontend-only (Svelte/TS)    | `npm --prefix frontend run build` + `npm --prefix frontend run check` |
+| Backend-only (Python)        | `pytest tests/ -v -k <related_test_file_or_pattern>`                  |
+| Bridge (services ↔ frontend) | Contract tests: `pytest tests/ -v -k "test_bridge"`                   |
+| UI/Dock/Design change        | Manual checklist (generate and hand to user)                          |
+| Full suite                   | On-demand only: `/fullcheck` or explicit `pytest tests/ -v`           |
 
 > Full suite is NOT the default. Only run full suite when explicitly requested (`/fullcheck`) or when a change touches both frontend and backend in non-trivial ways.
 

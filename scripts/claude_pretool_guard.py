@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path("D:/Ibrahim/Projects/project_tracker")
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def deny(reason: str) -> None:
@@ -51,7 +52,11 @@ def main() -> int:
 
     if re.search(r"\bgit\s+commit\b", compact):
         hook = ROOT / "scripts" / "pre-commit"
-        result = subprocess.run(["bash", str(hook)], cwd=ROOT, text=True, capture_output=True)
+        bash = shutil.which("bash")
+        if not bash:
+            deny("pre-commit gate requires bash on PATH before git commit.")
+            return 0
+        result = subprocess.run([bash, str(hook)], cwd=ROOT, text=True, capture_output=True)
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()[-4000:]
             deny(f"pre-commit gate failed before git commit:\n{output}")

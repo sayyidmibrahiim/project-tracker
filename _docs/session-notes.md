@@ -1,24 +1,36 @@
 # Session Notes
 
 > Brief recovery ledger. Do not paste transcripts or secrets.
+>
 > - **DECISIONS.md** → permanent ADRs (why)
 > - **PROGRESS.md** → tracking (what's done, what's next)
 > - **session-notes.md** → what's active NOW
 
 ---
 
-**Now:** Config cleanup — rapihin settings & docs system (branch: `chore/config-cleanup`)
-- Hapus agentmemory dari semua routing docs
-- CLAUDE.md: tambah Session vs Turn section
-- WORKFLOW.md: tambah chore/ branch, fix sidebar→bottom dock
-- FILE_ROUTING.md: bersihin stale references (notes.md, tree.txt)
-- DECISIONS.md: tambah D-0004 untuk config cleanup
+**Now:** Completed — merging `design/titlebar` to main.
 
-**Next:** User review & merge approval for config cleanup branch
+Phase 1 (Design All 6 Menus) deliverable:
+- TitleBar.svelte menggantikan Sidebar — avatar, search, 6 nav icons with tooltip, notif bell + popover, window controls
+- Unified `.page-header` (36px, border-bottom, icon+title left, actions right) applied to all 6 menu pages
+- 3-icon (Copy/Open/Edit SVG) + two-state pattern applied to ALL CR Number & Drone Ticket inputs across Dashboard, ProjectDetails panel, and SubProjectTable
+- Backend: `frameless=True`, `get_user_profile()` with 3-tier fallback (Outlook COM → ctypes → USERNAME), `_debug` field
+- Frontend: bridge wrappers, `waitForPywebviewReady()` race fix, notification click-outside
+
+**Next:** Phase 2 (Backend/Logic) or Phase 3 (Windows Verify) — user decides.
 
 **Blocked:** None
 
-**active_menu:** Config/docs cleanup (non-product)
+**active_menu:** Phase 1 — Design All Menus (done, merging)
+
+---
+
+## 2026-06-29
+
+Branch aktif: `design/titlebar`  
+File diubah: TitleBar.svelte (new), Sidebar.svelte → .bak, all 6 menu pages (page-header), Dashboard/ProjectDetails/SubProjectTable (3-icon CR/Drone), app_web.py, web/js_api.py, infrastructure/outlook_client.py, styles.css, App.svelte, Header.svelte, bridge.ts, various config/docs  
+Keputusan teknis: D-0005 (TitleBar replaces Sidebar), D-0006 (3-icon pattern for all CR/Drone inputs)  
+Verifikasi: svelte-check 0 errors, vite build clean
 
 ---
 

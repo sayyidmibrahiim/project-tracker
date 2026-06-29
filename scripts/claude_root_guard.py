@@ -13,8 +13,8 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path("D:/Ibrahim/Projects/project_tracker").resolve()
-WORKTREE_MARKER = "/.claude/worktrees/"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WORKTREE_MARKERS = ("/.claude/worktrees/", "/.harness-worktrees/")
 
 RISKY_COMMAND_RE = re.compile(
     r"(project_tracker\.main|pytest|npm\s+--prefix\s+frontend|npm\s+run|graphify|vite|svelte-check)",
@@ -35,7 +35,7 @@ def hook(payload: dict) -> dict | None:
     if tool == "Bash":
         command = str(tool_input.get("command", ""))
         command_s = norm(command)
-        in_claude_worktree = WORKTREE_MARKER in cwd_s or WORKTREE_MARKER in command_s
+        in_claude_worktree = any(marker in cwd_s or marker in command_s for marker in WORKTREE_MARKERS)
         risky = bool(RISKY_COMMAND_RE.search(command))
 
         if in_claude_worktree and risky:
@@ -43,7 +43,7 @@ def hook(payload: dict) -> dict | None:
                 "continue": False,
                 "stopReason": (
                     "BLOCKED wrong-root run. App/tests/build/graphify must run from "
-                    f"{REPO_ROOT}, not .claude/worktrees/*. User runs app with: "
+                    f"{REPO_ROOT}, not a worktree. User runs app with: "
                     "D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main. "
                     "Re-run using repo-root absolute paths or start the session from repo root."
                 ),
@@ -63,12 +63,12 @@ def hook(payload: dict) -> dict | None:
 
     if tool in {"Write", "Edit", "NotebookEdit"}:
         file_path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
-        if WORKTREE_MARKER in norm(file_path):
+        if any(marker in norm(file_path) for marker in WORKTREE_MARKERS):
             return {
                 "continue": False,
                 "stopReason": (
                     "BLOCKED worktree edit. Edit the real repo root instead: "
-                    f"{REPO_ROOT}. Do not patch .claude/worktrees/* for Project Tracker."
+                    f"{REPO_ROOT}. Do not patch worktree paths for Project Tracker."
                 ),
             }
 
@@ -77,18 +77,25 @@ def hook(payload: dict) -> dict | None:
 
 def main() -> int:
     try:
-        result = hook(json.load(sys.stdin))
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return 0
+
+    try:
+        result = hook(payload)
         if result:
             print(json.dumps(result))
     except Exception as exc:
-        # Fail open: bad hook must not brick Claude, but still warn the model.
         print(
             json.dumps(
                 {
+                    "continue": False,
+                    "stopReason": f"Root guard hook failed safely: {exc}",
                     "hookSpecificOutput": {
                         "hookEventName": "PreToolUse",
-                        "additionalContext": f"Root guard hook failed open: {exc}",
-                    }
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": f"Root guard hook failed safely: {exc}",
+                    },
                 }
             )
         )

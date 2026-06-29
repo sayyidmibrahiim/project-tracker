@@ -4,11 +4,14 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
+import ctypes
+import os
 from pathlib import Path
 from typing import Any, Protocol
 
 from core.rules import validate_windows_folder_name
 from web.event_queue import drain_events
+from infrastructure.outlook_client import get_current_user_name
 
 
 @dataclass(frozen=True)
@@ -477,6 +480,74 @@ class JsApi:
                 "phase": "phase_c_js_api",
             }
         )
+
+    def get_user_profile(self) -> dict[str, object]:
+        """Return user display name and initials (Outlook COM → Win32 API → OS env)."""
+        name = ""
+        _method = "fallback"
+
+        try:
+            resp = get_current_user_name()
+            if resp.get("ok") and resp.get("data"):
+                n = (resp["data"].get("name") or "").strip()
+                if n:
+                    name = n
+                    _method = "outlook_com"
+        except Exception:
+            pass
+
+        if not name:
+            try:
+                buf = ctypes.create_unicode_buffer(256)
+                size = ctypes.c_ulong(256)
+                if ctypes.windll.advapi32.GetUserNameW(buf, ctypes.byref(size)):
+                    n = buf.value.strip()
+                    if n:
+                        name = n
+                        _method = "getusernamew"
+            except Exception:
+                pass
+
+        if not name:
+            n = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+            if n:
+                name = n
+                _method = "env"
+
+        parts = [p for p in name.replace("_", " ").replace(".", " ").split() if p]
+        initials = "".join(p[0].upper() for p in parts)[:2] if parts else (name[:1].upper() if name else "U")
+        return ok({"name": name, "initials": initials, "_debug": _method})
+
+    def win_minimize(self) -> dict[str, object]:
+        try:
+            import webview  # noqa: PLC0415
+            if webview.windows:
+                webview.windows[0].minimize()
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="WIN_MINIMIZE_FAILED")
+
+    def win_toggle_maximize(self) -> dict[str, object]:
+        try:
+            import webview  # noqa: PLC0415
+            if webview.windows:
+                w = webview.windows[0]
+                if getattr(w, "fullscreen", False):
+                    w.restore()
+                else:
+                    w.toggle_fullscreen()
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="WIN_TOGGLE_MAXIMIZE_FAILED")
+
+    def win_close(self) -> dict[str, object]:
+        try:
+            import webview  # noqa: PLC0415
+            if webview.windows:
+                webview.windows[0].destroy()
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="WIN_CLOSE_FAILED")
 
     def util_validate_windows_folder_name(self, name: str) -> dict[str, object]:
         """Validate Windows-safe folder name without filesystem mutation."""

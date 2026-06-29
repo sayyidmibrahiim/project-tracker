@@ -347,8 +347,8 @@ Rules:
 | Test-first     | `/superpowers:test-driven-development`        |
 | Simplify       | `/simplify`                                   |
 | Commit         | `/caveman:caveman-commit`                     |
-| Memory save    | `claude-mem:remember`                        |
-| Memory load    | `claude-mem:recall`                          |
+| Memory save    | `claude-mem:remember`                         |
+| Memory load    | `claude-mem:recall`                           |
 | Codebase query | `/graphify`                                   |
 | Verify done    | `/superpowers:verification-before-completion` |
 | Run app        | `/verify` atau `/run`                         |

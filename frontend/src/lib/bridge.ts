@@ -181,3 +181,23 @@ export async function callBridge<T = unknown>(
     }
   }
 }
+
+// ── Window controls ──
+
+export function winMinimize(): Promise<BridgeResponse<null>> {
+  return callBridge("win_minimize");
+}
+
+export function winToggleMaximize(): Promise<BridgeResponse<null>> {
+  return callBridge("win_toggle_maximize");
+}
+
+export function winClose(): Promise<BridgeResponse<null>> {
+  return callBridge("win_close");
+}
+
+// ── User profile ──
+
+export function getUserProfile(): Promise<BridgeResponse<{ name: string; initials: string; _debug?: string }>> {
+  return callBridge("get_user_profile");
+}

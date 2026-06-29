@@ -158,3 +158,22 @@ def get_contacts() -> dict[str, Any]:
         return {"contacts": contacts}
 
     return _run_on_com_thread(_work, error_code="OUTLOOK_COM_ERROR")
+
+
+def get_current_user_name() -> dict[str, Any]:
+    """Return the current Outlook user's display name as a Bridge_Response.
+
+    Uses the Outlook MAPI ``CurrentUser.Name`` via the dedicated COM thread
+    so that COM is properly initialized. Off-Windows returns a dev fallback.
+    """
+    if not IS_WINDOWS:
+        return _ok({"name": "Dev User"})
+
+    def _work() -> dict[str, Any]:
+        import win32com.client  # lazy, Windows-only
+
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        namespace = outlook.GetNamespace("MAPI")
+        return {"name": namespace.CurrentUser.Name}
+
+    return _run_on_com_thread(_work, error_code="OUTLOOK_COM_ERROR")

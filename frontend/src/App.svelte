@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import Sidebar from "./lib/components/Sidebar.svelte";
+  import TitleBar from "./lib/components/TitleBar.svelte";
   import Header from "./lib/components/Header.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
   import Report from "./lib/components/Report.svelte";
@@ -187,23 +187,23 @@
 </script>
 
 <div class="app-shell">
-  <Sidebar
+  <TitleBar
     {currentPage}
     {notifications}
     {notifLoadState}
+    {searchQuery}
     onNavigate={navigate}
     onDismiss={handleDismiss}
     onDismissAll={handleDismissAll}
+    onSearchChange={handleSearchChange}
   />
   <main class="main">
     <Header
       {currentPage}
       {selectedYear}
-      {searchQuery}
       {years}
       showDashboardControls={currentPage === "dashboard"}
       onYearChange={handleYearChange}
-      onSearchChange={handleSearchChange}
       onRefresh={handleRefresh}
       onAddProject={openNewProjectPage}
       onAddYear={addYear}

@@ -1556,14 +1556,16 @@ def resolve_frontend_url(*, dev: bool = False, project_root: Path = PROJECT_ROOT
 
 def run(*, dev: bool = False, start_webview: bool = True) -> None:
     """Create webview window and start pywebview on main thread."""
-    webview.create_window(
+    window = webview.create_window(
         "Project Tracker DBS",
         url=resolve_frontend_url(dev=dev),
         js_api=create_js_api(db_path=app_config_dir() / "project_tracker_cache.db"),
         width=1200,
         height=760,
         min_size=(960, 640),
+        frameless=True,
     )
+    _app_window = window  # keep reference for window-control bridge methods
     if start_webview:
         webview.start(http_server=True)
 
