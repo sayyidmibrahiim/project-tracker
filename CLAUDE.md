@@ -89,37 +89,37 @@ Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
 
 ## Branch Workflow
 
-The app has **6 menus** + **1 general** = 7 long-lived base branches. Every fix/feature lives on a **sub-branch** off the relevant base branch — never commit product code directly onto a base branch.
+`main` is the only stable base branch. Every feature/fix branch is created directly from `main` using `{menu}/{desc}`.
 
-### 7 base branches (long-lived, branch off `main`)
+### Branch format: `{menu}/{desc}`
 
-| Base branch | Menu | Scope |
-| ----------- | ---- | ----- |
-| `menu/dashboard` | Dashboard | Dashboard view (PRD §11) |
-| `menu/project-details` | Project Details | Project Details view (PRD §12) |
-| `menu/second-brain` | Second Brain | Second Brain view (PRD §13) |
-| `menu/report` | Report | Report view (PRD §15) |
-| `menu/automations` | Automations | Automations view (PRD §16) |
-| `menu/settings` | Settings | Settings view (PRD §17) |
-| `general/main` | — | Cross-menu / infra / shared work |
+| Prefix | Scope |
+| ------ | ----- |
+| `dashboard/` | Dashboard view (PRD §11) |
+| `project-details/` | Project Details view (PRD §12) |
+| `second-brain/` | Second Brain view (PRD §13) |
+| `report/` | Report view (PRD §15) |
+| `automations/` | Automations view (PRD §16) |
+| `settings/` | Settings view (PRD §17) |
+| `general/` | Cross-menu / infra / shared work |
 
-### Sub-branch naming: `{type}/{menu}-{desc}` off the menu's base branch
-
-- `type` ∈ `feat` `fix` `design` `refactor` `chore`
-- `menu` ∈ `dashboard` `project-details` `second-brain` `report` `automations` `settings` (or `general` for cross-menu)
-- Example: fix a RTE bug in Project Details → `fix/project-details-rte-tiptap` off `menu/project-details`.
+Examples:
+- RTE bugs in Project Details → `project-details/rte-bugs`
+- Dashboard responsive fix → `dashboard/fix-responsive`
+- Cross-provider branch rule docs → `general/branch-rule`
 
 ### Rules
 
-- Read-only/audit = no branch. Docs-only = `chore/` branch. User-level settings = no repo branch.
-- **NEVER run two AI sessions on the same working tree** — parallel sessions `git reset --hard` each other's uncommitted work. One branch per session, one session per branch.
-- Merge only after user manual check + approval. Code done ≠ slice done — slice done only after user manual verification + merge approval.
+- Read-only/audit = no branch. User-level settings = no repo branch.
+- Branch from `main`; merge back to `main` only after user manual check + approval.
+- Code done ≠ slice done — slice done only after user manual verification + merge approval.
 - After merge → update \_docs/PROGRESS.md. If behavior changed → update PRD.md too.
-- Delete sub-branch after merge. Keep the 7 base branches.
+- Delete branch after merge. Keep `main` as the single source of truth.
+- **NEVER run two AI sessions on the same working tree** — parallel sessions can `git reset --hard` each other's uncommitted work. One branch per session, one session per branch.
 
 ### Cross-provider rule (ALL AI agents — Claude, opencode, Cursor, etc.)
 
-This branching rule is **binding for every AI agent regardless of provider/model**. It is recorded in: `CLAUDE.md` (here), `_docs/WORKFLOW.md`, and `_docs/FILE_ROUTING.md`. If you are any AI agent starting work in this repo: read this section first, always branch off the correct menu base branch, and never touch another session's branch.
+This branching rule is **binding for every AI agent regardless of provider/model**. It is recorded in: `CLAUDE.md` (here), `_docs/WORKFLOW.md`, and `_docs/FILE_ROUTING.md`. If you are any AI agent starting work in this repo: read this section first, branch directly from `main` using `{menu}/{desc}`, and never touch another session's branch.
 
 ## Smallest Diff
 
