@@ -533,10 +533,7 @@ class JsApi:
             import webview  # noqa: PLC0415
             if webview.windows:
                 w = webview.windows[0]
-                if getattr(w, "fullscreen", False):
-                    w.restore()
-                else:
-                    w.toggle_fullscreen()
+                w.maximize() if not w.maximized else w.restore()
             return ok()
         except Exception as exc:
             return fail(str(exc), code="WIN_TOGGLE_MAXIMIZE_FAILED")
@@ -1725,6 +1722,21 @@ def _scheduler_entry_payload(entry: object) -> dict[str, object]:
             c in ("outlook_email", "teams") for c in channels
         )
     return data
+
+
+def _push_js_state(w: object, state: str) -> None:
+    """Push window state to frontend via evaluate_js (thread-safe)."""
+    try:
+        w.evaluate_js(f"window.dispatchEvent(new CustomEvent('pywin-state', {{detail:'{state}'}}))")
+    except Exception:
+        pass
+
+
+def register_win_events(w: object) -> None:
+    """Hook pywebview window events to sync state to frontend."""
+    w.events.maximized += lambda: _push_js_state(w, "maximized")
+    w.events.restored += lambda: _push_js_state(w, "normal")
+    w.events.minimized += lambda: _push_js_state(w, "minimized")
 
 
 def _to_frontend_safe(value: object) -> object:

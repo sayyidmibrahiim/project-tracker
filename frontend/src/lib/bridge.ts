@@ -196,6 +196,23 @@ export function winClose(): Promise<BridgeResponse<null>> {
   return callBridge("win_close");
 }
 
+/** Callback type for window state changes. */
+export type WinStateCallback = (state: "normal" | "maximized" | "minimized") => void;
+
+let _winStateListeners: WinStateCallback[] = [];
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pywin-state", ((e: CustomEvent) => {
+    const s = e.detail as "normal" | "maximized" | "minimized";
+    _winStateListeners.forEach((cb) => cb(s));
+  }) as EventListener);
+}
+
+export function onWinStateChange(cb: WinStateCallback): () => void {
+  _winStateListeners.push(cb);
+  return () => { _winStateListeners = _winStateListeners.filter((f) => f !== cb); };
+}
+
 // ── User profile ──
 
 export function getUserProfile(): Promise<BridgeResponse<{ name: string; initials: string; _debug?: string }>> {

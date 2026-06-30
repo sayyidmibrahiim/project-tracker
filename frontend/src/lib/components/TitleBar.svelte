@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import type { NotificationItem } from "../types";
-  import { winMinimize, winToggleMaximize, winClose, getUserProfile, waitForPywebviewReady } from "../bridge";
+  import { winMinimize, winToggleMaximize, winClose, getUserProfile, waitForPywebviewReady, onWinStateChange } from "../bridge";
 
   let {
     currentPage,
@@ -37,6 +37,8 @@
   let debugInfo = $state("");
   let notifOpen = $state(false);
   let unreadCount = $derived(notifications.filter((n) => !n.dismissed).length);
+  let winState = $state<"normal" | "maximized" | "minimized">("normal");
+  let unsubWinState: (() => void) | undefined;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let searchFocused = $state(false);
   let notifContainerEl: HTMLDivElement | undefined;
@@ -59,10 +61,12 @@
       debugInfo = resp.error?.code || "";
     }
     window.addEventListener("click", handleWindowClick);
+    unsubWinState = onWinStateChange((s) => (winState = s));
   });
 
   onDestroy(() => {
     window.removeEventListener("click", handleWindowClick);
+    unsubWinState?.();
   });
 
   function handleSearchInput(e: Event) {
@@ -99,7 +103,7 @@
   };
 </script>
 
-<div class="titlebar">
+<div class="titlebar" ondblclick={handleToggleMaximize} role="region" aria-label="Window titlebar">
   <div class="titlebar-left">
     <div class="user-avatar" title="{userName} [{debugInfo}]">
       <span class="avatar-initials">{userInitials}</span>
@@ -176,7 +180,7 @@
     </div>
     <div class="win-controls">
       <button class="win-btn" onclick={handleMinimize} title="Minimize">─</button>
-      <button class="win-btn" onclick={handleToggleMaximize} title="Maximize">⛶</button>
+      <button class="win-btn" onclick={handleToggleMaximize} title={winState === "maximized" ? "Restore" : "Maximize"}>{winState === "maximized" ? "▣" : "⛶"}</button>
       <button class="win-btn win-close" onclick={handleClose} title="Close">✕</button>
     </div>
   </div>
@@ -197,7 +201,7 @@
     z-index: 100;
   }
   .titlebar-left { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; }
+  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; }
   .titlebar-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 
   .user-avatar {
