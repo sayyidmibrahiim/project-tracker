@@ -82,6 +82,8 @@ const ALLOWED_TAGS = new Set([
   "u", "sub", "sup", "s", "strike", "code", "pre", "span", "div", "p", "font",
   "img", "br", "hr", "b", "strong", "em", "i", "blockquote", "a", "table",
   "thead", "tbody", "tr", "th", "td",
+  // Tiptap task-list nodes (data-type distinguishes them from plain lists).
+  "ul", "ol", "li", "label",
 ]);
 
 /** Block-level tags: a line opening with one of these is emitted verbatim. */
@@ -100,6 +102,11 @@ const TAG_ATTRS: Record<string, Set<string>> = {
   font: new Set(["color", "face", "size"]),
   td: new Set(["style", "align", "colspan", "rowspan"]),
   th: new Set(["style", "align", "colspan", "rowspan"]),
+  // Tiptap task-list shape: <ul data-type="taskList"><li data-type="taskItem" data-checked>…</li></ul>
+  ul: new Set(["data-type", "style"]),
+  ol: new Set(["start", "style"]),
+  li: new Set(["data-type", "data-checked", "style"]),
+  label: new Set([]),
 };
 const DEFAULT_ATTRS = new Set(["style", "align"]);
 
@@ -309,7 +316,9 @@ export function renderMarkdown(src: string): string {
       closeLists();
       const checked = /^\s*[-*] \[[xX]\] /.test(line);
       const content = line.replace(/^\s*[-*] \[[xX ]\] /, "");
-      out.push(`<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox"${checked ? " checked" : ""} /> <span>${renderInline(content)}</span></div>`);
+      // Emit Tiptap's native task-list shape so the load path round-trips
+      // cleanly into the editor's TaskList/TaskItem nodes (DECISIONS D-0007).
+      out.push(`<ul data-type="taskList"><li data-type="taskItem" data-checked="${checked ? "true" : "false"}"><label><input type="checkbox"${checked ? " checked" : ""} /><span></span></label><div>${renderInline(content) || "<br>"}</div></li></ul>`);
       continue;
     }
     if (/^\s*[-*] /.test(line)) {

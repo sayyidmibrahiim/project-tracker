@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
+import base64
 import ctypes
 import os
 from pathlib import Path
@@ -600,6 +601,75 @@ class JsApi:
             first = result[0] if isinstance(result, (list, tuple)) else result
             path = str(first) if first else None
         return ok({"path": path})
+
+    def util_choose_image(self) -> dict[str, object]:
+        """Open the native OS image picker and return the chosen image as a data URI.
+
+        Lets the NotesEditor embed local images without a URL. Lazily imports
+        pywebview so the bridge stays importable in headless dev/test. Returns
+        ``data.data_uri`` (a ``data:image/<mime>;base64,...`` string, null when
+        the user cancels) and ``data.name`` (the file name for default alt text).
+        Any dialog/read failure surfaces as a standard fail envelope.
+        """
+        try:
+            import webview  # lazy: not imported at module load
+        except Exception as exc:  # pragma: no cover - pywebview always importable in app
+            return fail(
+                f"Image picker unavailable: {exc}",
+                code="IMAGE_PICKER_UNAVAILABLE",
+            )
+
+        windows = getattr(webview, "windows", []) or []
+        if not windows:
+            return fail(
+                "No application window is available to host the image picker.",
+                code="IMAGE_PICKER_UNAVAILABLE",
+            )
+
+        try:
+            file_dialog = getattr(webview, "FileDialog", None)
+            open_dialog = (
+                getattr(file_dialog, "OPEN_FILES", None)
+                if file_dialog is not None
+                else None
+            )
+            if open_dialog is None:
+                # Older pywebview exposes the constant on the module itself.
+                open_dialog = getattr(
+                    webview, "OPEN_FILES", getattr(webview, "OPEN_DIALOG")
+                )
+            result = windows[0].create_file_dialog(
+                open_dialog,
+                file_types=(
+                    "Image files (*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg)",
+                ),
+            )
+        except Exception as exc:
+            return fail(str(exc), code="IMAGE_PICKER_FAILED")
+
+        # pywebview returns a tuple/list of selected paths, or empty on cancel.
+        if not result:
+            return ok({"data_uri": None, "name": None})
+        first = result[0] if isinstance(result, (list, tuple)) else result
+        if not first:
+            return ok({"data_uri": None, "name": None})
+        p = Path(str(first))
+        ext = p.suffix.lower().lstrip(".")
+        mime = {
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "gif": "image/gif",
+            "webp": "image/webp",
+            "bmp": "image/bmp",
+            "svg": "image/svg+xml",
+        }.get(ext, "application/octet-stream")
+        try:
+            raw = p.read_bytes()
+        except Exception as exc:
+            return fail(str(exc), code="IMAGE_PICKER_FAILED")
+        encoded = base64.b64encode(raw).decode("ascii")
+        return ok({"data_uri": f"data:{mime};base64,{encoded}", "name": p.name})
 
     def year_list(self) -> dict[str, object]:
         """Return years from injected year service."""

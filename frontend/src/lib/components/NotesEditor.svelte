@@ -2,6 +2,25 @@
   import { onDestroy, tick, untrack } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
   import { renderMarkdown } from "../markdown";
+  import { Editor } from "@tiptap/core";
+  import StarterKit from "@tiptap/starter-kit";
+  // NOTE: Underline + Link are bundled INSIDE StarterKit v3 — re-registering them
+  // throws a duplicate-name error, so we only configure them on StarterKit.
+  import Subscript from "@tiptap/extension-subscript";
+  import Superscript from "@tiptap/extension-superscript";
+  import { FontFamily, TextStyle } from "@tiptap/extension-text-style";
+  import Image from "@tiptap/extension-image";
+  import { Table } from "@tiptap/extension-table";
+  import TableRow from "@tiptap/extension-table-row";
+  import TableCell from "@tiptap/extension-table-cell";
+  import TableHeader from "@tiptap/extension-table-header";
+  import TaskList from "@tiptap/extension-task-list";
+  import TaskItem from "@tiptap/extension-task-item";
+  import TextAlign from "@tiptap/extension-text-align";
+  import Color from "@tiptap/extension-color";
+  import Highlight from "@tiptap/extension-highlight";
+  import Placeholder from "@tiptap/extension-placeholder";
+  import { FontSize } from "../extensions/FontSize";
 
   interface Props {
     projectPath: string;
@@ -12,31 +31,17 @@
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
-  type FormatState = {
-    bold: boolean; italic: boolean; underline: boolean; strikethrough: boolean;
-    subscript: boolean; superscript: boolean;
-    heading: '' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
-    code: boolean; codeBlock: boolean; blockquote: boolean; link: boolean;
-    orderedList: boolean; unorderedList: boolean; todo: boolean;
-    align: '' | 'left' | 'center' | 'right' | 'justify';
-    fontFamily: string; fontSize: string;
-  };
-
   let text = $state(untrack(() => initialNotes ?? ""));
   let status = $state<SaveStatus>("idle");
   let errorText = $state("");
-  let editorEl = $state<HTMLDivElement | null>(null);
+  let hostEl = $state<HTMLDivElement | null>(null);
+  let editor: Editor | null = $state(null);
   let toolbarEl = $state<HTMLElement | null>(null);
   let lastSaved = $state(untrack(() => initialNotes ?? ""));
   let fullscreen = $state(false);
-
-  let fs = $state<FormatState>({
-    bold: false, italic: false, underline: false, strikethrough: false,
-    subscript: false, superscript: false,
-    heading: '', code: false, codeBlock: false, blockquote: false, link: false,
-    orderedList: false, unorderedList: false, todo: false,
-    align: '', fontFamily: '', fontSize: '',
-  });
+  // Reactive refresh token: bumped on every editor transaction so isActive() /
+  // getAttributes() in the markup re-evaluate (Editor is not a rune proxy).
+  let rev = $state(0);
 
   let colorOpen = $state(false);
   let colorMode: 'fore' | 'back' = $state('fore');
@@ -49,21 +54,18 @@
   let linkOpen = $state(false);
   let linkUrl = $state('');
   let linkEditing = $state(false);
-  let linkAnchor = $state<HTMLAnchorElement | null>(null);
-  let linkRange: Range | null = null;
   // Inline image dialog.
   let imgOpen = $state(false);
   let imgUrl = $state('');
   let imgAlt = $state('');
-  let imgRange: Range | null = null;
 
   const FONTS = [
+    { label: 'Times New Roman', value: '"Times New Roman", serif' },
     { label: 'Sans-serif', value: 'Inter, sans-serif' },
     { label: 'Serif', value: 'Georgia, serif' },
     { label: 'Monospace', value: '"Courier New", monospace' },
     { label: 'Arial', value: 'Arial' },
     { label: 'Calibri', value: 'Calibri' },
-    { label: 'Times New Roman', value: '"Times New Roman", serif' },
     { label: 'Verdana', value: 'Verdana' },
     { label: 'Trebuchet MS', value: '"Trebuchet MS"' },
     { label: 'Consolas', value: 'Consolas' },
@@ -111,10 +113,7 @@
   function scheduleSave() {
     status = "pending";
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
-      flush();
-    }, AUTOSAVE_MS);
+    timer = setTimeout(flush, AUTOSAVE_MS);
   }
 
   async function flush() {
@@ -139,16 +138,18 @@
     } else {
       document.body.style.overflow = '';
       window.removeEventListener('resize', recalcHeight);
-      if (editorEl) { editorEl.style.maxHeight = ''; editorEl.style.height = ''; }
+      const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
+      if (area) { area.style.maxHeight = ''; area.style.height = ''; }
     }
   }
 
   function recalcHeight() {
-    if (!fullscreen || !toolbarEl || !editorEl) return;
-    editorEl.style.maxHeight = 'none';
-    const other = editorEl.parentElement?.querySelector('.ne-toolbar');
-    const h = other ? window.innerHeight - other.getBoundingClientRect().height - 18 : window.innerHeight;
-    editorEl.style.height = `${h}px`;
+    if (!fullscreen || !toolbarEl || !hostEl) return;
+    const area = hostEl.querySelector('.ne-textarea') as HTMLElement | null;
+    if (!area) return;
+    area.style.maxHeight = 'none';
+    const h = window.innerHeight - toolbarEl.getBoundingClientRect().height - 18;
+    area.style.height = `${h}px`;
   }
 
   function closeAllPopovers() {
@@ -182,11 +183,12 @@
     if (node.nodeType !== Node.ELEMENT_NODE) return "";
     const el = node as HTMLElement;
     const tag = el.tagName.toLowerCase();
-    if (el.classList.contains("ne-todo-item")) {
-      const cb = el.querySelector("input[type='checkbox']") as HTMLInputElement | null;
-      const ts = el.querySelector("span") as HTMLElement | null;
-      const ch = cb?.checked ? "x" : " ";
-      const tc = ts ? Array.from(ts.childNodes).map(domToMarkdown).join("") : "";
+    // Tiptap task item: <li data-type="taskItem" data-checked="false">…<div>text</div></li>
+    if (el.dataset.type === "taskItem") {
+      const checked = el.dataset.checked === "true";
+      const ch = checked ? "x" : " ";
+      const contentEl = el.querySelector("div") || el;
+      const tc = Array.from(contentEl.childNodes).map(domToMarkdown).join("");
       return `- [${ch}] ${tc.trim()}\n`;
     }
     const children = Array.from(el.childNodes).map(domToMarkdown).join("");
@@ -195,7 +197,11 @@
       case "h2": return `## ${children.trim()}\n\n`;
       case "h3": return `### ${children.trim()}\n\n`;
       case "blockquote": return `> ${children.trim()}\n\n`;
-      case "li": return `${el.parentElement?.tagName === 'OL' ? '1.' : '-'} ${children.trim()}\n`;
+      case "li": {
+        // Task items are handled above; normal list items take their marker
+        // from the parent list type.
+        return `${el.parentElement?.tagName === 'OL' ? '1.' : '-'} ${children.trim()}\n`;
+      }
       case "ol": return `${children}\n`;
       case "ul": return `${children}\n`;
       case "strong": case "b": return `**${children}**`;
@@ -241,7 +247,6 @@
       }
       case "tr": case "td": case "th": case "tbody": case "thead": case "caption": return children;
       case "font": {
-        // Preserve legacy <font color/face> that execCommand may produce.
         const attrs: string[] = [];
         const fc = el.getAttribute('color'); if (fc) attrs.push(`color="${escapeAttr(fc)}"`);
         const ff = el.getAttribute('face'); if (ff) attrs.push(`face="${escapeAttr(ff)}"`);
@@ -249,9 +254,14 @@
         return children;
       }
       case "span": {
-        // Preserve ALL inline styles (color, background, font-size/family, …).
         const style = el.getAttribute('style') || '';
         if (style.trim()) return `<span style="${escapeAttr(style)}">${children}</span>`;
+        return children;
+      }
+      case "mark": {
+        // Tiptap highlight renders as <mark>; carry it as an inline-styled span.
+        const c = el.getAttribute('data-color') || el.style.backgroundColor;
+        if (c) return `<span style="background-color:${escapeAttr(c)}">${children}</span>`;
         return children;
       }
       default: return children;
@@ -266,235 +276,45 @@
     return md.trim();
   }
 
-  function syncToMarkdown() {
-    if (editorEl) { text = htmlToMarkdown(editorEl.innerHTML); scheduleSave(); }
-  }
-
-  function onEditorInput() { scheduleSave(); }
-
-  function onEditorBlur() {
-    if (editorEl) text = htmlToMarkdown(editorEl.innerHTML);
-    if (status === "pending" || timer) { if (timer) { clearTimeout(timer); timer = undefined; } flush(); }
-  }
-
-  /** Delegated change handler — fires for checklist toggles and re-serializes. */
-  function onEditorChange(e: Event) {
-    const t = e.target as HTMLElement | null;
-    if (t && t.classList.contains("ne-todo-checkbox")) syncToMarkdown();
-  }
-
-  // ── Active state detection ──
-
-  function isInElement(tagOrClass: string): boolean {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || !editorEl) return false;
-    let el = sel.anchorNode as HTMLElement | null;
-    if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    while (el && el !== editorEl) {
-      if (tagOrClass.startsWith('.') && el.classList.contains(tagOrClass.slice(1))) return true;
-      if (el.tagName.toLowerCase() === tagOrClass.toLowerCase()) return true;
-      el = el.parentElement;
-    }
-    return false;
-  }
-
-  function detectListType(): { ordered: boolean; unordered: boolean } {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return { ordered: false, unordered: false };
-    let el = sel.anchorNode as HTMLElement | null;
-    if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    while (el && el !== editorEl) {
-      const t = el.tagName.toLowerCase();
-      if (t === 'ol') return { ordered: true, unordered: false };
-      if (t === 'ul') return { ordered: false, unordered: true };
-      el = el.parentElement;
-    }
-    return { ordered: false, unordered: false };
-  }
-
-  function updateFormatState() {
-    if (!editorEl || !editorEl.contains(document.activeElement)) return;
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    try {
-      const list = detectListType();
-      let h: FormatState['heading'] = '';
-      const rawH = document.queryCommandValue('formatBlock')?.toLowerCase() || '';
-      if (/^h[1-6]$/.test(rawH)) h = rawH as FormatState['heading'];
-      else if (rawH.includes('paragraph') || rawH === 'p') h = 'p';
-      let al: FormatState['align'] = '';
-      if (document.queryCommandState('justifyLeft')) al = 'left';
-      else if (document.queryCommandState('justifyCenter')) al = 'center';
-      else if (document.queryCommandState('justifyRight')) al = 'right';
-      else if (document.queryCommandState('justifyFull')) al = 'justify';
-      fs = {
-        bold: document.queryCommandState('bold'),
-        italic: document.queryCommandState('italic'),
-        underline: document.queryCommandState('underline'),
-        strikethrough: document.queryCommandState('strikeThrough'),
-        subscript: document.queryCommandState('subscript'),
-        superscript: document.queryCommandState('superscript'),
-        heading: h,
-        code: isInElement('code') && !isInElement('pre'),
-        codeBlock: isInElement('pre'),
-        blockquote: isInElement('blockquote'),
-        link: isInElement('a'),
-        orderedList: list.ordered,
-        unorderedList: list.unordered,
-        todo: isInElement('.ne-todo-item'),
-        align: al,
-        fontFamily: document.queryCommandValue('fontName') || '',
-        fontSize: detectFontSize(),
-      };
-    } catch {}
-  }
-
-  // ── WYSIWYG commands ──
-
-  function format(cmd: string, value: string = "") {
-    document.execCommand(cmd, false, value || undefined);
+  function onEditorUpdate() {
+    if (!editor) return;
+    text = htmlToMarkdown(editor.getHTML());
     scheduleSave();
-    tick().then(updateFormatState);
   }
 
-  function formatSimple(cmd: string) {
-    format(cmd, '');
+  // ── Active-state helpers (reactive via the rev token) ──
+
+  function isActive(name: string, attrs?: Record<string, unknown>): boolean {
+    return editor?.isActive(name, attrs) ?? false;
   }
 
-  function formatBlockCmd(tag: string) {
-    format('formatBlock', `<${tag}>`);
+  /** TextAlign marks live as a node attribute; check it directly. */
+  function alignIs(value: string): boolean {
+    if (!editor) return false;
+    const cur = (editor.getAttributes("paragraph").textAlign as string) || (editor.getAttributes("heading").textAlign as string) || "";
+    return cur === value;
   }
 
   function applyFont() {
     if (!fontSelVal) return;
-    format('fontName', fontSelVal);
+    editor?.chain().focus().setFontFamily(fontSelVal).run();
+    rev++;
     (document.getElementById('ne-font-select') as HTMLSelectElement | null)?.blur();
   }
 
   function applySize() {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
     const px = parseInt(sizeSelVal);
-    if (isNaN(px)) return;
-    const range = sel.getRangeAt(0);
-    const span = document.createElement('span');
-    span.style.fontSize = `${px}px`;
-    span.textContent = range.toString();
-    range.deleteContents();
-    range.insertNode(span);
-    scheduleSave();
-    tick().then(updateFormatState);
+    if (isNaN(px)) editor?.chain().focus().unsetFontSize().run();
+    else editor?.chain().focus().setFontSize(`${px}px`).run();
+    rev++;
     (document.getElementById('ne-size-select') as HTMLSelectElement | null)?.blur();
   }
 
-  function detectFontSize(): string {
-    if (!editorEl) return '';
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return '';
-    let el = sel.anchorNode as HTMLElement | null;
-    if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    while (el && el !== editorEl) {
-      const s = el.style?.fontSize;
-      if (s) { const px = parseFloat(s); if (!isNaN(px)) return Math.round(px).toString(); }
-      el = el.parentElement;
-    }
-    if (el) return Math.round(parseFloat(window.getComputedStyle(el).fontSize)).toString();
-    return '';
-  }
-
-  function formatCode() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    if (range.collapsed) return;
-    const code = document.createElement("code");
-    code.textContent = range.toString();
-    range.deleteContents();
-    range.insertNode(code);
-    scheduleSave();
-    tick().then(updateFormatState);
-  }
-
-  function formatCodeBlock() {
-    if (!editorEl) return;
-    editorEl.focus();
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    let el = sel.anchorNode as HTMLElement | null;
-    if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    while (el && el !== editorEl && el.tagName.toLowerCase() !== 'pre') el = el.parentElement;
-    if (el && el.tagName.toLowerCase() === 'pre') {
-      const parent = el.parentNode;
-      if (parent) {
-        const text = el.textContent || '';
-        const p = document.createElement('p');
-        p.textContent = text;
-        parent.replaceChild(p, el);
-        const range = document.createRange();
-        range.selectNodeContents(p);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    } else {
-      const range = sel.getRangeAt(0);
-      const text = range.toString() || 'Code block';
-      const pre = document.createElement('pre');
-      const code = document.createElement('code');
-      code.textContent = text;
-      pre.appendChild(code);
-      range.deleteContents();
-      range.insertNode(pre);
-    }
-    scheduleSave();
-    tick().then(updateFormatState);
-  }
-
-  // ── Selection save/restore (prompt()-free dialogs steal focus from the editor) ──
-
-  function saveSelection(): Range | null {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return null;
-    const range = sel.getRangeAt(0).cloneRange();
-    return editorEl?.contains(range.commonAncestorContainer) ? range : null;
-  }
-
-  function restoreSelection(range: Range | null) {
-    if (!range) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // ── Link dialog (create / edit / remove) ──
-
   function formatLink() {
-    if (!editorEl) return;
-    editorEl.focus();
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-
-    // Editing an existing <a>?
-    let el = sel.anchorNode as HTMLElement | null;
-    if (el?.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    while (el && el !== editorEl && el.tagName.toLowerCase() !== 'a') el = el.parentElement;
-    if (el && el.tagName.toLowerCase() === 'a') {
-      const a = el as HTMLAnchorElement;
-      linkAnchor = a;
-      linkEditing = true;
-      linkUrl = a.getAttribute('href') || '';
-      linkRange = null;
-      openLinkDialog();
-      return;
-    }
-
-    // Creating a new link: require a non-empty selection.
-    if (sel.isCollapsed) return;
-    linkAnchor = null;
-    linkEditing = false;
-    linkUrl = '';
-    linkRange = saveSelection();
-    if (!linkRange) return;
+    if (!editor) return;
+    const prev = editor.getAttributes("link").href as string | undefined;
+    linkEditing = !!prev;
+    linkUrl = prev || "";
     openLinkDialog();
   }
 
@@ -507,41 +327,19 @@
   function closeLinkDialog() {
     linkOpen = false;
     linkUrl = '';
-    linkAnchor = null;
     linkEditing = false;
-    linkRange = null;
   }
 
   function confirmLink() {
     const url = linkUrl.trim();
-    if (linkEditing && linkAnchor) {
-      if (url) {
-        linkAnchor.setAttribute('href', url);
-      } else {
-        // Empty URL while editing = remove the link.
-        removeLink(linkAnchor);
-      }
-    } else if (url && linkRange) {
-      // Build <a> manually (no deprecated execCommand createLink).
-      editorEl?.focus();
-      restoreSelection(linkRange);
-      const a = document.createElement('a');
-      a.setAttribute('href', url);
-      a.textContent = linkRange.toString();
-      linkRange.deleteContents();
-      linkRange.insertNode(a);
+    if (linkEditing) {
+      if (url) editor?.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+      else editor?.chain().focus().extendMarkRange("link").unsetLink().run();
+    } else if (url) {
+      editor?.chain().focus().setLink({ href: url }).run();
     }
     linkOpen = false;
-    scheduleSave();
-    tick().then(updateFormatState);
-  }
-
-  function removeLink(a: HTMLAnchorElement | null) {
-    if (!a) return;
-    const parent = a.parentNode;
-    if (!parent) return;
-    const text = document.createTextNode(a.textContent || '');
-    parent.replaceChild(text, a);
+    rev++;
   }
 
   function onLinkKeydown(e: KeyboardEvent) {
@@ -549,15 +347,26 @@
     else if (e.key === 'Escape') { e.preventDefault(); closeLinkDialog(); }
   }
 
-  // ── Image dialog ──
+  // ── Image dialog (browses local laptop images via the Python bridge) ──
 
-  function formatImage() {
-    if (!editorEl) return;
-    editorEl.focus();
+  async function formatImage() {
+    if (!editor) return;
     imgUrl = '';
     imgAlt = '';
-    imgRange = saveSelection();
     closeAllPopovers();
+    if (isPywebviewReady()) {
+      // Open the native file dialog and embed the chosen image as a data URI
+      // (so it persists in notes.md without external references).
+      const resp = await callBridge<{ data_uri: string | null; name?: string }>("util_choose_image");
+      if (!resp.ok) { status = "error"; errorText = resp.error.message; return; }
+      if (!resp.data?.data_uri) return; // user cancelled
+      imgUrl = resp.data.data_uri;
+      imgAlt = resp.data.name || '';
+      imgOpen = true;
+      tick().then(() => document.getElementById('ne-img-alt')?.focus());
+      return;
+    }
+    // Browser-preview fallback: no native file dialog, so keep URL entry usable.
     imgOpen = true;
     tick().then(() => document.getElementById('ne-img-input')?.focus());
   }
@@ -566,27 +375,15 @@
     imgOpen = false;
     imgUrl = '';
     imgAlt = '';
-    imgRange = null;
   }
 
   function confirmImage() {
     const url = imgUrl.trim();
     if (url) {
-      editorEl?.focus();
-      if (imgRange) restoreSelection(imgRange);
-      const img = document.createElement('img');
-      img.setAttribute('src', url);
-      img.setAttribute('alt', imgAlt.trim());
-      img.style.maxWidth = '100%';
-      if (imgRange && !imgRange.collapsed) imgRange.deleteContents();
-      if (imgRange) imgRange.insertNode(img);
-      else if (editorEl) editorEl.appendChild(img);
-      const space = document.createTextNode('\u00A0');
-      img.parentNode?.insertBefore(space, img.nextSibling);
+      editor?.chain().focus().setImage({ src: url, alt: imgAlt.trim() }).run();
+      rev++;
     }
     imgOpen = false;
-    scheduleSave();
-    tick().then(updateFormatState);
   }
 
   function onImageKeydown(e: KeyboardEvent) {
@@ -594,58 +391,24 @@
     else if (e.key === 'Escape') { e.preventDefault(); closeImageDialog(); }
   }
 
-  function formatChecklist() {
-    if (!editorEl) return;
-    editorEl.focus();
-    const html = `<div class="ne-todo-item"><input type="checkbox" class="ne-todo-checkbox" /> <span>Todo item</span></div>`;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) {
-      editorEl.insertAdjacentHTML("beforeend", html);
-    } else {
-      const range = sel.getRangeAt(0);
-      if (!editorEl.contains(range.commonAncestorContainer)) {
-        editorEl.insertAdjacentHTML("beforeend", html);
-      } else {
-        range.insertNode(range.createContextualFragment(html));
-      }
-    }
-    editorEl.focus();
-    scheduleSave();
-    tick().then(updateFormatState);
-  }
-
   function applyColor(color: string) {
-    const cmd = colorMode === 'back' ? 'hiliteColor' : 'foreColor';
-    document.execCommand(cmd, false, color);
-    scheduleSave();
+    if (colorMode === 'back') editor?.chain().focus().toggleHighlight({ color }).run();
+    else editor?.chain().focus().setColor(color).run();
+    rev++;
     colorOpen = false;
-    tick().then(updateFormatState);
   }
 
   function insertTable() {
     const { rows, cols } = tableHover;
-    const html = `<table border="1" style="border-collapse:collapse;width:100%;"><tbody>`;
-    const rowsHtml = Array.from({ length: rows }, () => `<tr>${Array.from({ length: cols }, () => '<td style="border:1px solid #ccc;padding:4px;"><br></td>').join('')}</tr>`).join('');
-    const full = `${html}${rowsHtml}</tbody></table><p><br></p>`;
-    if (!editorEl) return;
-    editorEl.focus();
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      sel.getRangeAt(0).insertNode(document.createRange().createContextualFragment(full));
-    } else {
-      editorEl.insertAdjacentHTML('beforeend', full);
-    }
+    editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
     tableOpen = false;
-    scheduleSave();
-    tick().then(updateFormatState);
+    rev++;
   }
 
   function insertEmoji(emoji: string) {
-    editorEl?.focus();
-    document.execCommand('insertText', false, emoji);
+    editor?.chain().focus().insertContent(emoji).run();
     emojiOpen = false;
-    scheduleSave();
-    tick().then(updateFormatState);
+    rev++;
   }
 
   // ── Lifecycle ──
@@ -658,32 +421,83 @@
   });
 
   let lastPath = "";
-  let stateDetectBound = false;
+  let windowClickBound = false;
+
+  // SSR guard: the app renders client-side in pywebview, but the test harness
+  // renders server-side (window undefined there). Only build the Editor where a
+  // DOM exists, so the toolbar still renders under SSR.
+  const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
 
   $effect(() => {
-    const notesContent = untrack(() => text);
-    if (editorEl && projectPath !== lastPath) {
-      lastPath = projectPath;
-      editorEl.innerHTML = renderMarkdown(notesContent);
+    if (!isBrowser || !hostEl) return;
+    if (editor) {
+      // Project switch: reload content without rebuilding the editor.
+      if (projectPath !== lastPath) {
+        lastPath = projectPath;
+        editor.commands.setContent(renderMarkdown(text), { emitUpdate: false });
+        lastSaved = text;
+      }
+      return;
     }
-  });
-
-  $effect(() => {
-    if (editorEl && !stateDetectBound) {
-      stateDetectBound = true;
-      editorEl.addEventListener('keyup', updateFormatState);
-      editorEl.addEventListener('mouseup', updateFormatState);
-      editorEl.addEventListener('change', onEditorChange);
-      document.addEventListener('selectionchange', updateFormatState);
+    lastPath = projectPath;
+    const instance = new Editor({
+      element: hostEl,
+      editable: true,
+      content: renderMarkdown(untrack(() => text)),
+      extensions: [
+        StarterKit.configure({
+          // StarterKit v3 bundles bold/italic/strike/code, heading, blockquote,
+          // codeBlock, bulletList/orderedList/listItem/listKeymap, hardBreak,
+          // horizontalRule, undoRedo, link, underline.
+          link: { openOnClick: false, autolink: true },
+        }),
+        Subscript,
+        Superscript,
+        TextStyle,
+        FontFamily,
+        Color,
+        FontSize,
+        Highlight.configure({ multicolor: true }),
+        Image.configure({ inline: true, allowBase64: true }),
+        TaskList,
+        TaskItem.configure({ nested: false }),
+        TextAlign.configure({ types: ["heading", "paragraph"] }),
+        Placeholder.configure({ placeholder: "Write project notes (autosaves to notes.md)…" }),
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableHeader,
+        TableCell,
+      ],
+      editorProps: {
+        attributes: {
+          class: "ne-textarea ne-editor-area",
+          "aria-multiline": "true",
+          role: "textbox",
+        },
+      },
+    });
+    instance.on("transaction", () => { rev++; });
+    instance.on("selectionUpdate", () => { rev++; });
+    instance.on("update", onEditorUpdate);
+    editor = instance;
+    if (!windowClickBound) {
+      windowClickBound = true;
       window.addEventListener('click', onWindowClick);
     }
+    return () => { instance.destroy(); editor = null; };
   });
 
+  // Reflect editor font family/size into the selects (after each transaction).
   $effect(() => {
-    fontSelVal = fs.fontFamily || '';
+    rev;
+    if (!editor) return;
+    fontSelVal = (editor.getAttributes("textStyle").fontFamily as string) || "";
   });
   $effect(() => {
-    sizeSelVal = fs.fontSize || '';
+    rev;
+    if (!editor) return;
+    const fs = (editor.getAttributes("fontSize").fontSize as string) || "";
+    sizeSelVal = fs ? String(parseInt(fs)) : "";
   });
 </script>
 
@@ -692,8 +506,8 @@
     <div class="ne-tools" aria-label="Visual formatting">
 
       <!-- Row: Undo/Redo | Font | Size -->
-      <button type="button" class="ne-tbtn" title="Undo" onmousedown={(e) => { e.preventDefault(); formatSimple('undo'); }}>↩</button>
-      <button type="button" class="ne-tbtn" title="Redo" onmousedown={(e) => { e.preventDefault(); formatSimple('redo'); }}>↪</button>
+      <button type="button" class="ne-tbtn" title="Undo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().undo().run(); rev++; }}>↩</button>
+      <button type="button" class="ne-tbtn" title="Redo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().redo().run(); rev++; }}>↪</button>
       <span class="ne-sep"></span>
       <select id="ne-font-select" class="ne-tbtn ne-tselect" bind:value={fontSelVal} onchange={applyFont} onclick={(e) => e.stopPropagation()}>
         {#each FONTS as f}
@@ -701,6 +515,7 @@
         {/each}
       </select>
       <select id="ne-size-select" class="ne-tbtn ne-tselect" bind:value={sizeSelVal} onchange={applySize} onclick={(e) => e.stopPropagation()}>
+        <option value="">Size</option>
         {#each SIZES as s}
           <option value={s}>{s}</option>
         {/each}
@@ -708,13 +523,13 @@
       <span class="ne-sep"></span>
 
       <!-- Row: B I U S | Sup Sub -->
-      <button type="button" class="ne-tbtn" class:active={fs.bold} title="Bold" onmousedown={(e) => { e.preventDefault(); formatSimple('bold'); }}><strong>B</strong></button>
-      <button type="button" class="ne-tbtn" class:active={fs.italic} title="Italic" onmousedown={(e) => { e.preventDefault(); formatSimple('italic'); }}><em>I</em></button>
-      <button type="button" class="ne-tbtn" class:active={fs.underline} title="Underline" onmousedown={(e) => { e.preventDefault(); formatSimple('underline'); }}><u>U</u></button>
-      <button type="button" class="ne-tbtn" class:active={fs.strikethrough} title="Strikethrough" onmousedown={(e) => { e.preventDefault(); formatSimple('strikeThrough'); }}><s>S</s></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('bold')} title="Bold" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBold().run(); rev++; }}><strong>B</strong></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('italic')} title="Italic" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleItalic().run(); rev++; }}><em>I</em></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('underline')} title="Underline" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleUnderline().run(); rev++; }}><u>U</u></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('strike')} title="Strikethrough" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleStrike().run(); rev++; }}><s>S</s></button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" class:active={fs.superscript} title="Superscript" onmousedown={(e) => { e.preventDefault(); formatSimple('superscript'); }}>x<sup>2</sup></button>
-      <button type="button" class="ne-tbtn" class:active={fs.subscript} title="Subscript" onmousedown={(e) => { e.preventDefault(); formatSimple('subscript'); }}>x<sub>2</sub></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('superscript')} title="Superscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSuperscript().run(); rev++; }}>x<sup>2</sup></button>
+      <button type="button" class="ne-tbtn" class:active={isActive('subscript')} title="Subscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSubscript().run(); rev++; }}>x<sub>2</sub></button>
       <span class="ne-sep"></span>
 
       <!-- Row: Forecolor | Backcolor -->
@@ -738,41 +553,41 @@
       <span class="ne-sep"></span>
 
       <!-- Row: H1 H2 H3 P | Quote Code -->
-      <button type="button" class="ne-tbtn" class:active={fs.heading === 'h1'} title="Heading 1" onmousedown={(e) => { e.preventDefault(); formatBlockCmd('h1'); }}>H1</button>
-      <button type="button" class="ne-tbtn" class:active={fs.heading === 'h2'} title="Heading 2" onmousedown={(e) => { e.preventDefault(); formatBlockCmd('h2'); }}>H2</button>
-      <button type="button" class="ne-tbtn" class:active={fs.heading === 'h3'} title="Heading 3" onmousedown={(e) => { e.preventDefault(); formatBlockCmd('h3'); }}>H3</button>
-      <button type="button" class="ne-tbtn" class:active={fs.heading === 'p'} title="Paragraph" onmousedown={(e) => { e.preventDefault(); formatBlockCmd('p'); }}>¶</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:1})} title="Heading 1" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 1 }).run(); rev++; }}>H1</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:2})} title="Heading 2" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 2 }).run(); rev++; }}>H2</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:3})} title="Heading 3" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 3 }).run(); rev++; }}>H3</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('paragraph')} title="Paragraph" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setParagraph().run(); rev++; }}>¶</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" class:active={fs.blockquote} title="Blockquote" onmousedown={(e) => { e.preventDefault(); formatBlockCmd('blockquote'); }}>❝</button>
-      <button type="button" class="ne-tbtn" class:active={fs.code} title="Inline code" onmousedown={(e) => { e.preventDefault(); formatCode(); }}>{@html '&lt;/&gt;'}</button>
-      <button type="button" class="ne-tbtn" class:active={fs.codeBlock} title="Code block" onmousedown={(e) => { e.preventDefault(); formatCodeBlock(); }}>{"</>"}</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('blockquote')} title="Blockquote" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBlockquote().run(); rev++; }}>❝</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('code')} title="Inline code" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCode().run(); rev++; }}>{@html '&lt;/&gt;'}</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('codeBlock')} title="Code block" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCodeBlock().run(); rev++; }}>{"</>"}</button>
       <span class="ne-sep"></span>
 
       <!-- Row: OL UL | Indent Outdent -->
-      <button type="button" class="ne-tbtn" class:active={fs.orderedList} title="Numbered list" onmousedown={(e) => { e.preventDefault(); formatSimple('insertOrderedList'); }}>1.</button>
-      <button type="button" class="ne-tbtn" class:active={fs.unorderedList} title="Bulleted list" onmousedown={(e) => { e.preventDefault(); formatSimple('insertUnorderedList'); }}>•</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('orderedList')} title="Numbered list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleOrderedList().run(); rev++; }}>1.</button>
+      <button type="button" class="ne-tbtn" class:active={isActive('bulletList')} title="Bulleted list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBulletList().run(); rev++; }}>•</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" title="Indent" onmousedown={(e) => { e.preventDefault(); formatSimple('indent'); }}>→</button>
-      <button type="button" class="ne-tbtn" title="Outdent" onmousedown={(e) => { e.preventDefault(); formatSimple('outdent'); }}>←</button>
+      <button type="button" class="ne-tbtn" title="Indent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem('listItem').run(); rev++; }}>→</button>
+      <button type="button" class="ne-tbtn" title="Outdent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem('listItem').run(); rev++; }}>←</button>
       <span class="ne-sep"></span>
 
       <!-- Row: Align L C R J -->
-      <button type="button" class="ne-tbtn" class:active={fs.align === 'left'} title="Align left" onmousedown={(e) => { e.preventDefault(); formatSimple('justifyLeft'); }}>≡L</button>
-      <button type="button" class="ne-tbtn" class:active={fs.align === 'center'} title="Align center" onmousedown={(e) => { e.preventDefault(); formatSimple('justifyCenter'); }}>≡C</button>
-      <button type="button" class="ne-tbtn" class:active={fs.align === 'right'} title="Align right" onmousedown={(e) => { e.preventDefault(); formatSimple('justifyRight'); }}>≡R</button>
-      <button type="button" class="ne-tbtn" class:active={fs.align === 'justify'} title="Justify" onmousedown={(e) => { e.preventDefault(); formatSimple('justifyFull'); }}>≡J</button>
+      <button type="button" class="ne-tbtn" class:active={alignIs('left')} title="Align left" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('left').run(); rev++; }}>≡L</button>
+      <button type="button" class="ne-tbtn" class:active={alignIs('center')} title="Align center" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('center').run(); rev++; }}>≡C</button>
+      <button type="button" class="ne-tbtn" class:active={alignIs('right')} title="Align right" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('right').run(); rev++; }}>≡R</button>
+      <button type="button" class="ne-tbtn" class:active={alignIs('justify')} title="Justify" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('justify').run(); rev++; }}>≡J</button>
       <span class="ne-sep"></span>
 
       <!-- Row: Link HR Table Image Emoji -->
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" class:active={fs.link} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
+        <button type="button" class="ne-tbtn" class:active={isActive('link')} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
         {#if linkOpen}
           <div class="ne-popover ne-link-pop">
             <label class="ne-field-label" for="ne-link-input">{linkEditing ? 'Edit URL' : 'Link URL'}</label>
             <input id="ne-link-input" class="ne-input" type="url" bind:value={linkUrl} placeholder="https://example.com" onkeydown={onLinkKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
             <div class="ne-dialog-actions">
               {#if linkEditing}
-                <button type="button" class="ne-tbtn ne-act-btn" title="Remove link" onmousedown={(e) => { e.preventDefault(); removeLink(linkAnchor); linkOpen=false; scheduleSave(); tick().then(updateFormatState); }}>Remove</button>
+                <button type="button" class="ne-tbtn ne-act-btn" title="Remove link" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().extendMarkRange('link').unsetLink().run(); linkOpen=false; rev++; }}>Remove</button>
               {/if}
               <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeLinkDialog(); }}>Cancel</button>
               <button type="button" class="ne-tbtn ne-act-btn" title="Apply" onmousedown={(e) => { e.preventDefault(); confirmLink(); }}>OK</button>
@@ -780,7 +595,7 @@
           </div>
         {/if}
       </div>
-      <button type="button" class="ne-tbtn" title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); formatSimple('insertHorizontalRule'); }}>HR</button>
+      <button type="button" class="ne-tbtn" title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); rev++; }}>HR</button>
       <div class="ne-popover-wrap">
         <button type="button" class="ne-tbtn" title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}>⊞</button>
         {#if tableOpen}
@@ -788,12 +603,11 @@
               {#each Array(10) as _, r}
                 <div class="ne-table-row">
                   {#each Array(10) as _, c}
-                    <div role="gridcell" tabindex="-1" aria-label="Insert {r + 1} by {c + 1} table" class="ne-tcell" class:ne-thover={r < tableHover.rows && c < tableHover.cols} onmouseenter={() => tableHover = { rows: r + 1, cols: c + 1 }} onmousedown={(e) => { e.preventDefault(); tableHover = { rows: r + 1, cols: c + 1 }; }}></div>
+                    <div role="gridcell" tabindex="0" aria-label="Insert {r + 1} by {c + 1} table" class="ne-tcell" class:ne-thover={r < tableHover.rows && c < tableHover.cols} onmouseenter={() => tableHover = { rows: r + 1, cols: c + 1 }} onmousedown={(e) => { e.preventDefault(); tableHover = { rows: r + 1, cols: c + 1 }; }} onclick={() => insertTable()} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tableHover = { rows: r + 1, cols: c + 1 }; insertTable(); } }}></div>
                   {/each}
                 </div>
               {/each}
             <div class="ne-table-label">{tableHover.rows} × {tableHover.cols}</div>
-            <button type="button" class="ne-tbtn ne-insert-btn" onmousedown={(e) => { e.preventDefault(); insertTable(); }}>Insert table</button>
           </div>
         {/if}
       </div>
@@ -801,9 +615,13 @@
         <button type="button" class="ne-tbtn" title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
         {#if imgOpen}
           <div class="ne-popover ne-link-pop">
-            <label class="ne-field-label" for="ne-img-input">Image URL</label>
-            <input id="ne-img-input" class="ne-input" type="url" bind:value={imgUrl} placeholder="https://example.com/img.png" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
-            <label class="ne-field-label" for="ne-img-alt" style="margin-top:4px">Description (alt)</label>
+            {#if imgUrl.startsWith('data:image/')}
+              <div class="ne-image-picked">Local image selected</div>
+            {:else}
+              <label class="ne-field-label" for="ne-img-input">Image URL</label>
+              <input id="ne-img-input" class="ne-input" type="url" bind:value={imgUrl} placeholder="https://example.com/img.png" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
+            {/if}
+            <label class="ne-field-label ne-alt-label" for="ne-img-alt">Description (alt)</label>
             <input id="ne-img-alt" class="ne-input" type="text" bind:value={imgAlt} placeholder="Optional alt text" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
             <div class="ne-dialog-actions">
               <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeImageDialog(); }}>Cancel</button>
@@ -824,9 +642,9 @@
       </div>
       <span class="ne-sep"></span>
 
-      <!-- Row: Todo RemoveFormat -->
-      <button type="button" class="ne-tbtn" class:active={fs.todo} title="Checklist" onmousedown={(e) => { e.preventDefault(); formatChecklist(); }}>☑</button>
-      <button type="button" class="ne-tbtn" title="Clear formatting" onmousedown={(e) => { e.preventDefault(); formatSimple('removeFormat'); }}>↺</button>
+      <!-- Row: Todo ClearFormat -->
+      <button type="button" class="ne-tbtn" class:active={isActive('taskList')} title="Checklist" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleTaskList().run(); rev++; }}>☑</button>
+      <button type="button" class="ne-tbtn" title="Clear formatting" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().clearNodes().run(); rev++; }}>↺</button>
     </div>
 
     <div class="ne-actions">
@@ -844,15 +662,7 @@
     </div>
   </div>
 
-  <div
-    class="ne-textarea ne-editor-area"
-    class:ne-fs={fullscreen}
-    contenteditable="true"
-    bind:this={editorEl}
-    oninput={onEditorInput}
-    onblur={onEditorBlur}
-    placeholder="Write project notes (autosaves to notes.md)…"
-  ></div>
+  <div class="ne-editor-host" bind:this={hostEl}></div>
 </div>
 
 <style>
@@ -882,21 +692,49 @@
   .ne-tcell { width:14px; height:14px; border:1px solid var(--input-border); border-radius:1px; cursor:pointer; }
   .ne-tcell.ne-thover { background:var(--color-dbs-red); border-color:var(--color-dbs-red); }
   .ne-table-label { text-align:center; font-size:9px; font-weight:800; color:var(--color-muted); margin:4px 0; }
-  .ne-insert-btn { width:100%; margin-top:2px; }
   .ne-link-pop { left:auto; right:0; transform:none; padding:8px; width:200px; display:flex; flex-direction:column; gap:2px; }
   .ne-field-label { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
+  .ne-alt-label { margin-top:4px; }
+  .ne-image-picked { padding:4px 6px; border:1px solid var(--soft-white-border); border-radius:4px; font-size:10px; font-weight:800; color:var(--color-muted); background:var(--soft-pink-surface); }
   .ne-input { width:100%; padding:4px 6px; border:1px solid var(--soft-white-border); border-radius:4px; font-size:11px; font-family:var(--font); color:var(--color-ink); background:var(--card-white); outline:none; }
   .ne-input:focus { border-color:var(--color-dbs-red); }
   .ne-dialog-actions { display:flex; gap:4px; justify-content:flex-end; margin-top:6px; }
   .ne-act-btn { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-emoji-btn { font-size:16px; width:22px; height:22px; border:0; background:transparent; cursor:pointer; border-radius:3px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
   .ne-emoji-btn:hover { background:var(--soft-pink-surface); }
-  .ne-textarea { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:var(--font); color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; }
-  .ne-textarea:focus { border-color:var(--color-dbs-red); }
-  .ne-textarea.ne-fs { max-height:none; resize:none; }
-  .ne-textarea:empty::before { content:attr(placeholder); color:var(--color-muted); opacity:0.7; pointer-events:none; }
-  :global(.ne-todo-item) { display:flex; align-items:center; gap:6px; margin:4px 0; }
-  :global(.ne-todo-checkbox) { width:14px; height:14px; cursor:pointer; }
+
+  /* Editor surface — Tiptap mounts its contenteditable inside this host.
+     Default font is Times New Roman (DECISIONS D-0007 / bug 3 fix). */
+  .ne-editor-host { width:100%; }
+  :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; }
+  :global(.ne-editor-host .ne-textarea:focus) { border-color:var(--color-dbs-red); }
+  :global(.ne-editor-host .ne-textarea.ne-fs) { max-height:none; resize:none; }
+  :global(.ne-editor-host .ne-textarea p.is-editor-empty:first-child::before) { content:attr(data-placeholder); color:var(--color-muted); opacity:0.7; pointer-events:none; float:left; height:0; }
+  /* Bullets/numbers: Tailwind preflight sets list-style:none globally; restore
+     real markers so bullet & ordered lists actually show them (bug 10 fix). */
+  :global(.ne-editor-host .ne-textarea ul) { list-style:disc outside; padding-left:1.6em; margin:4px 0; }
+  :global(.ne-editor-host .ne-textarea ol) { list-style:decimal outside; padding-left:1.6em; margin:4px 0; }
+  :global(.ne-editor-host .ne-textarea ul[data-type="taskList"]) { list-style:none; padding-left:0; }
+  :global(.ne-editor-host .ne-textarea ul[data-type="taskList"] li) { display:flex; align-items:flex-start; gap:6px; margin:4px 0; }
+  :global(.ne-editor-host .ne-textarea ul[data-type="taskList"] li > div) { flex:1 1 auto; }
+  :global(.ne-editor-host .ne-textarea ul[data-type="taskList"] li > label) { flex:0 0 auto; display:flex; align-items:center; }
+  :global(.ne-editor-host .ne-textarea ul[data-type="taskList"] input[type="checkbox"]) { width:14px; height:14px; cursor:pointer; }
+  :global(.ne-editor-host .ne-textarea h1) { font-size:24px; font-weight:900; margin:6px 0; line-height:1.2; }
+  :global(.ne-editor-host .ne-textarea h2) { font-size:20px; font-weight:900; margin:6px 0; line-height:1.25; }
+  :global(.ne-editor-host .ne-textarea h3) { font-size:16px; font-weight:900; margin:5px 0; line-height:1.3; }
+  :global(.ne-editor-host .ne-textarea blockquote) { margin-left:1.4em; border-left:3px solid var(--soft-white-border); padding-left:8px; }
+  :global(.ne-editor-host .ne-textarea pre) { background:var(--surface-dark); color:var(--card-white); padding:8px 10px; border-radius:6px; font-family:"Courier New", monospace; font-size:11px; overflow-x:auto; }
+  :global(.ne-editor-host .ne-textarea code) { font-family:"Courier New", monospace; background:var(--soft-pink-surface); padding:0 3px; border-radius:3px; }
+  :global(.ne-editor-host .ne-textarea pre code) { background:transparent; padding:0; }
+  :global(.ne-editor-host .ne-textarea table) { border-collapse:collapse; table-layout:fixed; width:100%; margin:4px 0; }
+  :global(.ne-editor-host .ne-textarea th), :global(.ne-editor-host .ne-textarea td) { border:1px solid var(--input-border); padding:4px 6px; position:relative; }
+  :global(.ne-editor-host .ne-textarea th) { background:var(--soft-pink-surface); font-weight:800; }
+  :global(.ne-editor-host .ne-textarea img) { max-width:100%; }
+  /* Column-resize handle + cursor for resizable tables (bug 11). */
+  :global(.ne-editor-host .ne-textarea .selectedCell) { background:var(--soft-pink-surface); }
+  :global(.ne-editor-host .ne-textarea .column-resize-handle) { position:absolute; right:-2px; top:0; bottom:-2px; width:4px; background:var(--color-dbs-red); pointer-events:none; z-index:10; }
+  :global(.ne-editor-host.resize-cursor) { cursor:col-resize; }
+
   .ne-status { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:800; color:var(--color-muted); white-space:nowrap; }
   .ne-status.err { color:var(--color-dbs-red); }
   .ne-status.off { color:var(--tag-amber-ink); }

@@ -20,6 +20,7 @@ Shared element approved in one menu → update across all menus that use it.
 - **Frontend:** Svelte, TypeScript, Vite, Tailwind (local build only, no CDN)
 - **Backend:** Python 3.12+, layered monolith
 - **Desktop:** pywebview frameless + custom titlebar, WebView2
+- **RTE:** NotesEditor editing core = Tiptap v3 (ProseMirror); `frontend/src/lib/markdown.ts` remains the Markdown↔HTML load/serialize layer for the `notes.md` contract (see DECISIONS.md D-0007)
 - **Data:** Filesystem + `project_data.json` = canonical. SQLite = rebuildable cache only.
 - **Jobs:** APScheduler (in-process)
 - **Windows:** Outlook COM (background thread), Teams/pyautogui, send2trash, os.startfile
