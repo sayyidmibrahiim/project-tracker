@@ -11,6 +11,7 @@
 **Now:** Completed — merging `design/titlebar` to main.
 
 Phase 1 (Design All 6 Menus) deliverable:
+
 - TitleBar.svelte menggantikan Sidebar — avatar, search, 6 nav icons with tooltip, notif bell + popover, window controls
 - Unified `.page-header` (36px, border-bottom, icon+title left, actions right) applied to all 6 menu pages
 - 3-icon (Copy/Open/Edit SVG) + two-state pattern applied to ALL CR Number & Drone Ticket inputs across Dashboard, ProjectDetails panel, and SubProjectTable
