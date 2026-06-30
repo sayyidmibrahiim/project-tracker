@@ -2,20 +2,37 @@
 
 ## Git Branch Convention
 
+Full rule lives in [CLAUDE.md §Branch Workflow](../CLAUDE.md#branch-workflow) — this is the binding cross-provider summary.
+
+**7 long-lived base branches** (branch off `main`, one per menu + 1 general):
+
 ```
-main (stable, tested)
-  ├── feat/{menu}-{desc}        # New feature
-  ├── fix/{menu}-{desc}         # Bug fix
-  ├── design/{menu}-{desc}      # Design/UI change
-  ├── refactor/{menu}-{desc}    # Code restructure, no behavior change
-  └── chore/{desc}              # Config/docs/tooling, no product code change
+menu/dashboard          # Dashboard (PRD §11)
+menu/project-details    # Project Details (PRD §12)
+menu/second-brain       # Second Brain (PRD §13)
+menu/report             # Report (PRD §15)
+menu/automations        # Automations (PRD §16)
+menu/settings           # Settings (PRD §17)
+general/main            # cross-menu / infra / shared
 ```
 
-- Branch from main, merge back to main
+**Sub-branch** for every fix/feature, off the menu's base branch:
+
+```
+{type}/{menu}-{desc}    # type ∈ feat|fix|design|refactor|chore
+                        # menu ∈ dashboard|project-details|second-brain|report|automations|settings|general
+```
+
+- Example: `fix/project-details-rte-tiptap` (RTE bug, off `menu/project-details`).
 - Commit format: `type(scope): description` (conventional commits)
 - One logical change per commit
-- Delete branch after merge
+- **NEVER run two AI sessions on the same working tree** — parallel sessions `git reset --hard` each other's uncommitted work. One branch per session.
+- Delete sub-branch after merge. Keep the 7 base branches.
 - Tag releases: `v0.x.0`
+
+### Cross-provider rule (binding for ALL AI agents)
+
+This branching rule applies to **every AI agent regardless of provider/model** (Claude, opencode, Cursor, Gemini, etc.). Read CLAUDE.md §Branch Workflow before starting. Always branch off the correct menu base branch. Never touch another session's branch.
 
 ## Implementation Discipline
 
