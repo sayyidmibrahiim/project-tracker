@@ -1,57 +1,109 @@
 # Prompt Guide — Project Tracker
 
-Dokumentasi prompt untuk vibe-coding. Copy-paste, isi field `[...]`, kirim ke Claude Code.
-Setiap prompt sudah include skill yang tepat. Jangan ubah urutan skill invocation.
+> **Dokumentasi prompt untuk vibe-coding.** Copy-paste ke AI agent APAPUN (Claude, opencode, Cursor, Gemini, Copilot, Codex).
+> Prompt pertama di session baru PALING PENTING — karena itu yang bikin AI paham konteks dari nol.
+>
+> `[...]` = isi sesuai situasi.
 
 ---
 
-## 1. Session Baru (Resume)
+## 0. Document Hierarchy (WAJIB — Semua AI Agent)
 
-Pakai ini setiap kali buka session baru Claude Code.
+| Dokumen                 | Fungsi                                                                                           | Kapan di-update                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| **PRD.md**              | **Garis besar / blueprint ide aplikasi.** Behavior rules, product requirements.                  | Hanya ketika product behavior berubah                  |
+| **`_docs/` seluruhnya** | **Actual state / update kondisi.** Progress, arsitektur, session notes, design tokens, workflow. | Setiap slice selesai (lihat WORKFLOW.md §After Coding) |
+
+**Rule emas:** Jangan cuma baca PRD.md. Baca `_docs/PROGRESS.md` + `_docs/session-notes.md` DULU untuk status terkini.
+
+---
+
+## 1. Cold Start — AI Agent Baru, 0 Context
+
+**Gunakan ini SAAT PERTAMA KALI bertemu AI agent.** Claude, opencode, Cursor, Gemini, Copilot — semua butuh ini.
+
+Tinggal copy-paste tanpa edit. AI akan baca instruksi di bawah dan langsung ngerti.
 
 ```
-/goal resume Project Tracker vibe-code.
+PROJECT TRACKER DBS — Cold Start.
 
+Ini aplikasi desktop Windows untuk tracking CR deployment.
+Kamu adalah AI agent coding. Kamu BELUM PERNAH lihat project ini.
+Baca instruksi dengan seksama.
+
+--- DOKUMEN HIERARKI ---
+PRD.md = garis besar / blueprint. _docs/ = actual state.
+Baca _docs/ DULU. Jangan assume PRD = status coding terbaru.
+
+--- LANGKAH AWAL ---
+Baca file ini URUT:
+1. _docs/WORKFLOW.md — workflow rules, doc sync rule (WAJIB)
+2. _docs/PROGRESS.md — tracking terkini
+3. _docs/session-notes.md — active context (Now/Next/Blocked)
+4. _docs/DECISIONS.md — architectural decisions D-XXXX
+5. _docs/ARCHITECTURE.md — layer structure, dependency flow
+6. _docs/DESIGN_RULES.md — design tokens, komponen
+7. PRD.md — product requirements (referensi perilaku)
+
+Setelah baca, report:
+- Apa aplikasi ini
+- Phase dan last slice completed
+- Active menu
+- Git: branch, dirty files
+- Tugas paling aman yang bisa dikerjakan
+
+--- RULES KODE WAJIB ---
+1. Branch: {menu}/{desc} — dari main, merge ke main
+2. graphify DULU sebelum code lookup
+3. Satu menu per session
+4. UI: mockup dulu → user approve → code
+5. Python logic di services/core, bukan Svelte
+6. Jangan tambah dependency tanpa konfirmasi
+7. Jangan hard delete — send2trash
+8. Windows code: guard IS_WINDOWS
+9. Path: pathlib.Path, bukan string concat
+
+--- DOC SYNC — WAJIB SETELAH CODE ---
+- PROGRESS.md: tambah slice, update phase
+- session-notes.md: Now/Next/Blocked, files changed
+- PRD.md: hanya kalau behavior berubah
+- DECISIONS.md: hanya kalau keputusan arsitektur
+- DESIGN_RULES.md: hanya kalau tokens berubah
+
+--- VERIFIKASI ---
+- Frontend: npm --prefix frontend run build + check
+- Backend: .venv/Scripts/python.exe -m pytest tests/ -v -k <pattern>
+- Bridge: pytest tests/ -v -k "test_bridge"
+
+--- EKSEKUSI ---
+Mulai baca file 1-7 di atas. Jangan coding sebelum report dan aku kasih OK.
+```
+
+**Catatan per platform:**
+
+- **Claude Code / opencode:** Paste langsung di chat / CLI
+- **Cursor:** Paste di chat, dia akan baca file-file yang disebut
+- **Gemini CLI:** Paste, auto-activate tools
+- **Copilot / Codex:** Paste. Mungkin perlu manual run command untuk graphify
+
+---
+
+## 2. Resume — Lanjut Session
+
+Pakai kalau AI SUDAH pernah kerja di project ini — tinggal lanjut.
+
+```
 Context:
-- Project root: D:/Ibrahim/Projects/project_tracker
-- Working one menu at a time
+- Project: D:/Ibrahim/Projects/project_tracker
+- PRD.md = blueprint. _docs/ = actual state. Baca _docs/ DULU.
 
 Do:
-1. claude-mem:recall — get latest decisions, current menu, approved designs
-2. Read _docs/PROGRESS.md
+1. Read _docs/PROGRESS.md
+2. Read _docs/session-notes.md
 3. git status + git branch
-4. graphify check (absolute path)
-5. Report: active menu, last slice done, dirty files, next safest task
-6. Ask: continue current menu or switch?
-```
-
----
-
-## 2. Mulai / Lanjut Menu
-
-Pakai ini untuk mulai kerja di satu menu atau lanjut dari terakhir.
-
-```
-/goal lanjut [NAMA_MENU] sampai sesuai ekspektasi gw.
-
-Context:
-- Current menu: [NAMA_MENU]
-- Target sekarang: [APA YANG MAU DICAPAI]
-- Visual ref: _reference/ HTML prototype
-- Important preference: [PREFERENCE KALAU ADA, HAPUS KALAU TIDAK]
-
-Skills:
-- /frontend-design (for design work)
-- /context7-mcp (for Svelte/Vite/Tailwind docs)
-- Read _docs/DESIGN_RULES.md for design system
-
-Rules:
-- Satu menu only
-- Design mockup dulu, gw approve baru code
-- graphify first from D:/Ibrahim/Projects/project_tracker
-- Update _docs/PROGRESS.md after each slice
-- Generate manual checklist setelah code
-- Report: changed files, tests run, not tested, next slice
+4. graphify check (D:/Ibrahim/Projects/project_tracker/graphify-out/graph.json)
+5. Report: active menu, last slice done, dirty files, next task
+6. Ask: continue or switch?
 ```
 
 ---

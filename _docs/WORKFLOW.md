@@ -17,6 +17,7 @@ general/{desc}            # cross-menu / infra / shared
 ```
 
 Examples:
+
 - `project-details/rte-bugs`
 - `dashboard/fix-responsive`
 - `general/branch-rule`

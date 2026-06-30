@@ -93,17 +93,18 @@ Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
 
 ### Branch format: `{menu}/{desc}`
 
-| Prefix | Scope |
-| ------ | ----- |
-| `dashboard/` | Dashboard view (PRD §11) |
-| `project-details/` | Project Details view (PRD §12) |
-| `second-brain/` | Second Brain view (PRD §13) |
-| `report/` | Report view (PRD §15) |
-| `automations/` | Automations view (PRD §16) |
-| `settings/` | Settings view (PRD §17) |
-| `general/` | Cross-menu / infra / shared work |
+| Prefix             | Scope                            |
+| ------------------ | -------------------------------- |
+| `dashboard/`       | Dashboard view (PRD §11)         |
+| `project-details/` | Project Details view (PRD §12)   |
+| `second-brain/`    | Second Brain view (PRD §13)      |
+| `report/`          | Report view (PRD §15)            |
+| `automations/`     | Automations view (PRD §16)       |
+| `settings/`        | Settings view (PRD §17)          |
+| `general/`         | Cross-menu / infra / shared work |
 
 Examples:
+
 - RTE bugs in Project Details → `project-details/rte-bugs`
 - Dashboard responsive fix → `dashboard/fix-responsive`
 - Cross-provider branch rule docs → `general/branch-rule`
