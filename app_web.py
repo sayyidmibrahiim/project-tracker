@@ -1564,8 +1564,11 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
         height=760,
         min_size=(960, 640),
         frameless=True,
+        easy_drag=False,
     )
     _app_window = window  # keep reference for window-control bridge methods
+    from web.js_api import register_win_events  # noqa: PLC0415
+    register_win_events(window)
     if start_webview:
         webview.start(http_server=True)
 

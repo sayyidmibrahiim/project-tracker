@@ -186,6 +186,16 @@
   });
 </script>
 
+<div class="resize-edge">
+  <div class="resize-edge-top"></div>
+  <div class="resize-edge-bottom"></div>
+  <div class="resize-edge-left"></div>
+  <div class="resize-edge-right"></div>
+  <div class="resize-edge-tl"></div>
+  <div class="resize-edge-tr"></div>
+  <div class="resize-edge-bl"></div>
+  <div class="resize-edge-br"></div>
+</div>
 <div class="app-shell">
   <TitleBar
     {currentPage}

@@ -82,7 +82,33 @@ body {
   color: var(--text-primary);
   font-family: var(--font);
   font-size: 11px;
+  -webkit-app-region: no-drag;
 }
+.app-shell { -webkit-app-region: no-drag; }
+
+/* ── Frameless window resize edge ── */
+.resize-edge {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+.resize-edge-top,
+.resize-edge-bottom { height: 4px; position: absolute; left: 0; right: 0; pointer-events: auto; }
+.resize-edge-top { top: 0; cursor: n-resize; }
+.resize-edge-bottom { bottom: 0; cursor: s-resize; }
+.resize-edge-left,
+.resize-edge-right { width: 4px; position: absolute; top: 0; bottom: 0; pointer-events: auto; }
+.resize-edge-left { left: 0; cursor: w-resize; }
+.resize-edge-right { right: 0; cursor: e-resize; }
+.resize-edge-tl,
+.resize-edge-tr,
+.resize-edge-bl,
+.resize-edge-br { width: 8px; height: 8px; position: absolute; z-index: 1; pointer-events: auto; }
+.resize-edge-tl { top: 0; left: 0; cursor: nw-resize; }
+.resize-edge-tr { top: 0; right: 0; cursor: ne-resize; }
+.resize-edge-bl { bottom: 0; left: 0; cursor: sw-resize; }
+.resize-edge-br { bottom: 0; right: 0; cursor: se-resize; }
 button, input, select, textarea { font-family: inherit; font-size: inherit; }
 button { cursor: pointer; }
 ::-webkit-scrollbar { width: 4px; height: 6px; }
