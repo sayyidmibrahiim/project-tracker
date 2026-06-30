@@ -160,6 +160,10 @@
   function onWindowClick(e: MouseEvent) {
     const t = e.target as HTMLElement;
     if (t.closest('.ne-popover-wrap')) return;
+    // Never run editor popover-close logic for clicks on titlebar chrome,
+    // window controls, confirm/overlay regions, or modal dialogs. These must
+    // navigate/act unimpeded even while the RTE window listener is attached.
+    if (t.closest('.titlebar, .nav-tab, .notif-btn, .notif-popover, .win-controls, .win-btn, .app-header, .confirm-overlay, .dialog-backdrop')) return;
     closeAllPopovers();
   }
 

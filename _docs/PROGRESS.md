@@ -2,33 +2,42 @@
 
 > Single status source. Full history: `_docs/_archive/PROJECT_STATUS_history.md`
 
-## Current Phase
+## Current Work
 
-**Phase 1 — Design All 6 Menus** complete. Frameless titlebar replaces dock sidebar.
-Branch: `design/titlebar` (pending merge).
+Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
+
+Active branch: `general/global-plan`.
+Active slice: Global App Plan — in-app roadmap/todolist for AI-visible Now/Next/Backlog/Review/Done.
+
+Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 
 ## Active Blockers
 
 - Windows-only runtime (Outlook COM, Teams pyautogui, os.startfile, PyInstaller) not yet verified — requires manual Windows testing.
 - Avatar initials show "A" (single-part Windows username) instead of "AA" (Azzahra Ara) — Outlook COM not fully configured.
 
-## Pending (Phase 2 — Backend/Logic)
+## Pending
 
-| Area                | Status      |
-| ------------------- | ----------- |
-| Backend integration | Not started |
-| Logic & data flow   | Not started |
-| Windows verify      | Not started |
+| Area                | Status                  |
+| ------------------- | ----------------------- |
+| Global App Plan     | Done, pending user verify |
+| Report              | Done, pending user verify |
+| Second Brain        | Done, pending user verify |
+| Automations         | Done, pending user verify |
+| Settings            | Done, pending user verify |
+| Windows verify      | Not started (needs real Windows) |
+| Packaging           | Not started |
 
 ## Last 3 Completed Slices
 
-1. **Design All 6 Menus + Titlebar** (2026-06-29): Frameless `pywebview` titlebar with avatar/search/nav/notif/window-controls. Unified `.page-header` pattern across all 6 menus. 3-icon (Copy/Open/Edit) + two-state pattern on all CR Number & Drone Ticket inputs. Branch: `design/titlebar`.
-2. **Config/Docs Cleanup** (2026-06-29): Nav truth unified, agentmemory removed, CLAUDE.md lifecycle + SKILL_ROUTING.md clarity. 0 product code.
-3. **Dashboard Master-Detail Redesign** (2026-06-23): 38/62 master-detail layout, inline edits, DBS primary red tokens.
+1. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan productionized as official menu 7 with drag/drop; seeded full audit backlog. Scheduler trigger now targets real entry with real project provider; metrics derived from real entries. Rules Execute exposed separately from Evaluate. Report gains Month + Drone filters, CR/Drone/Monthly summaries, expanded columns, native save-dialog CSV with UTF-8 BOM + Blob fallback. Second Brain search/sort/type/date filters wired; Link Bank export/import/rename/restore added. Settings theme switch removed (PRD fixed theme), validation + restart notice added.
+2. **CLAUDE.md Cold Start + Verification Rule Update** (2026-06-30): Truth order now starts from cold-start docs; `_reference/` cannot override implemented titlebar/Dashboard/Project Details decisions; default verification is app-run unless full tests are requested.
+3. **Design All 6 Menus + Titlebar** (2026-06-29): Frameless `pywebview` titlebar with avatar/search/nav/notif/window-controls. Unified `.page-header` pattern across all 6 menus. 3-icon (Copy/Open/Edit) + two-state pattern on all CR Number & Drone Ticket inputs. Branch: `design/titlebar`.
 
 ## Verification (latest)
 
 ```
 svelte-check: 0 errors, 4 pre-existing SubProjectTable a11y warnings
-vite build: clean → web/static/
+app startup: runs, no traceback (2026-07-01)
+python imports: ok
 ```

@@ -2,13 +2,23 @@
 
 Desktop productivity app. Svelte+TS+Vite+Tailwind frontend, Python 3.12+ backend, pywebview frameless shell, SQLite cache.
 
-## Truth Order
+## Cold Start / Truth Order
 
-1. User's latest instruction — current pivot when explicit
-2. PRD.md — product behavior/rules source of truth (read via offset/limit per section, never full-load; see TOC comments at top of PRD.md)
-3. \_docs/PROGRESS.md — progress, gaps, parity
-4. This file — workflow/tooling rules
-5. `_reference/` HTML prototype — visual/layout reference for AS-IS parity
+Read `CLAUDE.md` first, then read project state in this order before coding:
+
+1. `_docs/WORKFLOW.md` — workflow rules, doc sync rule
+2. `_docs/PROGRESS.md` — current tracking
+3. `_docs/session-notes.md` — active context: Now / Next / Blocked
+4. `_docs/DECISIONS.md` — architectural decisions `D-XXXX`
+5. `_docs/ARCHITECTURE.md` — layer structure and dependency flow
+6. `_docs/DESIGN_RULES.md` — design tokens and components
+7. `PRD.md` — product requirements reference, not latest coding status
+8. This file — workflow/tooling guardrails
+9. `_reference/` HTML prototype — legacy visual reference only; do not override implemented decisions
+
+`PRD.md` is blueprint. `_docs/` is actual state. Do not assume PRD equals latest implementation.
+
+Implemented decisions beat `_reference/` for finished areas, especially frameless window titlebar, Dashboard, and Project Details.
 
 ## Active Menu
 
@@ -34,11 +44,14 @@ Full details → read `_docs/TECH_STACK.md` when making tech decisions.
 # Run app (always from repo root, always repo-root venv)
 D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main
 
-# Tests
+# Full tests (only when explicitly requested)
 D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/ -v
 
-# Frontend build
+# Frontend build (only when explicitly requested or packaging)
 npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run build
+
+# Default simple verification: run app, watch startup/runtime errors, fix surfaced issues
+D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main
 
 # Package
 D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe scripts/package.py
@@ -82,10 +95,10 @@ Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
 
 | Phase           | Actions                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Start**       | Once per session: recall memory → read \_docs/PROGRESS.md → git status                                      |
+| **Start**       | Once per session: read cold-start docs in truth order → git status                                           |
 | **Before code** | Use graphify before code lookup/blast-radius checks, not every turn                                         |
-| **After code**  | Test/build changed area → update \_docs/PROGRESS.md → refresh graphify → generate manual checklist for user |
-| **End**         | Report: changed files, tests run, not tested, next task. Save stable decisions to memory.                   |
+| **After code**  | Run app for simple verification → fix surfaced errors → update docs → generate manual checklist for user    |
+| **End**         | Report: changed files, verification run, not tested, next task. Save stable decisions to memory.            |
 
 ## Branch Workflow
 
@@ -129,7 +142,7 @@ File ownership/routing → `_docs/FILE_ROUTING.md`; workflow detail → `_docs/W
 
 ## PRD Section Routing
 
-Dashboard → PRD §11. Project Details → §12. Drone/CR state → §9. Folder state/filesystem → §7. Global shell/navigation → §10.
+Use `_docs/session-notes.md`, `_docs/PROGRESS.md`, and `_docs/DECISIONS.md` first to determine current menu/state. Use PRD sections only as behavior reference after confirming they still match actual docs.
 
 ## Design-First Rule
 

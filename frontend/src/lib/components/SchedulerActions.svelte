@@ -51,6 +51,7 @@
 
   let pendingTriggerEntry: SchedulerEntry | null = $state(null);
   let pendingDeleteEntry: SchedulerEntry | null = $state(null);
+  let triggerMessage: string = $state("");
 
   function setError(msg: string) {
     errorText = msg;
@@ -177,14 +178,35 @@
       pendingTriggerEntry = entry;
       return;
     }
-    runOnce();
+    triggerEntry(entry.id);
   }
   function cancelTrigger() {
     pendingTriggerEntry = null;
   }
+  async function triggerEntry(entryId: string) {
+    busy = true;
+    triggerMessage = "";
+    const resp = await callBridge<Record<string, unknown>>("scheduler_entry_trigger", entryId);
+    busy = false;
+    if (!resp.ok || !resp.data) {
+      setError(resp.ok ? "Trigger returned no data." : resp.error.message);
+      return;
+    }
+    const data = resp.data as Record<string, unknown>;
+    const matched = Array.isArray(data.matched_projects) ? (data.matched_projects as string[]).join(", ") : "";
+    if (data.matched) {
+      const pending = Array.isArray(data.pending_confirmation_channels) ? (data.pending_confirmation_channels as string[]).join(", ") : "";
+      triggerMessage = `Matched: ${matched || "(no names)"}` + (pending ? ` · pending confirmation: ${pending}` : "");
+    } else {
+      triggerMessage = `No match: ${data.reason ?? "unknown"}`;
+    }
+    await refreshEntries();
+  }
   async function confirmTrigger() {
+    const entry = pendingTriggerEntry;
     pendingTriggerEntry = null;
-    await runOnce();
+    if (!entry) return;
+    await triggerEntry(entry.id);
   }
 
   onMount(async () => {
@@ -206,6 +228,9 @@
 
   {#if errorText}
     <div class="sc-error" role="alert">⚠ {errorText}</div>
+  {/if}
+  {#if triggerMessage}
+    <div class="sc-info" role="status">▸ {triggerMessage}</div>
   {/if}
 
   <!-- Entry list -->
@@ -315,6 +340,7 @@
   .sc-btn-danger { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
   .sc-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red,#DA1E28); color:#fff; }
   .sc-error { font-size:10px; font-weight:800; color:var(--color-dbs-red,#DA1E28); padding:6px 10px; background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:5px; }
+  .sc-info { font-size:10px; font-weight:800; color:#166534; padding:6px 10px; background:#dcfce7; border:1px solid #86efac; border-radius:5px; }
   .sc-empty { font-size:11px; font-weight:700; color:var(--color-muted); padding:14px; text-align:center; background:#fff; border:1px dashed #D7DCE2; border-radius:6px; }
   .sc-list { display:flex; flex-direction:column; gap:8px; }
   .sc-card { background:#fff; border:1px solid #E5E7EB; border-left:3px solid var(--color-dbs-red); border-radius:6px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; box-shadow:var(--shadow-subtle); }

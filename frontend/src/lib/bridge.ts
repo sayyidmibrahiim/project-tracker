@@ -1,4 +1,4 @@
-import type { BridgeResponse, PywebviewApi } from "./types";
+import type { BridgeResponse, GlobalPlan, PywebviewApi } from "./types";
 import { BridgeErrorCode } from "./types";
 
 /** Maximum time to wait for a single bridge call before treating it as failed. */
@@ -217,4 +217,14 @@ export function onWinStateChange(cb: WinStateCallback): () => void {
 
 export function getUserProfile(): Promise<BridgeResponse<{ name: string; initials: string; _debug?: string }>> {
   return callBridge("get_user_profile");
+}
+
+// ── Global Plan ──
+
+export function globalPlanGet(): Promise<BridgeResponse<GlobalPlan>> {
+  return callBridge("global_plan_get");
+}
+
+export function globalPlanSave(plan: GlobalPlan): Promise<BridgeResponse<GlobalPlan>> {
+  return callBridge("global_plan_save", plan);
 }

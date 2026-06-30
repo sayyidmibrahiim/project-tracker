@@ -37,6 +37,7 @@
     "second-brain": "Second Brain",
     report: "Report",
     automations: "Automations",
+    "global-plan": "Global Plan",
     settings: "Settings",
   };
 

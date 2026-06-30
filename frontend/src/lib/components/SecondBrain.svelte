@@ -35,6 +35,12 @@
   let actionError: string = $state("");
   let selectedLinkId: string = $state("");
   let newCategoryName: string = $state("");
+  let renameCategoryFrom: string = $state("");
+  let renameCategoryTo: string = $state("");
+  let bankActionError: string = $state("");
+  let bankActionInfo: string = $state("");
+  let importing: boolean = $state(false);
+  let fileInputEl: HTMLInputElement | null = $state(null);
 
   let filteredLinks: LinkItem[] = $derived.by(() => {
     let result = bank.links;
@@ -102,6 +108,64 @@
     if (!response.ok) { actionError = response.error.message; return; }
     await loadLinkBank();
   }
+
+  async function handleRestoreLink(link: LinkItem) {
+    bankActionError = "";
+    if (!isPywebviewReady()) return;
+    const response = await callBridge<LinkItem>("linkbank_update", { id: link.id, archived: "false" });
+    if (!response.ok) { bankActionError = response.error.message; return; }
+    await loadLinkBank();
+  }
+  async function handleRenameCategory(oldName: string, newName: string) {
+    bankActionError = "";
+    if (!isPywebviewReady() || !oldName || !newName.trim()) return;
+    const response = await callBridge<unknown>("linkbank_category_rename", oldName, newName.trim());
+    if (!response.ok) { bankActionError = response.error.message; return; }
+    renameCategoryFrom = ""; renameCategoryTo = ""; categoryFilter = newName.trim();
+    await loadLinkBank();
+  }
+  async function handleExportBank() {
+    bankActionError = "";
+    bankActionInfo = "";
+    if (!isPywebviewReady()) return;
+    const response = await callBridge<unknown>("linkbank_export");
+    if (!response.ok) { bankActionError = response.error.message; return; }
+    const data = JSON.stringify(response.data ?? {}, null, 2);
+    const suggested = `link_bank_${new Date().toISOString().slice(0, 10)}.json`;
+    const saveResp = await callBridge<{ written: boolean; path: string | null }>("util_save_file", suggested, data);
+    if (saveResp.ok && saveResp.data?.written && saveResp.data.path) {
+      bankActionInfo = `Exported: ${saveResp.data.path}`;
+    } else {
+      // Fallback to Blob download.
+      const blob = new Blob([data], { type: "application/json;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = suggested; anchor.click();
+      URL.revokeObjectURL(url);
+      bankActionInfo = "Exported via browser.";
+    }
+    setTimeout(() => { bankActionInfo = ""; }, 3500);
+  }
+  function triggerImport() { bankActionError = ""; fileInputEl?.click(); }
+  async function handleImportFile(event: Event) {
+    bankActionError = "";
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      importing = true;
+      const response = await callBridge<unknown>("linkbank_import", parsed);
+      importing = false;
+      if (!response.ok) { bankActionError = response.error.message; return; }
+      await loadLinkBank();
+    } catch (err) {
+      importing = false;
+      bankActionError = err instanceof Error ? err.message : "Invalid link bank file.";
+    }
+  }
   async function copyLinkUrl(link: LinkItem) {
     try { await navigator.clipboard?.writeText(link.url); actionError = "Copied URL."; }
     catch { actionError = "Copy failed. Select and copy the URL manually."; }
@@ -113,6 +177,9 @@
   let notesErrorMessage: string = $state("");
   let notesItems: SecondBrainItem[] = $state([]);
   let notesSearch: string = $state("");
+  let notesSort: "updated" | "az" | "type" = $state("updated");
+  let notesTypeFilter: "all" | "md" | "txt" = $state("all");
+  let notesDateFilter: string = $state("");
   let selectedItem: SecondBrainItem | null = $state(null);
   let secondBrainRoot: string = $state("");
   let notesActionError: string = $state("");
@@ -129,8 +196,19 @@
 
   let filteredNotes: SecondBrainItem[] = $derived.by(() => {
     const q = notesSearch.trim().toLowerCase();
-    if (!q) return notesItems;
-    return notesItems.filter((n) => n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q) || n.item_type.toLowerCase().includes(q));
+    let rows = notesItems;
+    if (q) rows = rows.filter((n) => n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q) || (n.excerpt ?? "").toLowerCase().includes(q));
+    if (notesTypeFilter !== "all") {
+      rows = rows.filter((n) => n.path.toLowerCase().endsWith(`.${notesTypeFilter}`));
+    }
+    if (notesDateFilter) {
+      rows = rows.filter((n) => (n.updated_at ?? "").slice(0, 10) === notesDateFilter);
+    }
+    const sorted = [...rows];
+    if (notesSort === "az") sorted.sort((a, b) => a.title.localeCompare(b.title));
+    else if (notesSort === "type") sorted.sort((a, b) => a.item_type.localeCompare(b.item_type) || a.title.localeCompare(b.title));
+    else sorted.sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
+    return sorted;
   });
   let pinnedNotes: SecondBrainItem[] = $derived(filteredNotes.filter((n) => n.pinned));
   let favoriteNotes: SecondBrainItem[] = $derived(filteredNotes.filter((n) => n.favorite && !n.pinned));
@@ -230,7 +308,7 @@
 
   {#if activeTab === "notes"}
     <div class="page-stack">
-      <div class="toolbar"><div class="search-shell"><span class="search-icon">⌕</span><input class="input" placeholder="Search notes…" value={notesSearch} oninput={(e) => searchNotes((e.target as HTMLInputElement).value)} /></div><input class="input small" type="date" /><select class="combo"><option>Sort: Updated</option></select><button class="btn-secondary" onclick={() => searchNotes("")}>Clear</button><button class="btn-secondary" onclick={() => openCreate("folder")}>Add Folder</button><button class="btn-primary" onclick={() => createOpen ? closeCreate() : openCreate("file")}>{createOpen ? "Cancel" : "Add File"}</button><button class="btn-secondary">Filter</button><select class="combo"><option>.md</option><option>.txt</option></select></div>
+      <div class="toolbar"><div class="search-shell"><span class="search-icon">⌕</span><input class="input" placeholder="Search notes…" value={notesSearch} oninput={(e) => searchNotes((e.target as HTMLInputElement).value)} /></div><input class="input small" type="date" bind:value={notesDateFilter} title="Filter by updated date" /><select class="combo" bind:value={notesSort} title="Sort"><option value="updated">Sort: Newest</option><option value="az">Sort: A-Z</option><option value="type">Sort: Type</option></select><select class="combo" bind:value={notesTypeFilter} title="Type filter"><option value="all">All types</option><option value="md">.md</option><option value="txt">.txt</option></select><button class="btn-secondary" onclick={() => { notesSearch=""; notesDateFilter=""; notesTypeFilter="all"; searchNotes(""); }}>Clear</button><button class="btn-secondary" onclick={() => openCreate("folder")}>Add Folder</button><button class="btn-primary" onclick={() => createOpen ? closeCreate() : openCreate("file")}>{createOpen ? "Cancel" : "Add File"}</button></div>
       {#if createOpen}<div class="panel-card accent"><div class="form-grid"><input class="input" placeholder={createKind === "folder" ? "Folder name *" : "Filename (e.g. idea.md, script.py, query.sql) *"} bind:value={createFilename} />{#if createKind === "file"}<textarea class="textarea" placeholder="Initial file content" bind:value={createContent}></textarea>{/if}<button class="btn-primary" onclick={handleCreateItem}>Create {createKind === "folder" ? "Folder" : "File"}</button>{#if createError}<span class="error-text">{createError}</span>{/if}</div></div>{/if}
       {#if notesActionError}<div class="dashboard-banner banner-error"><span>{notesActionError}</span></div>{/if}
       {#if notesLoadState === "loading"}<div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading notes…</span></div>{:else if notesLoadState === "error"}<div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Notes unavailable</p><p class="banner-detail">{notesErrorCode}: {notesErrorMessage}</p></div></div>{:else}
@@ -240,7 +318,7 @@
     {#if deleteTarget}<ConfirmModal title="Delete Second Brain note" actionLabel="Delete note" targetName={deleteTarget.path} reversible={false} onConfirm={confirmDeleteNote} onCancel={cancelDeleteNote} />{/if}
   {:else}
     {#if loadState === "loading"}<div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading link bank…</span></div>{:else if loadState === "error"}<div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Link Bank unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>{:else}
-      <div class="category-grid link-bank-grid"><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Link Categories</span><span class="panel-subtitle">{bank.categories.length} groups</span></div><div class="toolbar vertical-tools"><select class="combo" bind:value={categoryFilter}><option value="all">All Categories</option>{#each bank.categories as cat}<option value={cat}>{cat}</option>{/each}</select><div class="field-row"><input class="input" placeholder="New category…" bind:value={newCategoryName} /><button class="btn-secondary" onclick={createCategory}>Add</button></div><button class="btn-secondary" onclick={archiveCurrentCategory} disabled={categoryFilter === "all"}>Archive Category</button><div class="search-shell"><span class="search-icon">⌕</span><input class="input" placeholder="Search title, link, tags, details…" bind:value={searchQuery} /></div><label class="check-row"><input type="checkbox" bind:checked={showArchived} /> Show archived</label><button class="btn-primary" onclick={() => { addFormOpen = !addFormOpen; addError = ""; }}>{addFormOpen ? "Cancel" : "+ Add Link"}</button></div><div class="list-box">{#each filteredLinks as link}<button class="link-row" class:active={selectedLink?.id === link.id} onclick={() => selectedLinkId = link.id}><strong>{link.name}</strong><span>{link.category || "Uncategorized"}{link.pinned === "true" ? " · pinned" : ""}{link.favorite === "true" ? " · favorite" : ""}</span></button>{:else}<div class="table-empty">No links found.</div>{/each}</div></div><div class="split-handle"></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">◆</span><span class="panel-title">Add/Edit Link</span><span class="panel-subtitle">category-first link workspace</span></div>{#if actionError}<div class="dashboard-banner banner-error"><span>{actionError}</span></div>{/if}{#if addFormOpen}<div class="form-grid"><input class="input" placeholder="Title *" bind:value={addName} /><input class="input" placeholder="URL (https://...) *" bind:value={addUrl} /><input class="input" placeholder="Category" bind:value={addCategory} /><textarea class="textarea" placeholder="Description / details" bind:value={addNotes}></textarea><button class="btn-primary" onclick={handleAddLink}>Save Link</button>{#if addError}<span class="error-text">{addError}</span>{/if}</div>{:else if selectedLink}{#if editingId === selectedLink.id}<div class="form-grid"><input class="input" bind:value={editName} /><input class="input" bind:value={editUrl} /><input class="input" bind:value={editCategory} /><input class="input" placeholder="Tags, comma separated" bind:value={editTags} /><textarea class="textarea" bind:value={editNotes}></textarea><button class="btn-primary" onclick={handleSaveEdit}>Save</button><button class="btn-secondary" onclick={cancelEdit}>Cancel</button>{#if editError}<span class="error-text">{editError}</span>{/if}</div>{:else}<div class="link-detail"><h3>{selectedLink.name}</h3><a href={selectedLink.url} target="_blank" rel="noopener">{selectedLink.url}</a><p>{selectedLink.details || selectedLink.notes || "No details."}</p><span>{selectedLink.category || "Uncategorized"}</span>{#if selectedLink.tags}<div class="badge-row">{#each selectedLink.tags.split(",").filter(Boolean) as tag}<span class="badge">{tag.trim()}</span>{/each}</div>{/if}<div class="toolbar"><button class="btn-primary" onclick={() => startEdit(selectedLink!)}>Edit</button><button class="btn-secondary" onclick={() => copyLinkUrl(selectedLink!)}>Copy URL</button><button class="btn-secondary" onclick={() => toggleLinkFlag(selectedLink!, "pinned")}>{selectedLink.pinned === "true" ? "Unpin" : "Pin"}</button><button class="btn-secondary" onclick={() => toggleLinkFlag(selectedLink!, "favorite")}>{selectedLink.favorite === "true" ? "Unfavorite" : "Favorite"}</button>{#if selectedLink.archived !== "true"}<button class="btn-secondary" onclick={() => handleArchive(selectedLink!.id)}>Archive</button>{/if}</div></div>{/if}{:else}<div class="table-empty">Select or add a link.</div>{/if}</div></div>
+      <div class="category-grid link-bank-grid"><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Link Categories</span><span class="panel-subtitle">{bank.categories.length} groups</span></div><div class="toolbar vertical-tools"><select class="combo" bind:value={categoryFilter}><option value="all">All Categories</option>{#each bank.categories as cat}<option value={cat}>{cat}</option>{/each}</select><div class="field-row"><input class="input" placeholder="New category…" bind:value={newCategoryName} /><button class="btn-secondary" onclick={createCategory}>Add</button></div>{#if categoryFilter !== "all"}<div class="field-row"><input class="input" placeholder="Rename category to…" bind:value={renameCategoryTo} /><button class="btn-secondary" onclick={() => handleRenameCategory(categoryFilter, renameCategoryTo)} disabled={!renameCategoryTo.trim()}>Rename</button></div>{/if}<button class="btn-secondary" onclick={archiveCurrentCategory} disabled={categoryFilter === "all"}>Archive Category</button><div class="search-shell"><span class="search-icon">⌕</span><input class="input" placeholder="Search title, link, tags, details…" bind:value={searchQuery} /></div><label class="check-row"><input type="checkbox" bind:checked={showArchived} /> Show archived</label><div class="field-row"><button class="btn-secondary" onclick={handleExportBank}>Export JSON</button><button class="btn-secondary" onclick={triggerImport} disabled={importing}>{importing ? "Importing…" : "Import JSON"}</button></div>{#if bankActionInfo}<span class="error-text" style="color:var(--color-ink);">{bankActionInfo}</span>{/if}{#if bankActionError}<span class="error-text">{bankActionError}</span>{/if}<button class="btn-primary" onclick={() => { addFormOpen = !addFormOpen; addError = ""; }}>{addFormOpen ? "Cancel" : "+ Add Link"}</button><input type="file" accept=".json,application/json" bind:this={fileInputEl} onchange={handleImportFile} style="display:none" /></div><div class="list-box">{#each filteredLinks as link}<button class="link-row" class:active={selectedLink?.id === link.id} onclick={() => selectedLinkId = link.id}><strong>{link.name}</strong><span>{link.category || "Uncategorized"}{link.pinned === "true" ? " · pinned" : ""}{link.favorite === "true" ? " · favorite" : ""}{link.archived === "true" ? " · archived" : ""}</span></button>{:else}<div class="table-empty">No links found.</div>{/each}</div></div><div class="split-handle"></div><div class="panel-card accent"><div class="panel-title-row"><span class="panel-title-icon">◆</span><span class="panel-title">Add/Edit Link</span><span class="panel-subtitle">category-first link workspace</span></div>{#if actionError}<div class="dashboard-banner banner-error"><span>{actionError}</span></div>{/if}{#if addFormOpen}<div class="form-grid"><input class="input" placeholder="Title *" bind:value={addName} /><input class="input" placeholder="URL (https://...) *" bind:value={addUrl} /><input class="input" placeholder="Category" bind:value={addCategory} /><textarea class="textarea" placeholder="Description / details" bind:value={addNotes}></textarea><button class="btn-primary" onclick={handleAddLink}>Save Link</button>{#if addError}<span class="error-text">{addError}</span>{/if}</div>{:else if selectedLink}{#if editingId === selectedLink.id}<div class="form-grid"><input class="input" bind:value={editName} /><input class="input" bind:value={editUrl} /><input class="input" bind:value={editCategory} /><input class="input" placeholder="Tags, comma separated" bind:value={editTags} /><textarea class="textarea" bind:value={editNotes}></textarea><button class="btn-primary" onclick={handleSaveEdit}>Save</button><button class="btn-secondary" onclick={cancelEdit}>Cancel</button>{#if editError}<span class="error-text">{editError}</span>{/if}</div>{:else}<div class="link-detail"><h3>{selectedLink.name}</h3><a href={selectedLink.url} target="_blank" rel="noopener">{selectedLink.url}</a><p>{selectedLink.details || selectedLink.notes || "No details."}</p><span>{selectedLink.category || "Uncategorized"}</span>{#if selectedLink.tags}<div class="badge-row">{#each selectedLink.tags.split(",").filter(Boolean) as tag}<span class="badge">{tag.trim()}</span>{/each}</div>{/if}<div class="toolbar"><button class="btn-primary" onclick={() => startEdit(selectedLink!)}>Edit</button><button class="btn-secondary" onclick={() => copyLinkUrl(selectedLink!)}>Copy URL</button><button class="btn-secondary" onclick={() => toggleLinkFlag(selectedLink!, "pinned")}>{selectedLink.pinned === "true" ? "Unpin" : "Pin"}</button><button class="btn-secondary" onclick={() => toggleLinkFlag(selectedLink!, "favorite")}>{selectedLink.favorite === "true" ? "Unfavorite" : "Favorite"}</button>{#if selectedLink.archived !== "true"}<button class="btn-secondary" onclick={() => handleArchive(selectedLink!.id)}>Archive</button>{:else}<button class="btn-secondary" onclick={() => handleRestoreLink(selectedLink!)}>Restore</button>{/if}</div></div>{/if}{:else}<div class="table-empty">Select or add a link.</div>{/if}</div></div>
     {/if}
   {/if}
 </section>

@@ -22,7 +22,6 @@
     { key: "display_name", card: "general" },
     { key: "language", card: "general" },
     { key: "datetime_format", card: "general" },
-    { key: "theme", card: "general" },
     { key: "t10_threshold_days", card: "behavior" },
     { key: "auto_refresh_interval", card: "behavior" },
     { key: "startup_behavior", card: "behavior" },
@@ -93,6 +92,22 @@
       saveState = "error";
       saveError = "Bridge unavailable.";
       return;
+    }
+
+    // Validation before persisting.
+    const t10 = Number(form["t10_threshold_days"]);
+    if (!Number.isFinite(t10) || t10 < 1 || t10 > 30) {
+      saveState = "error";
+      saveError = "T-10 Threshold Days must be a number between 1 and 30.";
+      return;
+    }
+    if (form["root_folder"] && typeof form["root_folder"] === "string" && form["root_folder"].trim()) {
+      const trimmed = form["root_folder"].trim();
+      if (/[/\\]$/.test(trimmed)) {
+        saveState = "error";
+        saveError = "Root Folder must not end with a trailing slash.";
+        return;
+      }
     }
 
     const payload: Record<string, unknown> = { ...originalRaw };
@@ -170,7 +185,6 @@
             <label class="field"><span>Display Name</span><input class="input" value={String(form["display_name"] ?? "")} oninput={(e) => handleFieldChange("display_name", (e.target as HTMLInputElement).value)} /></label>
             <label class="field"><span>Language</span><select class="combo" value={String(form["language"] ?? "en")} onchange={(e) => handleFieldChange("language", (e.target as HTMLSelectElement).value)}><option value="en">English</option><option value="id">Bahasa Indonesia</option></select></label>
             <label class="field"><span>Datetime Format</span><input class="input" value={String(form["datetime_format"] ?? "")} oninput={(e) => handleFieldChange("datetime_format", (e.target as HTMLInputElement).value)} placeholder="ddd, dd MMM yyyy HH:mm" /></label>
-            <label class="field"><span>Theme</span><select class="combo" value={String(form["theme"] ?? "dark")} onchange={(e) => handleFieldChange("theme", (e.target as HTMLSelectElement).value)}><option value="dark">DBS Red Chrome (Dark)</option><option value="light">Light</option></select></label>
           </div>
         </div>
 
@@ -194,6 +208,7 @@
         </div>
 
         <div class="toolbar right"><button class="btn-primary" disabled={loadState !== "loaded" || saveState === "saving"} onclick={handleSave}>{saveState === "saving" ? "Saving…" : "Save Settings"}</button></div>
+        {#if saveState === "success"}<p class="restart-note">▸ Saved. Some changes (root folder, startup behavior) require an app restart to take full effect.</p>{/if}
       </div>
     </div>
 
@@ -225,4 +240,5 @@
   .list-row { display:flex; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border-soft); font-size:11px; }
   .list-row p { margin:3px 0 0; color:var(--color-muted); font-size:10px; line-height:1.4; }
   .browse-error { color:var(--primary-red); font-size:10px; font-weight:800; }
+  .restart-note { color:var(--color-muted); font-size:10px; font-weight:800; margin:6px 0 0; text-align:right; }
 </style>

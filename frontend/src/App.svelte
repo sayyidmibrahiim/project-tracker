@@ -8,11 +8,12 @@
   import SecondBrain from "./lib/components/SecondBrain.svelte";
   import ProjectDetails from "./lib/components/ProjectDetails.svelte";
   import Automations from "./lib/components/Automations.svelte";
+  import GlobalPlan from "./lib/components/GlobalPlan.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
-  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "settings";
+  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "settings";
 
   // All pages have real components — no placeholder needed.
 
@@ -39,7 +40,7 @@
   let rootUnset: boolean = $state(false);
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations"];
+    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan"];
     if (validPages.includes(id)) {
       if (id !== "project-detail") {
         pendingProjectPath = null;
@@ -232,6 +233,8 @@
         <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
       {:else if currentPage === "automations"}
         <Automations />
+      {:else if currentPage === "global-plan"}
+        <GlobalPlan />
       {/if}
     </div>
   </main>

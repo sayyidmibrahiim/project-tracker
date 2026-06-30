@@ -128,6 +128,19 @@ class SchedulerServiceProtocol(Protocol):
     def set_enabled(self, entry_id: str, enabled: bool) -> object:
         """Enable or disable a scheduler entry."""
 
+    def trigger_entry(self, entry_id: str) -> object:
+        """Trigger one scheduler entry now."""
+
+
+class GlobalPlanServiceProtocol(Protocol):
+    """Global plan service surface used by JsApi."""
+
+    def get_plan(self) -> object:
+        """Return global project plan."""
+
+    def save_plan(self, data: dict[str, object]) -> object:
+        """Persist global project plan."""
+
 
 class YearServiceProtocol(Protocol):
     """Year service surface used by JsApi."""
@@ -447,6 +460,7 @@ class JsApi:
         rules_service: RulesServiceProtocol | None = None,
         outlook_service: OutlookServiceProtocol | None = None,
         teams_service: TeamsServiceProtocol | None = None,
+        global_plan_service: GlobalPlanServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -464,6 +478,7 @@ class JsApi:
         self._second_brain_service = second_brain_service
         self._outlook_service = outlook_service
         self._teams_service = teams_service
+        self._global_plan_service = global_plan_service
 
     def poll_events(self, limit: int | None = None) -> dict[str, object]:
         """Drain queued bridge events."""
@@ -598,6 +613,59 @@ class JsApi:
             first = result[0] if isinstance(result, (list, tuple)) else result
             path = str(first) if first else None
         return ok({"path": path})
+
+    def util_save_file(self, suggested_name: str, content: str) -> dict[str, object]:
+        """Open the native OS save dialog and write UTF-8 content to the chosen path.
+
+        Lazily imports pywebview so the bridge stays importable in headless dev.
+        Returns ``data.path`` (the written file path, null on cancel). A UTF-8
+        BOM is prepended for CSV content so Excel opens accented text correctly.
+        """
+        try:
+            import webview  # lazy: not imported at module load
+        except Exception as exc:  # pragma: no cover
+            return fail(f"Save dialog unavailable: {exc}", code="SAVE_DIALOG_UNAVAILABLE")
+
+        windows = getattr(webview, "windows", []) or []
+        if not windows:
+            return fail("No application window is available to host the save dialog.", code="SAVE_DIALOG_UNAVAILABLE")
+
+        try:
+            file_dialog = getattr(webview, "FileDialog", None)
+            save_dialog = (
+                getattr(file_dialog, "SAVE", None)
+                if file_dialog is not None
+                else None
+            )
+            if save_dialog is None:
+                save_dialog = getattr(webview, "SAVE_DIALOG")
+            result = windows[0].create_file_dialog(
+                save_dialog, save_filename=str(suggested_name or "export.csv")
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SAVE_DIALOG_FAILED")
+
+        # pywebview returns a tuple/list with the selected path, or empty on cancel.
+        path_str: str | None = None
+        if result:
+            first = result[0] if isinstance(result, (list, tuple)) else result
+            path_str = str(first) if first else None
+        if not path_str:
+            return ok({"path": None, "written": False})
+
+        try:
+            out_path = Path(path_str)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            # CSV gets a UTF-8 BOM so Excel renders accented columns correctly.
+            payload = content or ""
+            is_csv = out_path.suffix.lower() == ".csv"
+            with out_path.open("wb") as file:
+                if is_csv:
+                    file.write(b"\xef\xbb\xbf")
+                file.write(payload.encode("utf-8"))
+        except Exception as exc:
+            return fail(str(exc), code="SAVE_DIALOG_WRITE_FAILED")
+        return ok({"path": str(out_path), "written": True})
 
     def util_choose_image(self) -> dict[str, object]:
         """Open the native OS image picker and return the chosen image as a data URI.
@@ -882,6 +950,15 @@ class JsApi:
             return ok(_scheduler_entry_payload(self._scheduler_service.set_enabled(entry_id, bool(enabled))))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_ENTRY_TOGGLE_FAILED")
+
+    def scheduler_entry_trigger(self, entry_id: str) -> dict[str, object]:
+        """Trigger one scheduler entry now."""
+        try:
+            if self._scheduler_service is None:
+                return fail("scheduler_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._scheduler_service.trigger_entry(entry_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SCHEDULER_ENTRY_TRIGGER_FAILED")
 
     def project_get(self, project_path: str) -> dict[str, object]:
         """Return full project detail."""
@@ -1387,6 +1464,24 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="NOTES_UPDATE_FAILED")
 
+    def global_plan_get(self) -> dict[str, object]:
+        """Return global app plan."""
+        try:
+            if self._global_plan_service is None:
+                return fail("global_plan_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._global_plan_service.get_plan()))
+        except Exception as exc:
+            return fail(str(exc), code="GLOBAL_PLAN_GET_FAILED")
+
+    def global_plan_save(self, data: dict[str, object]) -> dict[str, object]:
+        """Persist global app plan."""
+        try:
+            if self._global_plan_service is None:
+                return fail("global_plan_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._global_plan_service.save_plan(dict(data or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="GLOBAL_PLAN_SAVE_FAILED")
+
     def settings_get(self) -> dict[str, object]:
         """Return settings through injected dependency."""
         try:
@@ -1511,6 +1606,17 @@ class JsApi:
             return ok(_to_frontend_safe(self._automation_service.evaluate_all(context)))
         except Exception as exc:
             return fail(str(exc), code="AUTOMATION_EVALUATE_ALL_FAILED")
+
+    def automation_execute_rule(
+        self, rule_id: str, context: dict[str, object]
+    ) -> dict[str, object]:
+        """Execute a rule's actions (Req 11.3-11.9), gated by conditions."""
+        try:
+            if self._automation_service is None:
+                return fail("automation_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._automation_service.execute_rule(rule_id, dict(context or {}))))
+        except Exception as exc:
+            return fail(str(exc), code="AUTOMATION_EXECUTE_RULE_FAILED")
 
     def rules_create(self, data: dict[str, object]) -> dict[str, object]:
         """Create a rule (Req 11.1/11.2). Reject incomplete/unsupported defs."""

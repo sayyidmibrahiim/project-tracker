@@ -9,9 +9,9 @@
 
 ## 0. Document Hierarchy (WAJIB — Semua AI Agent)
 
-| Dokumen                 | Fungsi                                                                                           | Kapan di-update                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| **PRD.md**              | **Garis besar / blueprint ide aplikasi.** Behavior rules, product requirements.                  | Hanya ketika product behavior berubah                  |
+| Dokumen | Fungsi | Kapan di-update |
+|---------|--------|-----------------|
+| **PRD.md** | **Garis besar / blueprint ide aplikasi.** Behavior rules, product requirements. | Hanya ketika product behavior berubah |
 | **`_docs/` seluruhnya** | **Actual state / update kondisi.** Progress, arsitektur, session notes, design tokens, workflow. | Setiap slice selesai (lihat WORKFLOW.md §After Coding) |
 
 **Rule emas:** Jangan cuma baca PRD.md. Baca `_docs/PROGRESS.md` + `_docs/session-notes.md` DULU untuk status terkini.
@@ -26,8 +26,9 @@ Tinggal copy-paste tanpa edit. AI akan baca instruksi di bawah dan langsung nger
 
 ```
 PROJECT TRACKER DBS — Cold Start.
+read @CLAUDE.md first!
 
-Ini aplikasi desktop Windows untuk tracking CR deployment.
+Ini aplikasi desktop Windows untuk tracking CR deployment dan automations.
 Kamu adalah AI agent coding. Kamu BELUM PERNAH lihat project ini.
 Baca instruksi dengan seksama.
 
@@ -77,10 +78,12 @@ Setelah baca, report:
 
 --- EKSEKUSI ---
 Mulai baca file 1-7 di atas. Jangan coding sebelum report dan aku kasih OK.
+
+--- RESPONSE ---
+BALAS singkat padat jelas kalau lu sudah melakukan seluruh perintah di atas
 ```
 
 **Catatan per platform:**
-
 - **Claude Code / opencode:** Paste langsung di chat / CLI
 - **Cursor:** Paste di chat, dia akan baca file-file yang disebut
 - **Gemini CLI:** Paste, auto-activate tools

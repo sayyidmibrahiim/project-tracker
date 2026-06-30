@@ -53,6 +53,8 @@
   let evalResults: Record<string, AutomationResult | null> = $state({});
   let evalPending: Record<string, boolean> = $state({});
   let evalAllPending: boolean = $state(false);
+  let execPending: Record<string, boolean> = $state({});
+  let execResults: Record<string, string> = $state({});
 
   // Form state.
   let formOpen: boolean = $state(false);
@@ -108,6 +110,28 @@
       const next: Record<string, AutomationResult | null> = {};
       for (const r of resp.data) next[r.rule_id] = r;
       evalResults = next;
+    }
+  }
+
+  async function executeRule(ruleId: string) {
+    if (!isPywebviewReady()) return;
+    execPending = { ...execPending, [ruleId]: true };
+    const resp = await callBridge<Record<string, unknown>>("automation_execute_rule", ruleId, {});
+    execPending = { ...execPending, [ruleId]: false };
+    if (!resp.ok) {
+      execResults = { ...execResults, [ruleId]: `✗ ${resp.error.message}` };
+      return;
+    }
+    const data = resp.data ?? {};
+    if (data.skipped) {
+      execResults = { ...execResults, [ruleId]: "⊘ skipped (disabled)" };
+    } else if (!data.conditions_met) {
+      execResults = { ...execResults, [ruleId]: "⊘ conditions not met" };
+    } else if (data.ok === false) {
+      execResults = { ...execResults, [ruleId]: `✗ ${data.failed_action ?? ""}: ${data.error_message ?? ""}` };
+    } else {
+      const executed = Array.isArray(data.actions_executed) ? (data.actions_executed as string[]).join(", ") : "";
+      execResults = { ...execResults, [ruleId]: executed ? `✓ executed: ${executed}` : "✓ executed" };
     }
   }
 
@@ -253,7 +277,10 @@
           {/if}
           <div class="ru-card-actions">
             <button class="ru-btn" onclick={() => evaluateRule(rule.id)} disabled={evalPending[rule.id] === true}>
-              {#if evalPending[rule.id] === true}◌ Evaluating…{:else}Evaluate{/if}
+              {#if evalPending[rule.id] === true}◌ Evaluating…{:else}Evaluate (preview){/if}
+            </button>
+            <button class="ru-btn ru-btn-primary" onclick={() => executeRule(rule.id)} disabled={execPending[rule.id] === true}>
+              {#if execPending[rule.id] === true}◌ Executing…{:else}Execute{/if}
             </button>
             {#if evalResults[rule.id] !== undefined}
               {@const r = evalResults[rule.id]}
@@ -263,6 +290,7 @@
                 </span>
               {/if}
             {/if}
+            {#if execResults[rule.id]}<span class="ru-exec-badge">{execResults[rule.id]}</span>{/if}
             <button class="ru-btn" onclick={() => openEdit(rule)}>Edit</button>
             <button class="ru-btn" onclick={() => toggleRule(rule)}>{rule.enabled ? "Disable" : "Enable"}</button>
             <button class="ru-btn" onclick={() => viewLogs(rule)}>Logs</button>
@@ -363,6 +391,7 @@
   .ru-eval-badge.passed { background:#dcfce7; color:#166534; }
   .ru-eval-badge.failed { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }
   .ru-eval-badge.skipped { background:var(--color-workspace-panel); color:var(--color-muted); }
+  .ru-exec-badge { font-size:9px; font-weight:800; padding:2px 7px; border-radius:4px; background:var(--color-workspace-panel); color:var(--color-ink); border:1px solid #D7DCE2; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ru-form { background:#fff; border:1px solid #D7DCE2; border-radius:6px; padding:12px; display:flex; flex-direction:column; gap:8px; }
   .ru-form-title { margin:0; font-size:12px; font-weight:900; color:var(--color-ink); }
   .ru-label { display:flex; flex-direction:column; gap:4px; font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }

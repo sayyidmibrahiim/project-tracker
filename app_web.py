@@ -30,6 +30,7 @@ from infrastructure.metadata_store import MetadataStore
 from infrastructure.settings_store import SettingsStore, app_config_dir
 from services.automation_service import AutomationService
 from services.dashboard_service import DashboardService
+from services.global_plan_service import GlobalPlanService
 from services.download_email_service import DownloadEmailService
 from services.email_service import (
     EmailService,
@@ -212,12 +213,13 @@ def create_js_api(
     scheduler_svc = SchedulerService(
         settings_store=_settings_store,
         notification_service=notification_svc,
-        project_provider=lambda: [],
+        project_provider=lambda: dashboard_svc.list_projects(),
     )
     second_brain_svc = SecondBrainService(
         items_provider=_second_brain_items_provider,
         folder_provider=lambda: _settings_store.read().second_brain_folder,
     )
+    global_plan_svc = GlobalPlanService()
 
     # ── settings adapter (SettingsStore.read() → get_settings()) ──────
     class _SettingsAdapter:
@@ -1534,6 +1536,7 @@ def create_js_api(
             _settings_store,
             TeamsService(),
         ),
+        global_plan_service=global_plan_svc,
     )
 
 
