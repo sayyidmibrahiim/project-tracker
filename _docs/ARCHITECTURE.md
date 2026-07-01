@@ -51,11 +51,14 @@ core      → nothing (pure domain, no imports from other layers)
 | What                 | Where               | Rule                                             |
 | -------------------- | ------------------- | ------------------------------------------------ |
 | Project existence    | Filesystem          | Folder exists = project exists                   |
-| Project year         | Year folder         | Parent folder name                               |
-| Project folder state | State folder        | Parent state folder determines state             |
+| Appcode              | Filesystem          | Folder with `appcode.json` under root = appcode  |
+| Project type         | Path + metadata     | Under `CR/` = CR, under `Non-CR/` = NON_CR       |
+| Project year         | Year folder         | `{appcode}/{YEAR}/` parent folder name           |
+| CR project state     | State folder        | Parent state folder (inside `CR/`) determines state |
+| Non-CR project state | `project_data.json` | `non_cr_state` field (Planning/In Progress/Done) |
 | Project metadata     | `project_data.json` | Metadata only, never `project_state`             |
 | Cache/index          | SQLite              | Rebuildable — if deleted, rebuild from FS + JSON |
-| Notes/links          | Local files         | Per-project files                                |
+| Notes/links          | Local files         | Per-project and per-drone files                  |
 
 - Atomic JSON writes via metadata store mechanism
 - Hard delete forbidden → `send2trash` on Windows
