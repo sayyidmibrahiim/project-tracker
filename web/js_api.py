@@ -145,11 +145,11 @@ class GlobalPlanServiceProtocol(Protocol):
 class YearServiceProtocol(Protocol):
     """Year service surface used by JsApi."""
 
-    def list_years(self) -> object:
-        """Return available years."""
+    def list_years(self, appcode: str) -> object:
+        """Return available years for an appcode."""
 
-    def create_year(self, year: str) -> object:
-        """Create a year folder and its Folder_State subfolders."""
+    def create_year(self, appcode: str, year: str) -> object:
+        """Create a year folder structure under an appcode."""
 
 
 class ProjectServiceProtocol(Protocol):
@@ -158,7 +158,7 @@ class ProjectServiceProtocol(Protocol):
     def get_project(self, project_path: Path) -> object:
         """Return full project detail DTO."""
 
-    def list_projects(self, year: str | None = None) -> object:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> object:
         """Return project list DTOs."""
 
     def open_folder(self, project_path: Path) -> None:
@@ -214,14 +214,36 @@ class ProjectServiceProtocol(Protocol):
     def reopen_project(self, project_path: Path) -> object:
         """Reopen project and return result."""
 
-    def list_subprojects(self, project_path: Path) -> object:
-        """Return subproject list."""
+    def list_drones(self, project_path: Path) -> object:
+        """Return drone list."""
 
-    def create_subproject(self, project_path: Path, name: str) -> object:
-        """Create subproject."""
+    def create_drone(self, project_path: Path, name: str) -> object:
+        """Create drone folder (UAT/PRD/notes.md)."""
 
-    def delete_subproject(self, project_path: Path, name: str) -> object:
-        """Delete subproject."""
+    def delete_drone(self, project_path: Path, name: str) -> object:
+        """Delete drone folder."""
+
+    def set_non_cr_state(self, project_path: Path, target_state: str) -> object:
+        """Set Non-CR project state (metadata-only)."""
+
+
+class AppCodeServiceProtocol(Protocol):
+    """Appcode service surface used by JsApi."""
+
+    def list_appcodes(self) -> object:
+        """Return registered appcodes."""
+
+    def add_appcode(self, name: str) -> object:
+        """Create appcode folder + appcode.json + CICD/."""
+
+    def remove_appcode(self, name: str) -> object:
+        """Remove appcode (send2trash)."""
+
+    def get_appcode_config(self, appcode: str) -> object:
+        """Return appcode config."""
+
+    def update_appcode_config(self, appcode: str, data: dict[str, object]) -> object:
+        """Update appcode config."""
 
 
 class FileServiceProtocol(Protocol):

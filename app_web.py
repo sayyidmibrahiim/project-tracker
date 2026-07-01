@@ -763,24 +763,41 @@ def create_js_api(
             if settings.root_folder is None:
                 raise ValueError("Root folder is not configured")
 
-            project_dir = settings.root_folder / year / "UAT_PREPARE" / name
-            if project_dir.exists():
-                raise ValueError(f"Project folder already exists: {project_dir}")
-
-            project_dir.mkdir(parents=True)
-            now = local_now()
-            metadata = ProjectMetadata(
-                project_name=name,
-                created_at=now,
-                updated_at=now,
-            )
-            self._metadata_store.write(project_dir, metadata)
-            return {
-                "project_path": str(project_dir),
-                "project_name": name,
-                "project_state": "UAT_PREPARE",
-                "cr_state": metadata.cr_state.value,
-            }
+            appcode_name = str(data.get("appcode", "")).strip()
+            project_type_str = str(data.get("project_type", "CR")).strip()
+            drone_name = str(data.get("drone_name", "")).strip()
+            if not appcode_name:
+                raise ValueError("Appcode is required")
+            from core.enums import NonCrState, ProjectType
+            from core.models import DroneTicket
+            from infrastructure.filesystem import _scaffold_drone
+            appcode_path = settings.root_folder / appcode_name
+            year_path = appcode_path / year
+            project_type = ProjectType(project_type_str)
+            if project_type == ProjectType.CR:
+                project_dir = year_path / "CR" / "UAT_PREPARE" / name
+                if project_dir.exists():
+                    raise ValueError(f"Project folder already exists: {project_dir}")
+                project_dir.mkdir(parents=True)
+                now = local_now()
+                metadata = ProjectMetadata(project_name=name, project_type=ProjectType.CR, created_at=now, updated_at=now)
+                (project_dir / "notes.md").touch()
+                (project_dir / "_cr-docs").mkdir()
+                if drone_name:
+                    _scaffold_drone(project_dir, drone_name)
+                    metadata.drone_tickets.append(DroneTicket(subfolder_name=drone_name))
+                self._metadata_store.write(project_dir, metadata)
+                return {"project_path": str(project_dir), "project_name": name, "project_state": "UAT_PREPARE", "project_type": "CR", "cr_state": metadata.cr_state.value}
+            else:
+                project_dir = year_path / "Non-CR" / name
+                if project_dir.exists():
+                    raise ValueError(f"Project folder already exists: {project_dir}")
+                project_dir.mkdir(parents=True)
+                now = local_now()
+                metadata = ProjectMetadata(project_name=name, project_type=ProjectType.NON_CR, non_cr_state=NonCrState.PLANNING, created_at=now, updated_at=now)
+                (project_dir / "notes.md").touch()
+                self._metadata_store.write(project_dir, metadata)
+                return {"project_path": str(project_dir), "project_name": name, "project_type": "NON_CR", "non_cr_state": "PLANNING"}
 
         # ── wired mutation: folder state transitions (guarded + rollback) ──
 
@@ -1019,15 +1036,15 @@ def create_js_api(
             filesystem.open_folder(path)
             return {"project_path": str(path), "opened": True}
 
-        def create_subproject(self, project_path: Path, name: str) -> object:
-            """Create a subproject folder inside the project directory."""
+        def create_drone(self, project_path: Path, name: str) -> object:
+            """Create a drone folder (UAT/PRD/notes.md) inside the project."""
+            from infrastructure.filesystem import _scaffold_drone
             project = Path(project_path)
-            target = project / name
-            created = create_directory(project, target)
+            drone_path = _scaffold_drone(project, name)
             return {
                 "project_path": str(project),
-                "subproject": created.name,
-                "path": str(created),
+                "drone": drone_path.name,
+                "path": str(drone_path),
             }
 
     # ── year service adapter (SettingsStore → year list) ──────────────
@@ -1037,19 +1054,23 @@ def create_js_api(
         def __init__(self, settings_store: SettingsStore) -> None:
             self._settings_store = settings_store
 
-        def list_years(self) -> object:
+        def list_years(self, appcode: str) -> object:
             settings = self._settings_store.read()
             root_folder = settings.root_folder
             if root_folder is None or not root_folder.exists():
                 return []
+            appcode_path = root_folder / appcode
+            if not appcode_path.is_dir():
+                return []
             return sorted(
                 child.name
-                for child in root_folder.iterdir()
+                for child in appcode_path.iterdir()
                 if child.is_dir() and child.name.isdigit()
             )
 
-        def create_year(self, year: str) -> object:
-            """Create {root}/{year}/ plus the five Folder_State subfolders."""
+        def create_year(self, appcode: str, year: str) -> object:
+            """Create {root}/{appcode}/{year}/CR/{5 states} + Non-CR/."""
+            from infrastructure.filesystem import ensure_appcode_year_structure
             year = str(year).strip()
             if not year.isdigit():
                 raise ValueError("Year must be numeric (e.g. 2026)")
@@ -1057,12 +1078,14 @@ def create_js_api(
             root_folder = settings.root_folder
             if root_folder is None:
                 raise ValueError("Root folder is not configured")
-            year_dir = root_folder / year
+            appcode_path = root_folder / appcode
+            if not appcode_path.is_dir():
+                raise ValueError(f"Appcode folder not found: {appcode_path}")
+            year_dir = appcode_path / year
             if year_dir.exists():
                 raise ValueError(f"Year folder already exists: {year_dir}")
-            for state in ProjectState:
-                (year_dir / state.value).mkdir(parents=True, exist_ok=True)
-            return {"year": year, "path": str(year_dir)}
+            ensure_appcode_year_structure(appcode_path, int(year))
+            return {"appcode": appcode, "year": year, "path": str(year_dir)}
 
     # ── file service adapter (list / open / create / rename / delete) ─
     class _FileServiceAdapter:
