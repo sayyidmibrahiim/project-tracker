@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,7 +11,7 @@ from core.exceptions import (
     InvalidFileNameError,
     PathOutsideBaseError,
 )
-from core.models import ProjectMetadata
+from core.models import AppCodeConfig, ProjectMetadata
 from core.rules import WINDOWS_RESERVED_NAMES, is_organizational_folder
 from infrastructure.metadata_store import MetadataStore
 
@@ -24,6 +25,13 @@ class ScannedProject:
     project_state: ProjectState | None
     metadata: ProjectMetadata
     drone_paths: list[Path]
+
+
+@dataclass(frozen=True, slots=True)
+class AppCodeEntry:
+    path: Path
+    name: str
+    config: AppCodeConfig
 
 
 IS_WINDOWS = sys.platform == "win32"
@@ -93,6 +101,51 @@ def ensure_year_structure(root_folder: Path, year: int) -> None:
         target.mkdir(parents=True, exist_ok=True)
 
 
+def ensure_appcode_year_structure(appcode_path: Path, year: int) -> None:
+    """Create appcode/{YEAR}/CR/{5 states} + appcode/{YEAR}/Non-CR/."""
+    year_path = appcode_path / str(year)
+    cr_path = year_path / "CR"
+    for state_name in STATE_FOLDER_NAMES:
+        target = cr_path / state_name
+        assert_within(appcode_path, target)
+        target.mkdir(parents=True, exist_ok=True)
+    non_cr_path = year_path / "Non-CR"
+    assert_within(appcode_path, non_cr_path)
+    non_cr_path.mkdir(parents=True, exist_ok=True)
+
+
+def project_type_from_path(project_path: Path) -> ProjectType:
+    """Determine project type from path: under CR/ = CR, under Non-CR/ = NON_CR."""
+    for parent in project_path.parents:
+        if parent.name == "CR":
+            return ProjectType.CR
+        if parent.name == "Non-CR":
+            return ProjectType.NON_CR
+    return ProjectType.CR
+
+
+def discover_appcodes(root_folder: Path) -> list[AppCodeEntry]:
+    """Scan {root}/* for folders containing appcode.json."""
+    if not root_folder.exists():
+        return []
+    entries: list[AppCodeEntry] = []
+    for child in sorted(root_folder.iterdir()):
+        if not child.is_dir():
+            continue
+        config_path = child / "appcode.json"
+        if not config_path.exists():
+            continue
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        config = AppCodeConfig.from_dict(data)
+        if not config.display_name:
+            config.display_name = child.name
+        entries.append(AppCodeEntry(path=child, name=child.name, config=config))
+    return entries
+
+
 def state_folders_for_year(year_path: Path) -> list[Path]:
     folders = [year_path / state_name for state_name in STATE_FOLDER_NAMES]
     for folder in folders:
@@ -133,6 +186,34 @@ def discover_subproject_paths(project_path: Path) -> list[Path]:
         for child in project_path.iterdir()
         if child.is_dir() and not is_organizational_folder(child)
     )
+
+
+def discover_drone_paths(project_path: Path) -> list[Path]:
+    """Like discover_subproject_paths but excludes the reserved _cr-docs folder."""
+    return sorted(
+        child
+        for child in project_path.iterdir()
+        if child.is_dir()
+        and not is_organizational_folder(child)
+        and child.name != "_cr-docs"
+    )
+
+
+def _scaffold_drone(project_path: Path, drone_name: str) -> Path:
+    """Create {project}/{drone}/ + UAT/ + PRD/ + notes.md."""
+    from core.rules import validate_windows_folder_name
+
+    validate_windows_folder_name(drone_name)
+    if drone_name == "_cr-docs":
+        raise ValueError("Drone name cannot be '_cr-docs' (reserved folder)")
+    drone_path = project_path / drone_name
+    if drone_path.exists():
+        raise ValueError(f"Drone folder already exists: {drone_path}")
+    drone_path.mkdir(parents=True)
+    (drone_path / "UAT").mkdir()
+    (drone_path / "PRD").mkdir()
+    (drone_path / "notes.md").touch()
+    return drone_path
 
 
 def open_folder(path: Path) -> None:
