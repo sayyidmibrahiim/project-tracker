@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
 from core.exceptions import InvalidFolderNameError
 from core.models import AppSettings, HistoryEntry, ProjectMetadata, local_now
 from core.rules import (
@@ -19,6 +19,7 @@ from core.state_machine import (
     reopen_project_state,
     validate_cr_transition,
     validate_drone_state_change_allowed,
+    validate_non_cr_transition,
     validate_project_state_transition,
 )
 from infrastructure import filesystem
@@ -30,6 +31,10 @@ def state_from_project_path(project_path: Path) -> ProjectState:
 
 
 def year_path_from_project_path(project_path: Path) -> Path:
+    from infrastructure.filesystem import project_type_from_path
+
+    if project_type_from_path(project_path) == ProjectType.CR:
+        return project_path.parent.parent.parent
     return project_path.parent.parent
 
 
@@ -104,6 +109,33 @@ class ProjectService:
     def delete_subproject(self, subproject_path: Path) -> None:
         """Route a subproject-folder deletion to the Recycle Bin via send2trash."""
         filesystem.send_to_recycle_bin(subproject_path)
+
+    def delete_drone(self, drone_path: Path) -> None:
+        """Route a drone-folder deletion to the Recycle Bin via send2trash."""
+        filesystem.send_to_recycle_bin(drone_path)
+
+    def set_non_cr_state(
+        self, project_path: Path, target: NonCrState, settings: AppSettings
+    ) -> Path:
+        """Set a Non-CR project's state (metadata-only, no folder move)."""
+        metadata = self.metadata_store.load(project_path)
+        if metadata.project_type != ProjectType.NON_CR:
+            raise ValueError("set_non_cr_state called on a CR project")
+        current = metadata.non_cr_state or NonCrState.PLANNING
+        validate_non_cr_transition(current, target)
+        now = local_now()
+        metadata.non_cr_state = target
+        metadata.updated_at = now
+        metadata.history.append(
+            HistoryEntry(
+                timestamp=now,
+                action="STATE_CHANGE",
+                detail=f"Non-CR: {current.value} → {target.value}",
+                user=current_user(settings),
+            )
+        )
+        self.metadata_store.save(project_path, metadata)
+        return project_path
 
     @staticmethod
     def _set_drone_pause_state(metadata: ProjectMetadata, target: DroneState, now) -> None:
