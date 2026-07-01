@@ -51,3 +51,14 @@ class Theme(StrEnum):
 class EmailMode(StrEnum):
     DRAFT = "draft"
     SEND = "send"
+
+
+class ProjectType(StrEnum):
+    CR = "CR"
+    NON_CR = "NON_CR"
+
+
+class NonCrState(StrEnum):
+    PLANNING = "PLANNING"
+    IN_PROGRESS = "IN_PROGRESS"
+    DONE = "DONE"
