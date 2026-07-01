@@ -8,6 +8,8 @@
   import NewProjectForm from "./NewProjectForm.svelte";
   import SubProjectTable from "./SubProjectTable.svelte";
   import ConfirmModal from "./ConfirmModal.svelte";
+  import { addToast } from "../stores/toastStore";
+  import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
   let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
@@ -271,8 +273,10 @@
     }
 
     // Refresh detail to show updated state
+    const oldLink = detail?.cr_link ?? "";
     if (detail) detail.cr_link = crLinkEdit;
     crLinkSaveState = "success";
+    addToast("CR link saved", "success", 5000, { label: "Undo", fn: () => { void callBridge("cr_update_link", selectedPath, oldLink); } });
     setTimeout(() => { if (crLinkSaveState === "success") crLinkSaveState = "idle"; }, 2500);
   }
 
@@ -331,8 +335,10 @@
     if (resp.data && (resp.data as any).project_path) {
       selectedPath = (resp.data as any).project_path;
     }
+    const oldState = detail?.cr_state ?? "";
     if (detail) detail.cr_state = crStateEdit;
     crStateSaveState = "success";
+    addToast("CR state saved", "success", 5000, { label: "Undo", fn: () => { void callBridge("cr_update_state", selectedPath, oldState); } });
     setTimeout(() => { if (crStateSaveState === "success") crStateSaveState = "idle"; }, 2500);
   }
 
@@ -395,6 +401,7 @@
       return;
     }
     metaSaveState = "success";
+    addToast("Project saved", "success", 2000);
     setTimeout(() => { if (metaSaveState === "success") metaSaveState = "idle"; }, 2500);
     await refreshDetail();
   }
@@ -464,6 +471,7 @@
     if (!detail || !selectedPath) return;
     const next = link.trim();
     const index = detail.drone_tickets.findIndex((t) => (t.subfolder_name ?? "") === name);
+    const oldLink = index >= 0 ? detail.drone_tickets[index].drone_link : "";
     droneLinkBusy = true; droneLinkError = "";
     let resp: any;
     if (index >= 0) {
@@ -474,6 +482,8 @@
     droneLinkBusy = false;
     if (!resp.ok) { droneLinkError = resp.error.message; return; }
     await refreshDetail();
+    addToast("Drone link saved", "success", 5000,
+      index >= 0 ? { label: "Undo", fn: () => { void callBridge("drone_update", selectedPath, index, { drone_link: oldLink }); } } : undefined);
   }
 
   async function saveDroneLinkFromPanel() {
@@ -482,11 +492,13 @@
     const next = droneLinkEdit.trim();
     const current = selectedSubprojectRowDetail.ticket.drone_link ?? "";
     if (next === current) return;
+    const oldLink = current;
     droneLinkBusy = true; droneLinkError = "";
     const resp = await callBridge("drone_update", selectedPath, selectedSubprojectRowDetail.index, { drone_link: next });
     droneLinkBusy = false;
     if (!resp.ok) { droneLinkError = resp.error.message; return; }
     await refreshDetail();
+    addToast("Drone link saved", "success", 5000, { label: "Undo", fn: () => { void callBridge("drone_update", selectedPath, selectedSubprojectRowDetail.index, { drone_link: oldLink }); } });
   }
 
   async function addDroneForSelectedRow() {
@@ -498,6 +510,7 @@
     droneLinkBusy = false;
     if (!resp.ok) { droneLinkError = resp.error.message; return; }
     await refreshDetail();
+    addToast("Drone ticket added", "success", 2000);
   }
 
   function editDroneLink() {

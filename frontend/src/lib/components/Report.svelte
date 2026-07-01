@@ -2,6 +2,7 @@
   import { callBridge, isPywebviewReady } from "../bridge";
   import { BridgeErrorCode } from "../types";
   import type { DashboardProject } from "../types";
+  import { addToast } from "../stores/toastStore";
 
   let _props: Record<string, unknown> = $props();
 
@@ -19,8 +20,7 @@
   let fetchKey: number = $state(0);
   let filterDebounce: ReturnType<typeof setTimeout> | null = null;
   let projects: DashboardProject[] = $state([]);
-  let exportState: "idle" | "saving" | "done" | "error" = $state("idle");
-  let exportMessage = $state("");
+  let exportState: "idle" | "saving" = $state("idle");
 
   const projectStates = ["UAT_PREPARE", "PROD_READY", "IMPLEMENTED", "POSTPONED"];
   const crStates = ["PENDING SUBMISSION", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "CANCELED", "REOPEN"];
@@ -132,7 +132,6 @@
   async function handleExportCsv() {
     if (!isPywebviewReady()) return;
     exportState = "saving";
-    exportMessage = "";
     const response = await callBridge<string>(
       "report_export_csv",
       yearFilter === "all" ? undefined : yearFilter,
@@ -141,17 +140,16 @@
       searchFilter || undefined,
     );
     if (!response.ok || !response.data) {
-      exportState = "error";
-      exportMessage = response.ok ? "No CSV data returned." : response.error.message;
+      exportState = "idle";
+      addToast(response.ok ? "No CSV data returned." : response.error.message, "error", 4000);
       return;
     }
     const suggested = `report_${new Date().toISOString().slice(0, 10)}.csv`;
     const saveResp = await callBridge<{ path: string | null; written: boolean }>("util_save_file", suggested, response.data);
     if (saveResp.ok && saveResp.data?.written && saveResp.data.path) {
-      exportState = "done";
-      exportMessage = `Saved: ${saveResp.data.path}`;
+      exportState = "idle";
+      addToast(`Report saved: ${saveResp.data.path}`, "success", 4000);
     } else if (saveResp.ok && saveResp.data && saveResp.data.written === false) {
-      // Save dialog cancelled or unavailable — fall back to Blob download.
       const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -159,10 +157,9 @@
       anchor.download = suggested;
       anchor.click();
       URL.revokeObjectURL(url);
-      exportState = "done";
-      exportMessage = "Downloaded via browser (native dialog unavailable).";
+      exportState = "idle";
+      addToast("Report downloaded via browser", "success", 4000);
     } else {
-      // Bridge save failed entirely — fall back to Blob download.
       const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -170,10 +167,9 @@
       anchor.download = suggested;
       anchor.click();
       URL.revokeObjectURL(url);
-      exportState = "done";
-      exportMessage = saveResp.ok ? "Downloaded via browser." : `Saved via browser (${saveResp.error.message}).`;
+      exportState = "idle";
+      addToast("Report downloaded via browser", "success", 4000);
     }
-    setTimeout(() => { if (exportState === "done") { exportState = "idle"; exportMessage = ""; } }, 3500);
   }
 
   let yearsLoaded = false;
@@ -266,8 +262,6 @@
   {:else if loadState === "error"}
     <div class="dashboard-banner banner-error" role="alert"><span class="banner-icon">⚠</span><div><p class="banner-title">Report unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
   {/if}
-
-  {#if exportState === "done"}<div class="dashboard-banner banner-success" role="status"><span class="banner-icon">✓</span><span>{exportMessage}</span></div>{:else if exportState === "error"}<div class="dashboard-banner banner-error" role="alert"><span class="banner-icon">⚠</span><span>{exportMessage}</span></div>{/if}
 
   <div class="metric-row">
     <div class="metric-card"><div class="metric-icon">Σ</div><div><div class="metric-value">{summary.total}</div><div class="metric-label">Total</div></div></div>

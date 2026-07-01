@@ -10,6 +10,8 @@
   import Automations from "./lib/components/Automations.svelte";
   import GlobalPlan from "./lib/components/GlobalPlan.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
+  import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
+  import Toast from "./lib/components/Toast.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
   import type { NotificationItem } from "./lib/types";
 
@@ -241,4 +243,7 @@
   {#if rootUnset}
     <FirstRunSetup onSaved={onRootConfigured} />
   {/if}
+  <WelcomeGuide />
 </div>
+
+<Toast />

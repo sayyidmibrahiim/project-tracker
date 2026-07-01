@@ -16,6 +16,7 @@
    */
   import { onMount, tick } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
+  import { addToast } from "../stores/toastStore";
 
   interface Props {
     categoryCode: string;
@@ -201,6 +202,7 @@
     originalRaw = (res.data as Record<string, unknown>) ?? payload;
     saveState = "success";
     onSaved?.(categoryCode);
+    addToast("Email template saved", "success", 2000);
     setTimeout(() => {
       if (saveState === "success") saveState = "idle";
     }, 2000);

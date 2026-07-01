@@ -5,6 +5,8 @@
   import { stateChipClass } from "../dashboardChips";
   import ConfirmModal from "./ConfirmModal.svelte";
   import DashboardRowMenu from "./DashboardRowMenu.svelte";
+  import { addToast } from "../stores/toastStore";
+  import type { ToastAction } from "../stores/toastStore";
 
   // ── Props from parent ──
   let {
@@ -61,12 +63,13 @@
     return savingKeys.includes(key);
   }
 
-  async function withSaving(key: string, action: () => Promise<BridgeResponse<unknown>>) {
+  async function withSaving(key: string, action: () => Promise<BridgeResponse<unknown>>, successMsg?: string, undoAction?: ToastAction) {
     startSaving(key);
     actionError = "";
     try {
       const r = await action();
       if (!r.ok) actionError = r.error?.message ?? "Update failed.";
+      else if (successMsg) addToast(successMsg, "success", undoAction ? 5000 : 2000, undoAction);
     } catch (error) {
       actionError = error instanceof Error ? error.message : "Update failed.";
     } finally {
@@ -290,23 +293,27 @@
   // ── Inline edits ──
   async function saveCrLink(p: DashboardProject, value: string) {
     if (value === p.cr_link) return;
-    await withSaving(`${p.project_path}:crlink`, () => callBridge("cr_update_link", p.project_path, value));
+    const oldValue = p.cr_link;
+    await withSaving(`${p.project_path}:crlink`, () => callBridge("cr_update_link", p.project_path, value), "CR link saved", { label: "Undo", fn: () => { void callBridge("cr_update_link", p.project_path, oldValue); } });
   }
 
   async function saveProjectDatetime(p: DashboardProject, field: "start_datetime" | "end_datetime", value: string) {
     const next = fromDatetimeLocal(value);
     const current = toDatetimeLocal(field === "start_datetime" ? p.start_datetime : p.end_datetime);
     if (value === current) return;
-    await withSaving(`${p.project_path}:${field}`, () => callBridge("project_update", p.project_path, { [field]: next }));
+    await withSaving(`${p.project_path}:${field}`, () => callBridge("project_update", p.project_path, { [field]: next }), "Date saved");
   }
 
   async function saveDroneLink(p: DashboardProject, row: AlignedDroneRow, value: string) {
     const next = value.trim();
     if (next === row.drone_link) return;
+    const oldValue = row.drone_link;
     const keyIndex = row.existingIndex >= 0 ? row.existingIndex : row.subfolder_name ?? "new";
     await withSaving(`${p.project_path}:dronelink:${keyIndex}`, () => row.existingIndex >= 0
       ? callBridge("drone_update", p.project_path, row.existingIndex, { drone_link: next })
-      : callBridge("drone_add", p.project_path, { drone_link: next, subfolder_name: row.subfolder_name, owner: "" }));
+      : callBridge("drone_add", p.project_path, { drone_link: next, subfolder_name: row.subfolder_name, owner: "" }),
+      "Drone link saved",
+      row.existingIndex >= 0 ? { label: "Undo", fn: () => { void callBridge("drone_update", p.project_path, row.existingIndex, { drone_link: oldValue }); } } : undefined);
   }
 
   function escapeHtml(value: string): string {
@@ -348,10 +355,10 @@
       pendingState = { kind: "cr", path: p.project_path, index: -1, next, name: p.project_name };
       return;
     }
-    void applyCrState(p.project_path, next);
+    void applyCrState(p.project_path, next, { label: "Undo", fn: () => { void callBridge("cr_update_state", p.project_path, p.cr_state); } });
   }
-  async function applyCrState(path: string, next: string) {
-    await withSaving(`${path}:crstate`, () => callBridge("cr_update_state", path, next));
+  async function applyCrState(path: string, next: string, undoAction?: ToastAction) {
+    await withSaving(`${path}:crstate`, () => callBridge("cr_update_state", path, next), "CR state saved", undoAction);
   }
 
   function onDroneStateChange(p: DashboardProject, row: AlignedDroneRow, next: string) {
@@ -360,14 +367,14 @@
       pendingState = { kind: "drone", path: p.project_path, index: row.existingIndex, next, name: `${p.project_name} · ${row.subfolder_name ?? `drone ${row.existingIndex + 1}`}` };
       return;
     }
-    void applyDroneState(p.project_path, row.existingIndex, next);
+    void applyDroneState(p.project_path, row.existingIndex, next, { label: "Undo", fn: () => { void callBridge("drone_update", p.project_path, row.existingIndex, { drone_state: row.drone_state }); } });
   }
-  async function applyDroneState(path: string, index: number, next: string) {
-    await withSaving(`${path}:dronestate:${index}`, () => callBridge("drone_update", path, index, { drone_state: next }));
+  async function applyDroneState(path: string, index: number, next: string, undoAction?: ToastAction) {
+    await withSaving(`${path}:dronestate:${index}`, () => callBridge("drone_update", path, index, { drone_state: next }), "Drone state saved", undoAction);
   }
 
   async function reopenProject(path: string) {
-    await withSaving(`${path}:crstate`, () => callBridge("folder_reopen", path));
+    await withSaving(`${path}:crstate`, () => callBridge("folder_reopen", path), "Project reopened");
   }
 
   async function confirmPendingState() {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
+  import { addToast } from "../stores/toastStore";
   import { BridgeErrorCode } from "../types";
 
   let _props: Record<string, unknown> = $props();
@@ -12,6 +13,8 @@
   type SaveState = "idle" | "saving" | "success" | "error";
   let saveState: SaveState = $state("idle");
   let saveError: string = $state("");
+  let dirty = $state(false);
+  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   type SettingsForm = Record<string, string | number>;
   let form: SettingsForm = $state({});
@@ -85,20 +88,35 @@
   }
 
   async function handleSave() {
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    await doSave();
+  }
+
+  function handleFieldChange(key: string, value: string) {
+    form = { ...form, [key]: value };
+    if (saveState === "success") saveState = "idle";
+    dirty = true;
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => { void doSave(); }, 1500);
+  }
+
+  async function doSave() {
+    if (!dirty) return;
     saveState = "saving";
     saveError = "";
 
     if (!isPywebviewReady()) {
       saveState = "error";
       saveError = "Bridge unavailable.";
+      addToast("Settings save failed: Bridge unavailable.", "error", 5000);
       return;
     }
 
-    // Validation before persisting.
     const t10 = Number(form["t10_threshold_days"]);
     if (!Number.isFinite(t10) || t10 < 1 || t10 > 30) {
       saveState = "error";
       saveError = "T-10 Threshold Days must be a number between 1 and 30.";
+      addToast(saveError, "error", 5000);
       return;
     }
     if (form["root_folder"] && typeof form["root_folder"] === "string" && form["root_folder"].trim()) {
@@ -106,6 +124,7 @@
       if (/[/\\]$/.test(trimmed)) {
         saveState = "error";
         saveError = "Root Folder must not end with a trailing slash.";
+        addToast(saveError, "error", 5000);
         return;
       }
     }
@@ -117,19 +136,14 @@
     if (!response.ok) {
       saveState = "error";
       saveError = response.error.message;
+      addToast("Settings save failed: " + response.error.message, "error", 5000);
       return;
     }
 
     originalRaw = (response.data as Record<string, unknown>) ?? payload;
-    saveState = "success";
-    setTimeout(() => {
-      if (saveState === "success") saveState = "idle";
-    }, 2500);
-  }
-
-  function handleFieldChange(key: string, value: string) {
-    form = { ...form, [key]: value };
-    if (saveState === "success") saveState = "idle";
+    dirty = false;
+    saveState = "idle";
+    addToast("Settings saved", "success", 2500);
   }
 
   interface HelpTopic { title: string; body: string; }
@@ -160,12 +174,6 @@
     <div class="dashboard-banner banner-loading"><span class="banner-icon">◌</span><span>Loading settings…</span></div>
   {:else if loadState === "error"}
     <div class="dashboard-banner banner-error"><span class="banner-icon">⚠</span><div><p class="banner-title">Settings unavailable</p><p class="banner-detail">{errorCode}: {errorMessage}</p></div></div>
-  {/if}
-
-  {#if saveState === "success"}
-    <div class="toast">✓ Settings saved</div>
-  {:else if saveState === "error"}
-    <div class="toast toast-error">✗ Save failed: {saveError}</div>
   {/if}
 
   <div class="page-header">
@@ -207,8 +215,9 @@
           </div>
         </div>
 
-        <div class="toolbar right"><button class="btn-primary" disabled={loadState !== "loaded" || saveState === "saving"} onclick={handleSave}>{saveState === "saving" ? "Saving…" : "Save Settings"}</button></div>
-        {#if saveState === "success"}<p class="restart-note">▸ Saved. Some changes (root folder, startup behavior) require an app restart to take full effect.</p>{/if}
+        <div class="toolbar right"><button class="btn-primary" disabled={loadState !== "loaded" || saveState === "saving" || !dirty} onclick={handleSave}>{saveState === "saving" ? "Saving…" : dirty ? "Save Now" : "Saved"}</button></div>
+        {#if saveState === "idle" && !dirty}<p class="restart-note">▸ Saved. Some changes (root folder, startup behavior) require an app restart to take full effect.</p>{/if}
+        {#if saveState === "error"}<p class="restart-note" style="color:var(--primary-red);">⚠ {saveError}</p>{/if}
       </div>
     </div>
 
@@ -231,8 +240,6 @@
 </section>
 
 <style>
-  .toast { position:absolute; top:18px; right:22px; z-index:40; background:var(--black-chrome); color:#fff; font-weight:900; font-size:11px; padding:8px 16px; border-radius:6px; box-shadow:var(--shadow-panel); pointer-events:none; }
-  .toast-error { background:var(--primary-red); }
   .field-row { display:flex; gap:6px; align-items:center; }
   .field-row .input { flex:1; min-width:0; }
   .one-col { grid-template-columns:1fr; }

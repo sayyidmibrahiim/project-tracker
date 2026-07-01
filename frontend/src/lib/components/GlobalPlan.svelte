@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { globalPlanGet, globalPlanSave, isPywebviewReady, waitForPywebviewReady } from "../bridge";
   import type { GlobalPlan, GlobalPlanItem, GlobalPlanStatus } from "../types";
+  import { addToast } from "../stores/toastStore";
 
   const columns: { id: GlobalPlanStatus; label: string; helper: string }[] = [
     { id: "doing", label: "Now", helper: "One active goal" },
@@ -15,7 +16,6 @@
   let loadState: "idle" | "loading" | "error" | "loaded" = $state("idle");
   let errorMessage = $state("");
   let savingId = $state("");
-  let saveMessage = $state("");
   let draggingId = $state("");
   let dragOverStatus: GlobalPlanStatus | "" = $state("");
   let dragOverItemId = $state("");
@@ -55,16 +55,14 @@
 
   async function savePlan(nextPlan: GlobalPlan, itemId: string) {
     savingId = itemId;
-    saveMessage = "";
     const response = await globalPlanSave(nextPlan);
     savingId = "";
     if (!response.ok || !response.data) {
-      saveMessage = response.error?.message ?? "Save failed.";
+      addToast(response.error?.message ?? "Save failed.", "error", 4000);
       return;
     }
     plan = response.data;
-    saveMessage = "Saved";
-    setTimeout(() => { saveMessage = ""; }, 1200);
+    addToast("Plan saved", "success", 2000);
   }
 
   async function setStatus(item: GlobalPlanItem, status: GlobalPlanStatus) {
@@ -123,7 +121,6 @@
     </div>
     <div class="page-header-actions">
       <button class="btn-secondary" type="button" onclick={loadPlan}>Refresh</button>
-      {#if saveMessage}<span class="gp-save-msg">{saveMessage}</span>{/if}
     </div>
   </div>
 
@@ -181,7 +178,6 @@
 
 <style>
   .global-plan-screen { overflow: hidden; }
-  .gp-save-msg { color: var(--text-strong); font-weight: 900; }
   .gp-empty { flex: 1; align-items: center; justify-content: center; color: var(--text-secondary); font-weight: 900; }
   .gp-error { color: var(--primary-red); }
   .gp-metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); }

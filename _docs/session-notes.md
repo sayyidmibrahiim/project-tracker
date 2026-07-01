@@ -28,10 +28,10 @@ Cross-menu fix sweep (one-time branch scope override approved by user):
 
 ## 2026-07-01
 
-Branch aktif: `general/global-plan`
-File diubah: `CLAUDE.md`, `_docs/PROGRESS.md`, `_docs/session-notes.md`, `services/global_plan_service.py`, `web/js_api.py`, `app_web.py`, `frontend/src/lib/types.ts`, `frontend/src/lib/bridge.ts`, `frontend/src/lib/components/GlobalPlan.svelte`, `frontend/src/App.svelte`, `frontend/src/lib/components/TitleBar.svelte`, `frontend/src/lib/components/Header.svelte`, `frontend/src/lib/components/Report.svelte`, `frontend/src/lib/components/SecondBrain.svelte`, `frontend/src/lib/components/Settings.svelte`, `frontend/src/lib/components/Automations.svelte`, `frontend/src/lib/components/SchedulerActions.svelte`, `frontend/src/lib/components/RulesActions.svelte`
-Keputusan teknis: one-branch multi-menu override (explicit user approval); Global Plan is official menu 7; scheduler real project provider; native save dialog with fallback; no new dependency.
-Verifikasi: svelte-check 0 errors (4 pre-existing SubProjectTable a11y warnings); python imports ok; app startup ok.
+Branch aktif: `general/ux-features`
+File diubah: App.svelte, Dashboard.svelte, ProjectDetails.svelte, Settings.svelte, EmailTemplateDialog.svelte, GlobalPlan.svelte, Report.svelte, SecondBrain.svelte, TitleBar.svelte, Toast.svelte (new), WelcomeGuide.svelte (new), toastStore.ts (new)
+Keputusan teknis: toast store with undo action support; Settings autosave 1500ms debounce; undo toasts 5s timeout; onboarding once-and-never via localStorage
+Verifikasi: build passes (pre-existing warnings only)
 
 ---
 

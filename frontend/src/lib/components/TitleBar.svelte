@@ -37,16 +37,21 @@
   let userInitials = $state("U");
   let debugInfo = $state("");
   let notifOpen = $state(false);
+  let helpOpen = $state(false);
   let unreadCount = $derived(notifications.filter((n) => !n.dismissed).length);
   let winState = $state<"normal" | "maximized" | "minimized">("normal");
   let unsubWinState: (() => void) | undefined;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let searchFocused = $state(false);
-  let notifContainerEl: HTMLDivElement | undefined;
+  let notifContainerEl = $state<HTMLDivElement | undefined>(undefined);
+  let helpContainerEl = $state<HTMLDivElement | undefined>(undefined);
 
   function handleWindowClick(e: MouseEvent) {
     if (notifOpen && notifContainerEl && !notifContainerEl.contains(e.target as Node)) {
       notifOpen = false;
+    }
+    if (helpOpen && helpContainerEl && !helpContainerEl.contains(e.target as Node)) {
+      helpOpen = false;
     }
   }
 
@@ -171,7 +176,28 @@
                   <div class="notif-item-row">
                     <div class="notif-item-title">{n.title}</div>
                     <button class="notif-item-dismiss" onclick={() => onDismiss(n.id)}>✕</button>
-                  </div>
+    </div>
+    <div class="help-container" bind:this={helpContainerEl}>
+      <button class="help-btn" class:open={helpOpen} onclick={() => (helpOpen = !helpOpen)} title="Keyboard shortcuts">?</button>
+      {#if helpOpen}
+        <div class="help-popover" role="region" aria-label="Keyboard shortcuts">
+          <div class="help-popover-head">
+            <span class="help-popover-title">Keyboard Shortcuts</span>
+          </div>
+          <div class="help-popover-list">
+            <div class="help-shortcut"><kbd>Ctrl+Shift+D</kbd><span>Dashboard</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+P</kbd><span>Project Details</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+B</kbd><span>Second Brain</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+R</kbd><span>Report</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+A</kbd><span>Automations</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+G</kbd><span>Global Plan</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+,</kbd><span>Settings</span></div>
+            <div class="help-shortcut"><kbd>Ctrl+Shift+F</kbd><span>Search</span></div>
+            <div class="help-shortcut"><kbd>Escape</kbd><span>Close popover / Back</span></div>
+          </div>
+        </div>
+      {/if}
+    </div>
                   <div class="notif-item-time">{formatTime(n.timestamp)}</div>
                   <div class="notif-item-msg">{n.message}</div>
                 </div>
@@ -398,6 +424,34 @@
   .notif-item-dismiss:hover { color: var(--primary-red); }
   .notif-item-time { color: rgba(45,61,52,.75); font-weight: 800; margin: 0 0 3px; }
   .notif-item-msg { color: rgba(45,61,52,.92); font-weight: 650; line-height: 1.28; margin: 0; }
+
+  .help-container { position: relative; -webkit-app-region: no-drag; }
+  .help-btn {
+    width: 26px; height: 26px; border: 0; border-radius: 50%;
+    background: transparent; color: var(--inactive-nav-text);
+    font-size: 13px; font-weight: 900; cursor: pointer;
+    display: grid; place-items: center;
+    transition: background .12s ease, color .12s ease;
+    font-family: var(--font);
+  }
+  .help-btn:hover, .help-btn.open { background: var(--surface-dark); color: #fff; }
+  .help-popover {
+    position: absolute; right: 0; top: 36px; width: 260px;
+    background: var(--notification-bg); border: 1px solid var(--dark-border);
+    border-radius: 10px; box-shadow: var(--shadow-notif);
+    z-index: 200; overflow: hidden;
+  }
+  .help-popover-head { padding: 10px 12px; border-bottom: 1px solid var(--dark-border); }
+  .help-popover-title { color: #fff; font-weight: 900; font-size: 11px; }
+  .help-popover-list { padding: 8px; }
+  .help-shortcut { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 10px; }
+  .help-shortcut kbd {
+    display: inline-block; min-width: 64px; padding: 2px 6px;
+    background: var(--surface-dark); border: 1px solid var(--dark-border);
+    border-radius: 4px; color: #fff; font-size: 9px; font-weight: 800;
+    font-family: var(--font); text-align: center;
+  }
+  .help-shortcut span { color: var(--text-muted); font-weight: 800; }
 
   .win-controls {
     display: flex;
