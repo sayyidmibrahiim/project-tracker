@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.enums import ProjectState
+from core.enums import ProjectState, ProjectType
 from core.exceptions import (
     FileTargetExistsError,
     InvalidFileNameError,
@@ -19,9 +19,11 @@ from infrastructure.metadata_store import MetadataStore
 class ScannedProject:
     path: Path
     year: str
-    project_state: ProjectState
+    appcode: str
+    project_type: ProjectType
+    project_state: ProjectState | None
     metadata: ProjectMetadata
-    subproject_paths: list[Path]
+    drone_paths: list[Path]
 
 
 IS_WINDOWS = sys.platform == "win32"
