@@ -6,7 +6,7 @@
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
   import NewProjectForm from "./NewProjectForm.svelte";
-  import SubProjectTable from "./SubProjectTable.svelte";
+  import DroneTable from "./DroneTable.svelte";
   import ConfirmModal from "./ConfirmModal.svelte";
   import { addToast } from "../stores/toastStore";
   import type { ToastAction } from "../stores/toastStore";
@@ -232,7 +232,7 @@
     ]);
 
     detail = dResp.ok ? (dResp.data ?? null) : null;
-    isSubproject = detail ? detail.is_subproject || false : false;
+    isSubproject = detail ? detail.is_drone || false : false;
     subprojects = spResp.ok ? (spResp.data ?? []) : [];
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
@@ -828,7 +828,7 @@
                     <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={subprojectBusy || !newSubprojectName.trim()}>Add Sub Project</button>
                   </div>
                 </div>
-                <SubProjectTable
+                <DroneTable
                   {subprojects}
                   droneTickets={detail.drone_tickets}
                   selectedRow={selectedSubprojectRow}
