@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
 from core.models import (
     Notification,
     datetime_from_json,
@@ -44,8 +44,11 @@ class CachedProjectRow:
     cr_state: CRState = CRState.PENDING_SUBMISSION
     cr_pending_approval_at: datetime | None = None
     drone_tickets_json: str = "[]"
-    subprojects_json: str = "[]"
+    drone_paths_json: str = "[]"
     t10_status: str = "UNKNOWN"
+    appcode: str = ""
+    project_type: ProjectType = ProjectType.CR
+    non_cr_state: NonCrState | None = None
     updated_at: datetime | None = None
     scanned_at: datetime | None = None
 
@@ -86,9 +89,12 @@ def cached_project_row_from_scan(scanned: ScannedProject) -> CachedProjectRow:
         cr_number=extract_cr_number(metadata.cr_link),
         cr_state=metadata.cr_state,
         cr_pending_approval_at=metadata.cr_pending_approval_at,
-        drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
-        subprojects_json=json.dumps([path.name for path in scanned.subproject_paths], ensure_ascii=False),
+                drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
+        drone_paths_json=json.dumps([path.name for path in scanned.drone_paths], ensure_ascii=False),
         t10_status=_t10_status(scanned),
+        appcode=scanned.appcode,
+        project_type=scanned.project_type,
+        non_cr_state=metadata.non_cr_state,
         updated_at=metadata.updated_at,
         scanned_at=local_now(),
     )
@@ -200,11 +206,14 @@ class CacheDb:
                     start_datetime,
                     end_datetime,
                     drone_tickets_json,
-                    subprojects_json,
+                    drone_paths_json,
                     t10_status,
+                    appcode,
+                    project_type,
+                    non_cr_state,
                     updated_at,
                     scanned_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     name = excluded.name,
                     year = excluded.year,
@@ -217,8 +226,11 @@ class CacheDb:
                     end_datetime = excluded.end_datetime,
                     drone_tickets_json = excluded.drone_tickets_json,
                     t10_status = excluded.t10_status,
+                    appcode = excluded.appcode,
+                    project_type = excluded.project_type,
+                    non_cr_state = excluded.non_cr_state,
                     updated_at = excluded.updated_at,
-                    subprojects_json = excluded.subprojects_json,
+                    drone_paths_json = excluded.drone_paths_json,
                     scanned_at = excluded.scanned_at
                 """,
                 self._project_values(row),
@@ -256,11 +268,11 @@ class CacheDb:
                         start_datetime,
                         end_datetime,
                         drone_tickets_json,
-                        subprojects_json,
+                        drone_paths_json,
                         t10_status,
                         updated_at,
                         scanned_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         name = excluded.name,
                         year = excluded.year,
@@ -272,7 +284,7 @@ class CacheDb:
                         start_datetime = excluded.start_datetime,
                         end_datetime = excluded.end_datetime,
                         drone_tickets_json = excluded.drone_tickets_json,
-                        subprojects_json = excluded.subprojects_json,
+                        drone_paths_json = excluded.drone_paths_json,
                         t10_status = excluded.t10_status,
                         updated_at = excluded.updated_at,
                         scanned_at = excluded.scanned_at
@@ -280,31 +292,74 @@ class CacheDb:
                     self._project_values(row),
                 )
 
-    def list_projects(self, year: str | None = None) -> list[CachedProjectRow]:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> list[CachedProjectRow]:
+        cols = ("path, year, folder_state, name, cr_link, start_datetime, "
+                "end_datetime, cr_number, cr_state, cr_pending_approval_at, "
+                "drone_tickets_json, drone_paths_json, t10_status, appcode, project_type, non_cr_state, updated_at, scanned_at")
         with self._connect() as connection:
-            if year is None:
+            if year is None and appcode is None:
                 rows = connection.execute(
-                    """
-                    SELECT path, year, folder_state, name, cr_link, start_datetime,
-                           end_datetime, cr_number, cr_state, cr_pending_approval_at,
-                           drone_tickets_json, subprojects_json, t10_status, updated_at, scanned_at
-                    FROM project_index
-                    ORDER BY year, name, path
-                    """
+                    f"SELECT {cols} FROM project_index ORDER BY year, name, path"
+                ).fetchall()
+            elif year is not None and appcode is not None:
+                rows = connection.execute(
+                    f"SELECT {cols} FROM project_index WHERE year = ? AND appcode = ? ORDER BY year, name, path",
+                    (year, appcode),
+                ).fetchall()
+            elif year is not None:
+                rows = connection.execute(
+                    f"SELECT {cols} FROM project_index WHERE year = ? ORDER BY year, name, path",
+                    (year,),
                 ).fetchall()
             else:
                 rows = connection.execute(
-                    """
-                    SELECT path, year, folder_state, name, cr_link, start_datetime,
-                           end_datetime, cr_number, cr_state, cr_pending_approval_at,
-                           drone_tickets_json, subprojects_json, t10_status, updated_at, scanned_at
-                    FROM project_index
-                    WHERE year = ?
-                    ORDER BY year, name, path
-                    """,
-                    (year,),
+                    f"SELECT {cols} FROM project_index WHERE appcode = ? ORDER BY year, name, path",
+                    (appcode,),
                 ).fetchall()
         return [self._project_from_row(row) for row in rows]
+    def replace_projects_for_appcode_year(self, appcode: str, year: str, rows: Iterable[CachedProjectRow]) -> None:
+        """Replace all projects for a specific appcode+year combination."""
+        replacement_rows = list(rows)
+        replacement_paths = {str(row.project_path) for row in replacement_rows}
+        with self._connect() as connection:
+            existing_paths = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT path FROM project_index WHERE year = ? AND appcode = ?",
+                    (year, appcode),
+                ).fetchall()
+            }
+            removed_paths = existing_paths - replacement_paths
+            for project_path in removed_paths:
+                connection.execute("DELETE FROM drone_tickets WHERE project_path = ?", (project_path,))
+                connection.execute("DELETE FROM project_index WHERE path = ?", (project_path,))
+            for row in replacement_rows:
+                connection.execute(
+                    """
+                    INSERT INTO project_index (
+                        path, name, year, folder_state, cr_link, cr_number, cr_state,
+                        cr_pending_approval_at, start_datetime, end_datetime,
+                        drone_tickets_json, drone_paths_json, t10_status, appcode,
+                        project_type, non_cr_state, updated_at, scanned_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        name = excluded.name, year = excluded.year,
+                        folder_state = excluded.folder_state, cr_link = excluded.cr_link,
+                        cr_number = excluded.cr_number, cr_state = excluded.cr_state,
+                        cr_pending_approval_at = excluded.cr_pending_approval_at,
+                        start_datetime = excluded.start_datetime,
+                        end_datetime = excluded.end_datetime,
+                        drone_tickets_json = excluded.drone_tickets_json,
+                        drone_paths_json = excluded.drone_paths_json,
+                        t10_status = excluded.t10_status,
+                        appcode = excluded.appcode,
+                        project_type = excluded.project_type,
+                        non_cr_state = excluded.non_cr_state,
+                        updated_at = excluded.updated_at,
+                        scanned_at = excluded.scanned_at
+                    """,
+                    self._project_values(row),
+                )
 
     def replace_drone_tickets_for_project(
         self,
@@ -460,9 +515,12 @@ class CacheDb:
                 cr_pending_approval_at TEXT,
                 start_datetime TEXT,
                 end_datetime TEXT,
-                drone_tickets_json TEXT,
-                subprojects_json TEXT NOT NULL DEFAULT '[]',
+                                drone_tickets_json TEXT,
+                drone_paths_json TEXT NOT NULL DEFAULT '[]',
                 t10_status TEXT,
+                appcode TEXT NOT NULL DEFAULT '',
+                project_type TEXT NOT NULL DEFAULT 'CR',
+                non_cr_state TEXT,
                 updated_at TEXT,
                 scanned_at TEXT DEFAULT (datetime('now'))
             )
@@ -529,9 +587,9 @@ class CacheDb:
             row[1]
             for row in connection.execute("PRAGMA table_info(project_index)").fetchall()
         }
-        if "subprojects_json" not in project_columns:
+        if "drone_paths_json" not in project_columns:
             connection.execute(
-                "ALTER TABLE project_index ADD COLUMN subprojects_json TEXT NOT NULL DEFAULT '[]'"
+                "ALTER TABLE project_index ADD COLUMN drone_paths_json TEXT NOT NULL DEFAULT '[]'"
             )
 
     @staticmethod
@@ -550,8 +608,11 @@ class CacheDb:
             datetime_to_json(row.start_datetime),
             datetime_to_json(row.end_datetime),
             row.drone_tickets_json,
-            row.subprojects_json,
+            row.drone_paths_json,
             row.t10_status,
+            row.appcode,
+            row.project_type.value,
+            row.non_cr_state.value if row.non_cr_state else None,
             datetime_to_json(row.updated_at),
             datetime_to_json(row.scanned_at),
         )
@@ -588,10 +649,13 @@ class CacheDb:
             cr_state=CRState(row[8]),
             cr_pending_approval_at=datetime_from_json(row[9]),
             drone_tickets_json=row[10] or "[]",
-            subprojects_json=row[11] or "[]",
+            drone_paths_json=row[11] or "[]",
             t10_status=row[12] or "UNKNOWN",
-            updated_at=datetime_from_json(row[13]),
-            scanned_at=datetime_from_json(row[14]),
+            appcode=row[13] or "",
+            project_type=ProjectType(row[14]) if row[14] else ProjectType.CR,
+            non_cr_state=NonCrState(row[15]) if row[15] else None,
+            updated_at=datetime_from_json(row[16]),
+            scanned_at=datetime_from_json(row[17]),
         )
 
     @staticmethod
