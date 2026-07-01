@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, NonCrState, ProjectState
 from core.exceptions import InvalidTransitionError
 
 REOPEN_ALLOWED_FOLDER_STATES = frozenset({ProjectState.POSTPONED, ProjectState.CANCELED})
@@ -43,6 +43,12 @@ PROJECT_STATE_TRANSITIONS: dict[ProjectState, frozenset[ProjectState]] = {
     ProjectState.IMPLEMENTED: frozenset(),
     ProjectState.POSTPONED: frozenset({ProjectState.UAT_PREPARE, ProjectState.CANCELED}),
     ProjectState.CANCELED: frozenset({ProjectState.UAT_PREPARE, ProjectState.POSTPONED}),
+}
+
+NON_CR_TRANSITIONS: dict[NonCrState, frozenset[NonCrState]] = {
+    NonCrState.PLANNING: frozenset({NonCrState.IN_PROGRESS, NonCrState.DONE}),
+    NonCrState.IN_PROGRESS: frozenset({NonCrState.DONE, NonCrState.PLANNING}),
+    NonCrState.DONE: frozenset({NonCrState.IN_PROGRESS}),
 }
 
 
@@ -187,3 +193,18 @@ def can_resume_postponed(target_state: ProjectState) -> bool:
 def validate_postponed_resume(target_state: ProjectState) -> None:
     if not can_resume_postponed(target_state):
         raise InvalidTransitionError("POSTPONED projects may resume only to UAT_PREPARE")
+
+
+def valid_next_non_cr_states(current_state: NonCrState) -> frozenset[NonCrState]:
+    return NON_CR_TRANSITIONS[current_state]
+
+
+def can_transition_non_cr(current_state: NonCrState, target_state: NonCrState) -> bool:
+    return target_state in valid_next_non_cr_states(current_state)
+
+
+def validate_non_cr_transition(current_state: NonCrState, target_state: NonCrState) -> None:
+    if not can_transition_non_cr(current_state, target_state):
+        raise InvalidTransitionError(
+            f"Invalid Non-CR transition: {current_state.value} -> {target_state.value}"
+        )
