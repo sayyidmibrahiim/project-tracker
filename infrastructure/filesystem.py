@@ -172,9 +172,67 @@ def scan_year(year_path: Path, metadata_store: MetadataStore | None = None) -> l
                 ScannedProject(
                     path=project_path,
                     year=year_path.name,
+                    appcode="",
+                    project_type=ProjectType.CR,
                     project_state=state,
                     metadata=metadata,
-                    subproject_paths=discover_subproject_paths(project_path),
+                    drone_paths=discover_drone_paths(project_path),
+                )
+            )
+    return projects
+
+
+def scan_appcode_year(
+    appcode_path: Path, year: str, metadata_store: MetadataStore | None = None
+) -> list[ScannedProject]:
+    """Scan one appcode's year folder for CR + Non-CR projects."""
+    store = metadata_store or MetadataStore()
+    projects: list[ScannedProject] = []
+    year_path = appcode_path / year
+    if not year_path.exists():
+        return projects
+
+    # CR branch: year/CR/{STATE}/project
+    cr_root = year_path / "CR"
+    if cr_root.is_dir():
+        for state in ProjectState:
+            state_path = cr_root / state.value
+            if not state_path.is_dir():
+                continue
+            for project_path in sorted(child for child in state_path.iterdir() if child.is_dir()):
+                metadata = store.read(project_path)
+                if metadata is None:
+                    continue
+                metadata.project_type = ProjectType.CR
+                projects.append(
+                    ScannedProject(
+                        path=project_path,
+                        year=year,
+                        appcode=appcode_path.name,
+                        project_type=ProjectType.CR,
+                        project_state=state,
+                        metadata=metadata,
+                        drone_paths=discover_drone_paths(project_path),
+                    )
+                )
+
+    # Non-CR branch: year/Non-CR/project (no state folders)
+    non_cr_root = year_path / "Non-CR"
+    if non_cr_root.is_dir():
+        for project_path in sorted(child for child in non_cr_root.iterdir() if child.is_dir()):
+            metadata = store.read(project_path)
+            if metadata is None:
+                continue
+            metadata.project_type = ProjectType.NON_CR
+            projects.append(
+                ScannedProject(
+                    path=project_path,
+                    year=year,
+                    appcode=appcode_path.name,
+                    project_type=ProjectType.NON_CR,
+                    project_state=None,
+                    metadata=metadata,
+                    drone_paths=[],
                 )
             )
     return projects
