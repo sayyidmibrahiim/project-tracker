@@ -117,19 +117,25 @@ Repository ini pakai **superpowers skills**. Sebelum melakukan apapun, check ski
 - **Spec:** `_docs/specs/superpowers/specs/2026-07-01-appcode-cr-structure-design.md`
 - **Plan:** `_docs/specs/superpowers/plans/2026-07-01-appcode-cr-structure.md`
 
-### Piece B (_cr-docs + multi-file RTE editor) — BELUM ADA spec/plan:
+### Piece B (_cr-docs + multi-file RTE editor) — SPEC ADA (plan belum ada):
 - Scope: `_cr-docs/` folder berisi 4 file: `uat-signoff` (rich-text editable in-app), `prod-lv` (same), 2x `.msg` (manager approval emails). RTE di Project Details punya dropdown untuk switch antara notes, uat-signoff, prod-lv, dan file lain di folder.
 - Dependencies: Piece A (folder structure ada, `_cr-docs/` created empty)
+- **Spec:** `_docs/specs/superpowers/specs/2026-07-02-cr-docs-rte-design.md`
+- Plan: belum ada, buat pakai `superpowers:writing-plans`
+- **Spec:** `_docs/specs/superpowers/specs/2026-07-02-approval-automation-design.md`
+- Plan: belum ada, buat pakai `superpowers:writing-plans`
+- **Spec:** `_docs/specs/superpowers/specs/2026-07-02-cicd-bitbucket-design.md`
+- Plan: belum ada, buat pakai `superpowers:writing-plans`
 - Build: brainstorm dulu → spec → plan → implement
 - Branch: `project-details/cr-docs-rte`
 
-### Piece C (Approval automation) — BELUM ADA spec/plan:
+### Piece C (Approval automation) — SPEC ADA (plan belum ada):
 - Scope: Project Details automation on/off toggle. Conditional "Send Request UAT Approval" button (muncul ketika: drone exists + drone state Pending Approval + CR number exists + CR state Pending Submission + uat-signoff non-empty). "Send Request LV" button (CR state Approved AND/OR drone state Approved + prod-lv non-empty). Setelah kirim: poll email reply setiap 5 menit (default), max 3 jam (configurable). Auto-download reply `.msg` ke `_cr-docs/`.
 - Dependencies: Piece A + Piece B
 - Build: brainstorm dulu → spec → plan → implement
 - Branch: `automations/approval-polling`
 
-### Piece D (CICD Bitbucket integration) — BELUM ADA spec/plan:
+### Piece D (CICD Bitbucket integration) — SPEC ADA (plan belum ada):
 - Scope: Git CLI detection + install guidance. Bitbucket clone helper (paste HTTP URL → app clones `cicd` branch). In-app repo file browser (VSCode-like tree, klik file → buka di VSCode/Notepad++/default app). CICD folder configurable per-appcode atau shared root.
 - Dependencies: Piece A saja (bisa paralel dengan B/C)
 - Build: brainstorm dulu → spec → plan → implement
