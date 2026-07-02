@@ -85,6 +85,11 @@
   function handleToggleMaximize() { winToggleMaximize(); }
   function handleClose() { winClose(); }
 
+  function navigateTo(id: string) {
+    window.dispatchEvent(new CustomEvent("app:navigate-away"));
+    onNavigate(id);
+  }
+
   function formatTime(iso: string): string {
     try {
       const d = new Date(iso);
@@ -135,7 +140,7 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
-        onclick={(e) => { e.stopPropagation(); onNavigate(item.id); }}
+        onclick={(e) => { e.stopPropagation(); navigateTo(item.id); }}
         onpointerdown={(e) => e.stopPropagation()}
       >
         <span class="nav-tab-icon">{@html navIcons[item.id]}</span>
@@ -145,7 +150,7 @@
   </nav>
 
   <div class="titlebar-right">
-      <div class="notif-container" bind:this={notifContainerEl}>
+    <div class="notif-container" bind:this={notifContainerEl}>
       <button
         class="notif-btn"
         class:open={notifOpen}
@@ -176,6 +181,15 @@
                   <div class="notif-item-row">
                     <div class="notif-item-title">{n.title}</div>
                     <button class="notif-item-dismiss" onclick={() => onDismiss(n.id)}>✕</button>
+                  </div>
+                  <div class="notif-item-time">{formatTime(n.timestamp)}</div>
+                  <div class="notif-item-msg">{n.message}</div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
     <div class="help-container" bind:this={helpContainerEl}>
       <button class="help-btn" class:open={helpOpen} onclick={() => (helpOpen = !helpOpen)} title="Keyboard shortcuts">?</button>
@@ -194,15 +208,6 @@
             <div class="help-shortcut"><kbd>Ctrl+Shift+,</kbd><span>Settings</span></div>
             <div class="help-shortcut"><kbd>Ctrl+Shift+F</kbd><span>Search</span></div>
             <div class="help-shortcut"><kbd>Escape</kbd><span>Close popover / Back</span></div>
-          </div>
-        </div>
-      {/if}
-    </div>
-                  <div class="notif-item-time">{formatTime(n.timestamp)}</div>
-                  <div class="notif-item-msg">{n.message}</div>
-                </div>
-              {/each}
-            {/if}
           </div>
         </div>
       {/if}

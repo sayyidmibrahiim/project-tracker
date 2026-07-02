@@ -8,7 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
 from core.rules import extract_drone_ticket
 from infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
 
@@ -40,7 +40,10 @@ class DashboardProject:
     drone_ticket_count: int
     updated_at: datetime | None
     scanned_at: datetime | None
-    subprojects: tuple[str, ...] = ()
+    appcode: str = ""
+    project_type: ProjectType = ProjectType.CR
+    non_cr_state: NonCrState | None = None
+    drones: tuple[str, ...] = ()
     drone_tickets: tuple[DashboardRowDrone, ...] = ()
 
 
@@ -74,14 +77,14 @@ class DashboardService:
     def __init__(self, cache: CacheDb) -> None:
         self.cache = cache
 
-    def list_projects(self, year: str | None = None) -> list[DashboardProject]:
-        return [_dashboard_project_from_cache_row(row) for row in self.cache.list_projects(year)]
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> list[DashboardProject]:
+        return [_dashboard_project_from_cache_row(row) for row in self.cache.list_projects(year, appcode)]
 
     def list_drone_tickets(self, project_path: Path) -> list[DashboardDroneTicket]:
         return [_dashboard_drone_from_cache_row(row) for row in self.cache.list_drone_tickets(project_path)]
 
     def get_summary(self, year: str | None = None) -> DashboardSummary:
-        return _summary_from_projects(self.list_projects(year))
+        return _summary_from_projects(self.list_projects(year))  # appcode passed via list_projects overload
 
     def get_dashboard(self, year: str | None = None) -> DashboardData:
         projects = self.list_projects(year)
@@ -104,14 +107,17 @@ def _dashboard_project_from_cache_row(row: CachedProjectRow) -> DashboardProject
         drone_ticket_count=_drone_ticket_count(row.drone_tickets_json),
         updated_at=row.updated_at,
         scanned_at=row.scanned_at,
-        subprojects=_subprojects_from_json(row.subprojects_json),
+        drones=_drones_from_json(row.drone_paths_json),
+        appcode=row.appcode,
+        project_type=row.project_type,
+        non_cr_state=row.non_cr_state,
         drone_tickets=_dashboard_drones_from_json(row.drone_tickets_json),
     )
 
 
-def _subprojects_from_json(subprojects_json: str) -> tuple[str, ...]:
+def _drones_from_json(drone_paths_json: str) -> tuple[str, ...]:
     try:
-        parsed: Any = json.loads(subprojects_json)
+        parsed: Any = json.loads(drone_paths_json)
     except json.JSONDecodeError:
         return ()
     if not isinstance(parsed, list):

@@ -26,7 +26,7 @@ test("NotesEditor converts Tiptap task items to markdown and vice-versa", () => 
   assert.match(NE, /- \[\$\{ch\}\]/);
 });
 
-test("ProjectDetails disables CR and schedule inputs for sub-projects", () => {
+test("ProjectDetails disables CR and schedule inputs for drones", () => {
   assert.match(PD, /isSubproject/);
   assert.match(PD, /disabled=\{[^}]*isSubproject\}/);
   assert.match(PD, /pd-inherited-label/);

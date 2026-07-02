@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.enums import CRState, DroneState, EmailMode, Language, Theme
+from core.enums import CRState, DroneState, EmailMode, Language, NonCrState, ProjectType, Theme
 
 PROJECT_DATA_SCHEMA = "project_data_v1"
 
@@ -146,6 +146,8 @@ class ProjectMetadata:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     h10_notified_at: datetime | None = None
+    project_type: ProjectType = ProjectType.CR
+    non_cr_state: NonCrState | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
@@ -164,6 +166,8 @@ class ProjectMetadata:
             created_at=datetime_from_json(data.get("created_at")),
             updated_at=datetime_from_json(data.get("updated_at")),
             h10_notified_at=datetime_from_json(data.get("h10_notified_at")),
+            project_type=ProjectType(data.get("project_type", ProjectType.CR.value)),
+            non_cr_state=NonCrState(data["non_cr_state"]) if data.get("non_cr_state") else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,6 +187,34 @@ class ProjectMetadata:
             "created_at": datetime_to_json(self.created_at),
             "updated_at": datetime_to_json(self.updated_at),
             "h10_notified_at": datetime_to_json(self.h10_notified_at),
+            "project_type": self.project_type.value,
+            "non_cr_state": self.non_cr_state.value if self.non_cr_state else None,
+        }
+
+
+@dataclass(slots=True)
+class AppCodeConfig:
+    display_name: str = ""
+    cicd_location: str = "per_appcode"
+    cicd_shared_path: Path | None = None
+    created_at: datetime | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AppCodeConfig:
+        cicd_shared = data.get("cicd_shared_path", "")
+        return cls(
+            display_name=str(data.get("display_name", "")),
+            cicd_location=str(data.get("cicd_location", "per_appcode")),
+            cicd_shared_path=Path(cicd_shared) if cicd_shared else None,
+            created_at=datetime_from_json(data.get("created_at")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "display_name": self.display_name,
+            "cicd_location": self.cicd_location,
+            "cicd_shared_path": str(self.cicd_shared_path) if self.cicd_shared_path else "",
+            "created_at": datetime_to_json(self.created_at),
         }
 
 

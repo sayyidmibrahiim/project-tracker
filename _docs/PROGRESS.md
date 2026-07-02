@@ -6,8 +6,8 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `general/ux-features`.
-Active slice: UX feature pack — toast system, settings autosave, snapshot undo, help system.
+Active branch: `general/appcode-structure`.
+Active slice: Appcode folder structure + CR/Non-CR project types — new folder tree, ProjectType/NonCrState enums, drone rename, scanner/cache/model updates. Piece A of 4.
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 

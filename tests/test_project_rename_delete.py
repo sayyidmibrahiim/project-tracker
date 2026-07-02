@@ -1,4 +1,4 @@
-"""Task 7.4 — Unit tests for project rename / delete + subproject delete.
+"""Task 7.4 — Unit tests for project rename / delete + drone delete.
 
 These tests exercise the wired ``JsApi`` (via ``create_js_api``) and the
 ``ProjectService``/``SafeDeleteService`` route, entirely against ``tmp_path``.
@@ -8,7 +8,7 @@ Covered behaviour (Req 5.2, 5.3, 5.5, 5.8):
 - case-insensitive sibling-duplicate rejection on rename (folder unchanged)
 - locked-state rejection for rename/delete in PROD_READY and IMPLEMENTED
   (folder unchanged, no cache update)
-- ``send2trash`` failure on delete / subproject-delete preserves the folder,
+- ``send2trash`` failure on delete / drone-delete preserves the folder,
   returns ``ok=false`` and skips the cache update
 - cache update on a successful rename and a successful delete
 
@@ -204,13 +204,13 @@ def test_rename_success_updates_cache(env):
     assert "old-name" not in names
 
 
-# ── subproject delete (Req 5.8) ────────────────────────────────────────────
+# ── drone delete (Req 5.8) ────────────────────────────────────────────
 
 
-def test_subproject_delete_success(env, tmp_path, monkeypatch):
+def test_drone_delete_success(env, tmp_path, monkeypatch):
     project = _make_project(env["root"], "UAT_PREPARE", "parent", env["store"])
-    subproject = project / "sub-a"
-    subproject.mkdir()
+    drone = project / "sub-a"
+    drone.mkdir()
 
     trash = tmp_path / "trash"
     trash.mkdir()
@@ -220,25 +220,25 @@ def test_subproject_delete_success(env, tmp_path, monkeypatch):
 
     monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _fake_trash)
 
-    result = env["js_api"].subproject_delete(str(project), "sub-a")
+    result = env["js_api"].drone_delete(str(project), "sub-a")
 
     assert result["ok"] is True
-    assert not subproject.exists()  # subproject removed
+    assert not drone.exists()  # drone removed
     assert project.is_dir()  # parent untouched
 
 
-def test_subproject_delete_send2trash_failure_preserves_folder(env, monkeypatch):
+def test_drone_delete_send2trash_failure_preserves_folder(env, monkeypatch):
     project = _make_project(env["root"], "UAT_PREPARE", "parent", env["store"])
-    subproject = project / "sub-a"
-    subproject.mkdir()
+    drone = project / "sub-a"
+    drone.mkdir()
 
     def _raise(path):
         raise RuntimeError("send2trash unavailable")
 
     monkeypatch.setattr(infra_fs, "send_to_recycle_bin", _raise)
 
-    result = env["js_api"].subproject_delete(str(project), "sub-a")
+    result = env["js_api"].drone_delete(str(project), "sub-a")
 
     assert result["ok"] is False
-    assert result["error"]["code"] == "SUBPROJECT_DELETE_FAILED"
-    assert subproject.is_dir()  # folder preserved in place
+    assert result["error"]["code"] == "DRONE_DELETE_FAILED"
+    assert drone.is_dir()  # folder preserved in place

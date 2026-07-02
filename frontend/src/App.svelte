@@ -21,6 +21,7 @@
 
   let currentPage: PageId = $state("dashboard");
   let selectedYear = $state("all");
+  let selectedAppcode = $state("");
   let searchQuery = $state("");
   let refreshKey = $state(0);
   let pendingProjectPath: string | null = $state(null);
@@ -137,14 +138,14 @@
 
   async function loadYears() {
     if (!isPywebviewReady()) return;
-    const resp = await callBridge<string[]>("year_list");
+    const resp = await callBridge<string[]>("year_list", selectedAppcode || "");
     if (resp.ok && resp.data) years = resp.data;
   }
 
   // Add Year (PRD §11.7): create the folder, refresh the list, select it.
   async function addYear(year: string): Promise<string | null> {
     if (!isPywebviewReady()) return "The desktop app is required to create a year folder.";
-    const r = await callBridge("year_create", year);
+    const r = await callBridge("year_create", year, selectedAppcode || "");
     if (!r.ok) return r.error.message;
     await loadYears();
     selectedYear = year;
@@ -232,7 +233,7 @@
       {:else if currentPage === "second-brain"}
         <SecondBrain />
       {:else if currentPage === "project-detail"}
-        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
+        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} defaultAppcode={selectedAppcode} onNavigateDashboard={() => navigate("dashboard")} />
       {:else if currentPage === "automations"}
         <Automations />
       {:else if currentPage === "global-plan"}

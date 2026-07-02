@@ -1,7 +1,7 @@
 """Phase D.15a — Project Details read-path production wiring tests.
 
 TDD RED: tests fail because create_js_api() returns SERVICE_UNAVAILABLE
-for project_get, subproject_list, file_list, notes_get, and year_list.
+for project_get, drone_list, file_list, notes_get, and year_list.
 """
 
 from __future__ import annotations
@@ -24,8 +24,11 @@ def temp_project():
     """Create a temp project dir with project_data.json for real testing."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        year_dir = root / "2024"
-        state_dir = year_dir / "UAT_PREPARE"
+        appcode_dir = root / "MYAPP"
+        appcode_dir.mkdir(parents=True)
+        (appcode_dir / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        year_dir = appcode_dir / "2024"
+        state_dir = year_dir / "CR" / "UAT_PREPARE"
         proj_dir = state_dir / "test-project"
         proj_dir.mkdir(parents=True)
 
@@ -37,7 +40,7 @@ def temp_project():
         store = MetadataStore()
         store.write(proj_dir, metadata)
 
-        # Create a subproject dir
+        # Create a drone dir
         (proj_dir / "sub1").mkdir()
         # Create a file
         (proj_dir / "notes.md").write_text("hello world")
@@ -117,22 +120,22 @@ def test_project_get_returns_detail_fields(js_api, temp_project):
     assert isinstance(data["drone_ticket_count"], int)
 
 
-# ── RED 3: subproject_list no longer SERVICE_UNAVAILABLE ───────────────
+# ── RED 3: drone_list no longer SERVICE_UNAVAILABLE ───────────────
 
-def test_subproject_list_wired_and_returns_ok(js_api, temp_project):
-    """subproject_list returns ok with subproject paths."""
+def test_drone_list_wired_and_returns_ok(js_api, temp_project):
+    """drone_list returns ok with drone paths."""
     path = str(temp_project["project_path"])
-    result = js_api.subproject_list(path)
+    result = js_api.drone_list(path)
     assert isinstance(result, dict), f"Expected dict, got {type(result)}"
     assert result.get("ok") is True, (
-        f"subproject_list must return ok=True, got {result}"
+        f"drone_list must return ok=True, got {result}"
     )
 
 
-def test_subproject_list_discovers_subdir_names(js_api, temp_project):
-    """subproject_list returns subproject basenames, not absolute paths."""
+def test_drone_list_discovers_subdir_names(js_api, temp_project):
+    """drone_list returns drone basenames, not absolute paths."""
     path = str(temp_project["project_path"])
-    result = js_api.subproject_list(path)
+    result = js_api.drone_list(path)
     data = result["data"]
     assert isinstance(data, list)
     assert data == ["sub1"]
@@ -218,15 +221,15 @@ def test_project_open_folder_wired_and_returns_ok(js_api, temp_project, monkeypa
     assert opened == [path]
 
 
-def test_subproject_create_wired_and_creates_folder(js_api, temp_project):
-    """subproject_create creates a folder inside the project."""
+def test_drone_create_wired_and_creates_folder(js_api, temp_project):
+    """drone_create creates a folder inside the project."""
     path = temp_project["project_path"]
 
-    result = js_api.subproject_create(str(path), "new-sub")
+    result = js_api.drone_create(str(path), "new-sub")
 
     assert result["ok"] is True
     assert (path / "new-sub").is_dir()
-    assert result["data"]["subproject"] == "new-sub"
+    assert result["data"]["drone"] == "new-sub"
 
 
 def test_file_open_dev_skipped_off_windows(js_api):

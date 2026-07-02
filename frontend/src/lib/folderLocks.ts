@@ -25,7 +25,7 @@ export type LockableAction =
   | "edit_metadata"
   | "rename_project"
   | "delete_project"
-  | "subproject_delete"
+  | "drone_delete"
   | "file_create"
   | "file_rename"
   | "file_delete"
@@ -50,7 +50,7 @@ const DISABLED_ACTIONS: Record<FolderState, ReadonlySet<LockableAction>> = {
     "edit_metadata",
     "rename_project",
     "delete_project",
-    "subproject_delete",
+    "drone_delete",
     "file_create",
     "file_rename",
     "file_delete",
@@ -59,7 +59,7 @@ const DISABLED_ACTIONS: Record<FolderState, ReadonlySet<LockableAction>> = {
     "edit_metadata",
     "rename_project",
     "delete_project",
-    "subproject_delete",
+    "drone_delete",
     "file_create",
     "file_rename",
     "file_delete",
@@ -127,7 +127,7 @@ export function disabledActions(state: string): LockableAction[] {
       "edit_metadata",
       "rename_project",
       "delete_project",
-      "subproject_delete",
+      "drone_delete",
       "file_create",
       "file_rename",
       "file_delete",

@@ -6,13 +6,13 @@
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
   import NewProjectForm from "./NewProjectForm.svelte";
-  import SubProjectTable from "./SubProjectTable.svelte";
+  import DroneTable from "./DroneTable.svelte";
   import ConfirmModal from "./ConfirmModal.svelte";
   import { addToast } from "../stores/toastStore";
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
+  let { initialPath = null, startNew = false, defaultAppcode = "", onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; defaultAppcode?: string; onNavigateDashboard?: () => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -25,9 +25,10 @@
   let detail: ProjectDetail | null = $state(null);
   let isSubproject: boolean = $state(false);
   let selectedSubproject: string = $state("all");
-  let subprojects: string[] = $state([]);
+  let drones: string[] = $state([]);
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
+  let showNotesEditor: boolean = $state(false);
   type TopActionState = "idle" | "saving" | "success" | "error";
   let topActionState: TopActionState = $state("idle");
   let topActionError: string = $state("");
@@ -84,9 +85,6 @@
   let metaSaveState: MetaSave = $state("idle");
   let metaSaveError: string = $state("");
 
-  // ── Drone edit state ──
-  let droneBusy: boolean = $state(false);
-  let droneError: string = $state("");
   // ── Drone state edit state ──
   const DRONE_STATE_OPTIONS = ["UAT", "PENDING APPROVAL", "APPROVED", "IN-PROGRESS", "FINISHED", "POSTPONED", "CANCELED"];
   const DRONE_NEXT: Record<string, string[]> = {
@@ -120,9 +118,9 @@
 
   // ── Sub-project create state (prototype Add Sub Project action) ──
   let newSubprojectName: string = $state("");
-  let subprojectBusy: boolean = $state(false);
-  let subprojectFeedback: string = $state("");
-  let subprojectFeedbackKind: "idle" | "success" | "error" = $state("idle");
+  let droneBusy: boolean = $state(false);
+  let droneFeedback: string = $state("");
+  let droneFeedbackKind: "idle" | "success" | "error" = $state("idle");
 
   let yearFilter: string = $state("all");
   let searchText: string = $state("");
@@ -201,11 +199,10 @@
   async function selectProject(path: string) {
     selectedPath = path;
     detailState = "loading";
-    detail = null; isSubproject = false; selectedSubproject = "all"; subprojects = []; files = []; notes = "";
+    detail = null; isSubproject = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
-    droneError = "";
     selectedSubprojectRow = null;
     droneLinkEdit = "";
     droneLinkBusy = false;
@@ -214,7 +211,7 @@
     droneLinkCopied = false;
     droneStateBusyName = null;
     droneStateErrorName = {};
-    newSubprojectName = ""; subprojectBusy = false; subprojectFeedback = ""; subprojectFeedbackKind = "idle";
+    newSubprojectName = ""; droneBusy = false; droneFeedback = ""; droneFeedbackKind = "idle";
     errorCode = ""; errorMessage = "";
 
     if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
@@ -226,16 +223,17 @@
 
     const [dResp, spResp, flResp, ntResp] = await Promise.all([
       callBridge<ProjectDetail>("project_get", path),
-      callBridge<string[]>("subproject_list", path),
+      callBridge<string[]>("drone_list", path),
       callBridge<FileRow[]>("file_list", path),
       callBridge<string>("notes_get", path),
     ]);
 
     detail = dResp.ok ? (dResp.data ?? null) : null;
-    isSubproject = detail ? detail.is_subproject || false : false;
-    subprojects = spResp.ok ? (spResp.data ?? []) : [];
+    isSubproject = detail ? detail.project_type === "NON_CR" : false;
+    drones = spResp.ok ? (spResp.data ?? []) : [];
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
+    showNotesEditor = false;
 
     if (detail) {
       crLinkEdit = detail.cr_link || "";
@@ -443,27 +441,27 @@
 
   async function addSubproject() {
     const name = newSubprojectName.trim();
-    subprojectFeedback = "";
-    subprojectFeedbackKind = "idle";
+    droneFeedback = "";
+    droneFeedbackKind = "idle";
     if (!selectedPath || !name) return;
     if (!isPywebviewReady()) {
-      subprojectFeedback = "pywebview bridge unavailable.";
-      subprojectFeedbackKind = "error";
+      droneFeedback = "pywebview bridge unavailable.";
+      droneFeedbackKind = "error";
       return;
     }
-    subprojectBusy = true;
-    const resp = await callBridge("subproject_create", selectedPath, name);
-    subprojectBusy = false;
+    droneBusy = true;
+    const resp = await callBridge("drone_create", selectedPath, name);
+    droneBusy = false;
     if (!resp.ok) {
-      subprojectFeedback = resp.error.message;
-      subprojectFeedbackKind = "error";
+      droneFeedback = resp.error.message;
+      droneFeedbackKind = "error";
       return;
     }
     newSubprojectName = "";
     selectedSubprojectRow = name;
     droneLinkEdit = "";
-    subprojectFeedback = `Created ${name}.`;
-    subprojectFeedbackKind = "success";
+    droneFeedback = `Created ${name}.`;
+    droneFeedbackKind = "success";
     await reloadSubprojects();
   }
 
@@ -622,7 +620,8 @@
 
   // After project_create succeeds, leave NEW_PROJECT mode, reload the list, and
   // open the freshly created project in SHOW_EDIT (PRD §12.4 navigation).
-  async function onProjectCreated(path: string) {
+  async function onProjectCreated(path: string, appcode: string) {
+    defaultAppcode = appcode;
     mode = "browse";
     await loadProjects();
     if (path) await selectProject(path);
@@ -633,18 +632,19 @@
   async function onProjectDeleted() {
     selectedPath = "";
     detail = null;
-    subprojects = [];
+    drones = [];
     files = [];
     notes = "";
+    showNotesEditor = false;
     detailState = "idle";
     await loadProjects();
   }
 
-  // After a successful subproject delete, reload the subproject list (Req 5.7).
+  // After a successful drone delete, reload the drone list (Req 5.7).
   async function reloadSubprojects() {
     if (!selectedPath || !isPywebviewReady()) return;
-    const resp = await callBridge<string[]>("subproject_list", selectedPath);
-    if (resp.ok) subprojects = resp.data ?? [];
+    const resp = await callBridge<string[]>("drone_list", selectedPath);
+    if (resp.ok) drones = resp.data ?? [];
   }
 
   // After a successful file create/rename/delete, reload the file list so the
@@ -679,11 +679,11 @@
           {/each}
         </select>
       </label>
-      <label class="pd-command-field pd-command-project" for="pd-subproject-select">
+      <label class="pd-command-field pd-command-project" for="pd-drone-select">
         <span>Sub Project</span>
-        <select id="pd-subproject-select" class="pd-control" bind:value={selectedSubproject} disabled={!selectedPath || subprojects.length === 0 || mode === "new"}>
+        <select id="pd-drone-select" class="pd-control" bind:value={selectedSubproject} disabled={!selectedPath || drones.length === 0 || mode === "new"}>
           <option value="all">All Sub Projects</option>
-          {#each subprojects as sp}
+          {#each drones as sp}
             <option value={sp}>{sp}</option>
           {/each}
         </select>
@@ -704,6 +704,7 @@
         <NewProjectForm
           yearOptions={yearOptions}
           defaultYear={yearFilter !== "all" ? yearFilter : (yearOptions[0] ?? "")}
+          defaultAppcode={defaultAppcode}
           onCancel={() => (mode = "browse")}
           onCreated={onProjectCreated}
         />
@@ -824,12 +825,12 @@
                 <div class="pd-section-head">
                   <h4 class="pd-section-title">Sub Project (DRONE)</h4>
                   <div class="pd-inline-create">
-                    <input class="pd-control" placeholder="Sub project name…" bind:value={newSubprojectName} disabled={subprojectBusy} />
-                    <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={subprojectBusy || !newSubprojectName.trim()}>Add Sub Project</button>
+                    <input class="pd-control" placeholder="Sub project name…" bind:value={newSubprojectName} disabled={droneBusy} />
+                    <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={droneBusy || !newSubprojectName.trim()}>Add Sub Project</button>
                   </div>
                 </div>
-                <SubProjectTable
-                  {subprojects}
+                <DroneTable
+                  {drones}
                   droneTickets={detail.drone_tickets}
                   selectedRow={selectedSubprojectRow}
                   droneStateBusyName={droneStateBusyName}
@@ -882,8 +883,8 @@
                     {/if}
                   </div>
                 {/if}
-                {#if subprojectFeedback}
-                  <p class:cr-link-ok={subprojectFeedbackKind === "success"} class:cr-link-err={subprojectFeedbackKind === "error"} class="cr-link-feedback">{subprojectFeedbackKind === "success" ? "✓" : "✗"} {subprojectFeedback}</p>
+                {#if droneFeedback}
+                  <p class:cr-link-ok={droneFeedbackKind === "success"} class:cr-link-err={droneFeedbackKind === "error"} class="cr-link-feedback">{droneFeedbackKind === "success" ? "✓" : "✗"} {droneFeedback}</p>
                 {/if}
               </div>
             {/if}
@@ -896,10 +897,21 @@
             </div>
 
             <div class="pd-section">
-              <h4 class="pd-section-title">Notes</h4>
-              {#key detail.project_path}
-                <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
-              {/key}
+              <div class="pd-section-headline">
+                <h4 class="pd-section-title">Notes</h4>
+                <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
+                  {showNotesEditor ? "Close Notes" : "Edit Notes"}
+                </button>
+              </div>
+              {#if showNotesEditor}
+                {#key detail.project_path}
+                  <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
+                {/key}
+              {:else}
+                <div class="pd-notes-preview">
+                  {notes.trim() || "No notes yet. Click Edit Notes to open the rich-text editor."}
+                </div>
+              {/if}
             </div>
 
             <div class="pd-section">
@@ -952,6 +964,9 @@
   .pd-section { background:var(--color-workspace-panel); border:1px solid var(--color-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05); padding:18px; }
   .pd-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
   .pd-section-head .pd-section-title { margin:0; }
+  .pd-section-headline { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .pd-section-headline .pd-section-title { margin:0; }
+  .pd-notes-preview { white-space:pre-wrap; font-size:11px; line-height:1.5; color:var(--color-ink); background:var(--color-workspace); border:1px dashed var(--color-border); border-radius:6px; padding:10px; max-height:160px; overflow:auto; }
   .pd-section-title { margin:0 0 8px; font-family:var(--font-display); font-size:13px; font-weight:600; letter-spacing:-0.01em; color:var(--color-ink-strong); display:flex; align-items:center; gap:6px; }
   .pd-inline-create { display:flex; align-items:center; gap:6px; flex:0 1 360px; }
   .pd-inline-create .pd-control { flex:1; }

@@ -1,9 +1,9 @@
 <script lang="ts">
   /**
-   * Gated project rename / delete + subproject delete control
+   * Gated project rename / delete + drone delete control
    * (Requirements 3.1, 3.5, 5.3, 5.5).
    *
-   * Routes EVERY high-risk action (project rename, project delete, subproject
+   * Routes EVERY high-risk action (project rename, project delete, drone
    * delete) through `ConfirmModal`. No bridge call is issued until the user
    * explicitly confirms (Req 3.1):
    *
@@ -30,10 +30,10 @@
     projectPath,
     projectState,
     projectName,
-    subprojects = [],
+    drones = [],
     onRenamed,
     onDeleted,
-    onSubprojectsChanged,
+    onDronesChanged,
   }: {
     /** Absolute project folder path (action target). */
     projectPath: string;
@@ -42,20 +42,20 @@
     /** Human-readable project name shown in the Confirmation_UI. */
     projectName: string;
     /** Subproject names (delete targets). */
-    subprojects?: string[];
+    drones?: string[];
     /** Called after a successful rename with the renamed project's new path. */
     onRenamed?: (next: { projectPath: string }) => void;
     /** Called after a successful project delete. */
     onDeleted?: () => void;
-    /** Called after a successful subproject delete. */
-    onSubprojectsChanged?: () => void;
+    /** Called after a successful drone delete. */
+    onDronesChanged?: () => void;
   } = $props();
 
   /** A high-risk action awaiting explicit confirmation (gates the bridge call). */
   type PendingAction =
     | { kind: "rename"; newName: string }
     | { kind: "delete_project" }
-    | { kind: "subproject_delete"; name: string };
+    | { kind: "drone_delete"; name: string };
 
   // ── State ──
   let renameDraft: string = $state("");
@@ -70,24 +70,24 @@
   let renameLockMsg: string = $derived(lockReason(projectState, "rename_project") ?? "");
   let deleteLocked: boolean = $derived(isActionDisabled(projectState, "delete_project"));
   let deleteLockMsg: string = $derived(lockReason(projectState, "delete_project") ?? "");
-  let subDeleteLocked: boolean = $derived(isActionDisabled(projectState, "subproject_delete"));
-  let subDeleteLockMsg: string = $derived(lockReason(projectState, "subproject_delete") ?? "");
+  let subDeleteLocked: boolean = $derived(isActionDisabled(projectState, "drone_delete"));
+  let subDeleteLockMsg: string = $derived(lockReason(projectState, "drone_delete") ?? "");
 
   // ── Confirmation_UI copy derived from the pending action (Req 3.2/3.3) ──
   let confirmTitle: string = $derived.by(() => {
     if (pending?.kind === "rename") return "Rename project";
     if (pending?.kind === "delete_project") return "Delete project";
-    if (pending?.kind === "subproject_delete") return "Delete subproject";
+    if (pending?.kind === "drone_delete") return "Delete drone";
     return "";
   });
   let confirmActionLabel: string = $derived.by(() => {
     if (pending?.kind === "rename") return "Rename";
     if (pending?.kind === "delete_project") return "Delete project";
-    if (pending?.kind === "subproject_delete") return "Delete subproject";
+    if (pending?.kind === "drone_delete") return "Delete drone";
     return "";
   });
   let confirmTarget: string = $derived.by(() => {
-    if (pending?.kind === "subproject_delete") return pending.name;
+    if (pending?.kind === "drone_delete") return pending.name;
     if (pending?.kind === "rename") return `${projectName} → ${pending.newName}`;
     return projectName;
   });
@@ -120,10 +120,10 @@
     pending = { kind: "delete_project" };
   }
 
-  /** Arm the subproject-delete Confirmation_UI; issue no bridge call yet (Req 3.1). */
+  /** Arm the drone-delete Confirmation_UI; issue no bridge call yet (Req 3.1). */
   function requestSubprojectDelete(name: string) {
     clearFeedback();
-    pending = { kind: "subproject_delete", name };
+    pending = { kind: "drone_delete", name };
   }
 
   /** Cancel / dismiss leaves the prior UI state unchanged (Req 3.4). */
@@ -170,15 +170,15 @@
       return;
     }
 
-    // action.kind === "subproject_delete"
-    const response = await callBridge("subproject_delete", projectPath, action.name);
+    // action.kind === "drone_delete"
+    const response = await callBridge("drone_delete", projectPath, action.name);
     busy = false;
     if (!response.ok) {
       errorMessage = response.error.message;
       return;
     }
     successMessage = `Subproject "${action.name}" deleted to the Recycle Bin.`;
-    onSubprojectsChanged?.();
+    onDronesChanged?.();
   }
 
   async function confirmPending() {
@@ -230,11 +230,11 @@
   <!-- ── Subproject delete ── -->
   <div class="pa-block">
     <span class="pa-block-label">Subprojects</span>
-    {#if subprojects.length === 0}
-      <p class="pa-muted">No subprojects.</p>
+    {#if drones.length === 0}
+      <p class="pa-muted">No drones.</p>
     {:else}
       <ul class="pa-sub-list">
-        {#each subprojects as sp}
+        {#each drones as sp}
           <li class="pa-sub-row">
             <span class="pa-sub-name">{sp}</span>
             {#if subDeleteLocked}

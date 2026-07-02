@@ -1,4 +1,4 @@
-"""Phase C.10 — JsApi subproject/file/notes facades tests (TDD: RED first)."""
+"""Phase C.10 — JsApi drone/file/notes facades tests (TDD: RED first)."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,16 +16,16 @@ class FakeProjectService:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...]]] = []
 
-    def list_subprojects(self, project_path: Path) -> list[Path]:
-        self.calls.append(("list_subprojects", (project_path,)))
+    def list_drones(self, project_path: Path) -> list[Path]:
+        self.calls.append(("list_drones", (project_path,)))
         return [project_path / "api"]
 
-    def create_subproject(self, project_path: Path, name: str) -> Path:
-        self.calls.append(("create_subproject", (project_path, name)))
+    def create_drone(self, project_path: Path, name: str) -> Path:
+        self.calls.append(("create_drone", (project_path, name)))
         return project_path / name
 
-    def delete_subproject(self, project_path: Path, name: str) -> dict[str, object]:
-        self.calls.append(("delete_subproject", (project_path, name)))
+    def delete_drone(self, project_path: Path, name: str) -> dict[str, object]:
+        self.calls.append(("delete_drone", (project_path, name)))
         return {"deleted": True, "path": project_path / name}
 
 
@@ -58,8 +58,8 @@ class FakeNotesService:
 
 
 class ExplodingProjectService(FakeProjectService):
-    def list_subprojects(self, project_path: Path) -> list[Path]:
-        raise RuntimeError("subproject unavailable")
+    def list_drones(self, project_path: Path) -> list[Path]:
+        raise RuntimeError("drone unavailable")
 
 
 class ExplodingFileService(FakeFileService):
@@ -72,21 +72,21 @@ class ExplodingNotesService(FakeNotesService):
         raise RuntimeError("notes unavailable")
 
 
-def test_subproject_facades_delegate_and_convert_results():
+def test_drone_facades_delegate_and_convert_results():
     service = FakeProjectService()
     api = JsApi(dashboard_service=None, project_service=service)
 
-    listed = api.subproject_list("/tmp/Alpha")
-    created = api.subproject_create("/tmp/Alpha", "api")
-    deleted = api.subproject_delete("/tmp/Alpha", "api")
+    listed = api.drone_list("/tmp/Alpha")
+    created = api.drone_create("/tmp/Alpha", "api")
+    deleted = api.drone_delete("/tmp/Alpha", "api")
 
     assert listed == {"ok": True, "data": ["/tmp/Alpha/api"], "error": None}
     assert created == {"ok": True, "data": "/tmp/Alpha/api", "error": None}
     assert deleted == {"ok": True, "data": {"deleted": True, "path": "/tmp/Alpha/api"}, "error": None}
     assert service.calls == [
-        ("list_subprojects", (Path("/tmp/Alpha"),)),
-        ("create_subproject", (Path("/tmp/Alpha"), "api")),
-        ("delete_subproject", (Path("/tmp/Alpha"), "api")),
+        ("list_drones", (Path("/tmp/Alpha"),)),
+        ("create_drone", (Path("/tmp/Alpha"), "api")),
+        ("delete_drone", (Path("/tmp/Alpha"), "api")),
     ]
 
 
@@ -134,7 +134,7 @@ def test_notes_facades_delegate_and_convert_results():
 def test_missing_services_return_service_unavailable_fail():
     api = JsApi(dashboard_service=None)
 
-    assert api.subproject_list("/tmp/Alpha")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.drone_list("/tmp/Alpha")["error"]["code"] == "SERVICE_UNAVAILABLE"
     assert api.file_list("/tmp/Alpha")["error"]["code"] == "SERVICE_UNAVAILABLE"
     assert api.notes_get("/tmp/Alpha")["error"]["code"] == "SERVICE_UNAVAILABLE"
 
@@ -147,9 +147,9 @@ def test_exceptions_return_fail():
         notes_service=ExplodingNotesService(),
     )
 
-    assert api.subproject_list("/tmp/Alpha")["error"] == {
-        "code": "SUBPROJECT_LIST_FAILED",
-        "message": "subproject unavailable",
+    assert api.drone_list("/tmp/Alpha")["error"] == {
+        "code": "DRONE_LIST_FAILED",
+        "message": "drone unavailable",
         "details": None,
     }
     assert api.file_list("/tmp/Alpha")["error"] == {

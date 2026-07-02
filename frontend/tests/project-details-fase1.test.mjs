@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PD = readFileSync(resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"), "utf8");
 const FA = readFileSync(resolve(__dirname, "../src/lib/components/FileActions.svelte"), "utf8");
 const APP = readFileSync(resolve(__dirname, "../src/App.svelte"), "utf8");
-const SPT = readFileSync(resolve(__dirname, "../src/lib/components/SubProjectTable.svelte"), "utf8");
+const SPT = readFileSync(resolve(__dirname, "../src/lib/components/DroneTable.svelte"), "utf8");
 
 // --- CR Link conditional render (Section 1.4) --------------------------------
 
@@ -64,13 +64,13 @@ test("Sub Project box is titled 'Sub Project (DRONE)'", () => {
   assert.match(PD, /Sub Project \(DRONE\)/);
 });
 
-test("SubProjectTable is presentational (no callBridge inside)", () => {
+test("DroneTable is presentational (no callBridge inside)", () => {
   assert.doesNotMatch(SPT, /callBridge/);
   assert.match(SPT, /onChangeDroneState/);
-  assert.match(SPT, /onUpdateDroneLink/);
+  assert.match(SPT, /onSaveDroneLink/);
 });
 
-test("SubProjectTable no longer has an Owner column", () => {
+test("DroneTable no longer has an Owner column", () => {
   assert.doesNotMatch(SPT, /\bOwner\b/);
 });
 

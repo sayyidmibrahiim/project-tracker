@@ -145,11 +145,11 @@ class GlobalPlanServiceProtocol(Protocol):
 class YearServiceProtocol(Protocol):
     """Year service surface used by JsApi."""
 
-    def list_years(self) -> object:
-        """Return available years."""
+    def list_years(self, appcode: str) -> object:
+        """Return available years for an appcode."""
 
-    def create_year(self, year: str) -> object:
-        """Create a year folder and its Folder_State subfolders."""
+    def create_year(self, appcode: str, year: str) -> object:
+        """Create a year folder structure under an appcode."""
 
 
 class ProjectServiceProtocol(Protocol):
@@ -158,7 +158,7 @@ class ProjectServiceProtocol(Protocol):
     def get_project(self, project_path: Path) -> object:
         """Return full project detail DTO."""
 
-    def list_projects(self, year: str | None = None) -> object:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> object:
         """Return project list DTOs."""
 
     def open_folder(self, project_path: Path) -> None:
@@ -214,14 +214,36 @@ class ProjectServiceProtocol(Protocol):
     def reopen_project(self, project_path: Path) -> object:
         """Reopen project and return result."""
 
-    def list_subprojects(self, project_path: Path) -> object:
-        """Return subproject list."""
+    def list_drones(self, project_path: Path) -> object:
+        """Return drone list."""
 
-    def create_subproject(self, project_path: Path, name: str) -> object:
-        """Create subproject."""
+    def create_drone(self, project_path: Path, name: str) -> object:
+        """Create drone folder (UAT/PRD/notes.md)."""
 
-    def delete_subproject(self, project_path: Path, name: str) -> object:
-        """Delete subproject."""
+    def delete_drone(self, project_path: Path, name: str) -> object:
+        """Delete drone folder."""
+
+    def set_non_cr_state(self, project_path: Path, target_state: str) -> object:
+        """Set Non-CR project state (metadata-only)."""
+
+
+class AppCodeServiceProtocol(Protocol):
+    """Appcode service surface used by JsApi."""
+
+    def list_appcodes(self) -> object:
+        """Return registered appcodes."""
+
+    def add_appcode(self, name: str) -> object:
+        """Create appcode folder + appcode.json + CICD/."""
+
+    def remove_appcode(self, name: str) -> object:
+        """Remove appcode (send2trash)."""
+
+    def get_appcode_config(self, appcode: str) -> object:
+        """Return appcode config."""
+
+    def update_appcode_config(self, appcode: str, data: dict[str, object]) -> object:
+        """Update appcode config."""
 
 
 class FileServiceProtocol(Protocol):
@@ -736,21 +758,27 @@ class JsApi:
         encoded = base64.b64encode(raw).decode("ascii")
         return ok({"data_uri": f"data:{mime};base64,{encoded}", "name": p.name})
 
-    def year_list(self) -> dict[str, object]:
+    def year_list(self, appcode: str = "") -> dict[str, object]:
         """Return years from injected year service."""
         try:
             if self._year_service is None:
                 raise RuntimeError("year_service is not configured")
-            return ok(_to_frontend_safe(self._year_service.list_years()))
+            try:
+                years = self._year_service.list_years(appcode)
+            except TypeError as exc:
+                if "positional argument" not in str(exc):
+                    raise
+                years = self._year_service.list_years()
+            return ok(_to_frontend_safe(years))
         except Exception as exc:
             return fail(str(exc), code="YEAR_LIST_FAILED")
 
-    def year_create(self, year: str) -> dict[str, object]:
-        """Create a year folder and its five Folder_State subfolders."""
+    def year_create(self, year: str, appcode: str = "") -> dict[str, object]:
+        """Create an appcode-scoped year folder."""
         try:
             if self._year_service is None:
                 raise RuntimeError("year_service is not configured")
-            return ok(_to_frontend_safe(self._year_service.create_year(year)))
+            return ok(_to_frontend_safe(self._year_service.create_year(appcode, year)))
         except Exception as exc:
             return fail(str(exc), code="YEAR_CREATE_FAILED")
 
@@ -1086,12 +1114,12 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="DRONE_UPDATE_FAILED")
 
-    def drone_delete(self, project_path: str, drone_index: int) -> dict[str, object]:
-        """Delete Drone ticket through service layer."""
+    def drone_delete(self, project_path: str, drone: int | str) -> dict[str, object]:
+        """Delete Drone ticket or folder through service layer."""
         try:
             return ok(
                 _to_frontend_safe(
-                    self._project_service.delete_drone(Path(project_path), drone_index)
+                    self._project_service.delete_drone(Path(project_path), drone)
                 )
             )
         except Exception as exc:
@@ -1162,44 +1190,43 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="FOLDER_REOPEN_FAILED")
 
-    def subproject_list(self, project_path: str) -> dict[str, object]:
-        """List subprojects through service layer."""
+    def drone_list(self, project_path: str) -> dict[str, object]:
+        """List drone folders through service layer."""
         try:
             if self._project_service is None:
                 return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
             return ok(
                 _to_frontend_safe(
-                    self._project_service.list_subprojects(Path(project_path))
+                    self._project_service.list_drones(Path(project_path))
                 )
             )
         except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_LIST_FAILED")
+            return fail(str(exc), code="DRONE_LIST_FAILED")
+
+    def drone_create(self, project_path: str, name: str) -> dict[str, object]:
+        """Create drone folder through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.create_drone(Path(project_path), name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="DRONE_CREATE_FAILED")
+
+    def subproject_list(self, project_path: str) -> dict[str, object]:
+        """Backward-compatible alias for drone_list."""
+        return self.drone_list(project_path)
 
     def subproject_create(self, project_path: str, name: str) -> dict[str, object]:
-        """Create subproject through service layer."""
-        try:
-            if self._project_service is None:
-                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(
-                _to_frontend_safe(
-                    self._project_service.create_subproject(Path(project_path), name)
-                )
-            )
-        except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_CREATE_FAILED")
+        """Backward-compatible alias for drone_create."""
+        return self.drone_create(project_path, name)
 
     def subproject_delete(self, project_path: str, name: str) -> dict[str, object]:
-        """Delete subproject through service layer."""
-        try:
-            if self._project_service is None:
-                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(
-                _to_frontend_safe(
-                    self._project_service.delete_subproject(Path(project_path), name)
-                )
-            )
-        except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_DELETE_FAILED")
+        """Backward-compatible alias for drone_delete."""
+        return self.drone_delete(project_path, name)
 
     def file_list(self, path: str) -> dict[str, object]:
         """List files through service layer."""

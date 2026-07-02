@@ -169,7 +169,7 @@
 
   function subprojectsOf(p: DashboardProject): string[] {
     const names = [
-      ...(p.subprojects ?? []),
+      ...(p.drones ?? []),
       ...(p.drone_tickets ?? [])
         .map((d) => d.subfolder_name)
         .filter((n): n is string => !!n && n.trim().length > 0),

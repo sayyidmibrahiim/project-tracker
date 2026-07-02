@@ -36,7 +36,7 @@ def _project_row(
     cr_number: str | None = "CR202604209900114",
     cr_link: str = "https://cr.example.local/change?CRNumber=CR202604209900114",
     drone_tickets_json: str = "[]",
-    subprojects_json: str = "[]",
+    drone_paths_json: str = "[]",
     t10_status: str = "UNKNOWN",
 ) -> CachedProjectRow:
     return CachedProjectRow(
@@ -48,7 +48,7 @@ def _project_row(
         cr_number=cr_number,
         cr_state=cr_state,
         drone_tickets_json=drone_tickets_json,
-        subprojects_json=subprojects_json,
+        drone_paths_json=drone_paths_json,
         t10_status=t10_status,
     )
 
@@ -85,7 +85,7 @@ def test_list_projects_returns_cache_backed_dashboard_project_dtos(tmp_path: Pat
             drone_ticket_count=1,
             updated_at=None,
             scanned_at=None,
-            subprojects=(),
+            drones=(),
             drone_tickets=(
                 DashboardRowDrone(
                     subfolder_name=None,
@@ -257,24 +257,24 @@ def test_invalid_drone_tickets_json_counts_as_zero(tmp_path: Path) -> None:
     assert dashboard.summary.total_drone_tickets == 0
 
 
-def test_dashboard_project_includes_subprojects_from_cache(tmp_path: Path) -> None:
+def test_dashboard_project_includes_drones_from_cache(tmp_path: Path) -> None:
     cache = _cache(tmp_path)
     project_path = tmp_path / "CR" / "2026" / ProjectState.UAT_PREPARE.value / "WITH_SUBS"
-    cache.upsert_project(_project_row(project_path, subprojects_json='["alpha", "beta"]'))
+    cache.upsert_project(_project_row(project_path, drone_paths_json='["alpha", "beta"]'))
 
     dashboard = DashboardService(cache).get_dashboard("2026")
 
-    assert dashboard.projects[0].subprojects == ("alpha", "beta")
+    assert dashboard.projects[0].drones == ("alpha", "beta")
 
 
-def test_invalid_subprojects_json_returns_empty_tuple(tmp_path: Path) -> None:
+def test_invalid_drone_paths_json_returns_empty_tuple(tmp_path: Path) -> None:
     cache = _cache(tmp_path)
     project_path = tmp_path / "CR" / "2026" / ProjectState.UAT_PREPARE.value / "BROKEN_SUBS"
-    cache.upsert_project(_project_row(project_path, subprojects_json="{not json"))
+    cache.upsert_project(_project_row(project_path, drone_paths_json="{not json"))
 
     dashboard = DashboardService(cache).get_dashboard("2026")
 
-    assert dashboard.projects[0].subprojects == ()
+    assert dashboard.projects[0].drones == ()
 
 
 def test_dashboard_service_does_not_mutate_project_data_json_or_project_folders(tmp_path: Path) -> None:

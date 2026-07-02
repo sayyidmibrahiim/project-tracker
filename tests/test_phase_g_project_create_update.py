@@ -67,6 +67,9 @@ def temp_root_configured():
     """Root folder configured but no projects yet."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        appcode = root / "MYAPP"
+        appcode.mkdir()
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
         settings = SettingsStore(config_dir=root / "config")
         updated = replace(settings.read(), root_folder=root)
         settings.write(updated)
@@ -88,6 +91,9 @@ def temp_root_unconfigured():
     """No root_folder configured."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        appcode = root / "MYAPP"
+        appcode.mkdir()
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
         settings = SettingsStore(config_dir=root / "config")
         yield {
             "root": root,
@@ -169,6 +175,8 @@ def test_project_create_success(js_api_fresh, temp_root_configured):
     result = js_api_fresh.project_create({
         "project_name": "new-project",
         "year": "2025",
+        "appcode": "MYAPP",
+        "project_type": "CR",
     })
     assert result["ok"] is True
     data = result["data"]
@@ -225,9 +233,9 @@ def test_project_create_invalid_chars_fails(js_api_fresh):
 
 def test_project_create_existing_folder_fails(js_api_fresh, temp_root_configured):
     """project_create fails if folder already exists."""
-    existing = temp_root_configured["root"] / "2025" / "UAT_PREPARE" / "dupe"
+    existing = temp_root_configured["root"] / "MYAPP" / "2025" / "CR" / "UAT_PREPARE" / "dupe"
     existing.mkdir(parents=True)
-    result = js_api_fresh.project_create({"project_name": "dupe", "year": "2025"})
+    result = js_api_fresh.project_create({"project_name": "dupe", "year": "2025", "appcode": "MYAPP", "project_type": "CR"})
     assert result["ok"] is False
     assert "already exists" in result["error"]["message"].lower()
 

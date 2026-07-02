@@ -75,3 +75,50 @@ def test_settings_h10_reminder_days_default_and_roundtrip() -> None:
     assert data["h10_reminder_days"] == 10
     restored = AppSettings.from_dict({**data, "h10_reminder_days": 7})
     assert restored.h10_reminder_days == 7
+
+
+from pathlib import Path
+from core.enums import ProjectType, NonCrState
+from core.models import ProjectMetadata, AppCodeConfig
+
+def test_project_metadata_defaults_to_cr():
+    m = ProjectMetadata(project_name="Test")
+    assert m.project_type == ProjectType.CR
+    assert m.non_cr_state is None
+
+def test_project_metadata_non_cr_roundtrip():
+    m = ProjectMetadata(
+        project_name="NonCrTask",
+        project_type=ProjectType.NON_CR,
+        non_cr_state=NonCrState.IN_PROGRESS,
+    )
+    d = m.to_dict()
+    assert d["project_type"] == "NON_CR"
+    assert d["non_cr_state"] == "IN_PROGRESS"
+    restored = ProjectMetadata.from_dict(d)
+    assert restored.project_type == ProjectType.NON_CR
+    assert restored.non_cr_state == NonCrState.IN_PROGRESS
+
+def test_project_metadata_cr_roundtrip():
+    m = ProjectMetadata(project_name="CrProj", project_type=ProjectType.CR)
+    d = m.to_dict()
+    assert d["project_type"] == "CR"
+    assert d["non_cr_state"] is None
+    restored = ProjectMetadata.from_dict(d)
+    assert restored.project_type == ProjectType.CR
+    assert restored.non_cr_state is None
+
+def test_appcode_config_defaults():
+    c = AppCodeConfig()
+    assert c.display_name == ""
+    assert c.cicd_location == "per_appcode"
+    assert c.cicd_shared_path is None
+
+def test_appcode_config_roundtrip():
+    c = AppCodeConfig(display_name="My Appcode", cicd_location="shared_root", cicd_shared_path=Path("D:/WORK/CICD"))
+    d = c.to_dict()
+    assert d["display_name"] == "My Appcode"
+    assert d["cicd_location"] == "shared_root"
+    restored = AppCodeConfig.from_dict(d)
+    assert restored.display_name == "My Appcode"
+    assert restored.cicd_location == "shared_root"

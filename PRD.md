@@ -313,97 +313,95 @@ Scrollbars:   thin (4px), pink accent handle
 User selects one root folder. All project data lives here.
 
 ```
-D:\WORK\CR\
+D:\\WORK\\
 ```
 
-### 7.2 Year Folders
+### 7.2 Appcode Folders
+
+Each appcode is a subfolder under the root, containing an `appcode.json` config file.
 
 ```
-{ROOT}\{YEAR}\
+{ROOT}\\{APPCODE}\\
+  appcode.json
+  CICD\\
+  {YEAR}\\
+```
+
+- Appcodes are discovered by scanning `{ROOT}/*` for folders containing `appcode.json`.
+- User can add multiple appcodes.
+- `appcode.json` holds per-appcode config: display name, CICD location preference.
+- `CICD/` is created empty (Bitbucket clone helper in Piece D).
+- Removing an appcode sends the folder to Recycle Bin.
+
+### 7.3 Year Folders
+
+```
+{ROOT}\\{APPCODE}\\{YEAR}\\
 ```
 
 - Year is derived solely from the year folder name.
-- Dashboard year dropdown shows only existing year folders.
-- Creating a year creates the year folder + all 5 project state folders.
+- Dashboard year dropdown shows only existing year folders for the selected appcode.
+- Creating a year creates `{YEAR}/CR/` + 5 state folders inside CR + `{YEAR}/Non-CR/`.
 - Default Add Year suggestion: next calendar year.
-- Adding a year >2 years ahead of current year shows a confirmation warning.
+- Adding a year >2 years ahead shows a confirmation warning.
 
-### 7.3 Project State Folders (5 States)
-
-```
-{ROOT}\{YEAR}\UAT_PREPARE\
-{ROOT}\{YEAR}\PROD_READY\
-{ROOT}\{YEAR}\IMPLEMENTED\
-{ROOT}\{YEAR}\POSTPONED\
-{ROOT}\{YEAR}\CANCELED\
-```
-
-| Folder        | Meaning                         | Editability                  |
-| ------------- | ------------------------------- | ---------------------------- |
-| `UAT_PREPARE` | Active preparation/editing      | Fully editable               |
-| `PROD_READY`  | Ready for production deployment | Partially locked             |
-| `IMPLEMENTED` | Completed and archived          | Fully locked (read-only)     |
-| `POSTPONED`   | Paused; can be resumed          | Editable after resume action |
-| `CANCELED`    | Closed; can be reopened         | Editable after reopen action |
-
-### 7.4 Project Folder
+### 7.4 CR Project State Folders (5 States, inside CR/)
 
 ```
-{ROOT}\{YEAR}\{STATE}\{PROJECT_NAME}\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\UAT_PREPARE\\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\PROD_READY\\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\IMPLEMENTED\\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\POSTPONED\\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\CANCELED\\
 ```
 
-One folder = one CR scope.
+State folders exist **only inside `CR/`**. Non-CR projects have no state folders.
 
-Required files:
-
-```
-project_data.json
-notes.md
-```
-
-### 7.5 Sub Project Folder
-
-A child folder inside the main project folder representing a component/package/script under the same CR.
+### 7.5 CR Project Folder
 
 ```
-{ROOT}\{YEAR}\{STATE}\{PROJECT_NAME}\{SUBPROJECT_NAME}\
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\{STATE}\\{PROJECT_NAME}\\
 ```
 
-Rules:
+One folder = one CR scope. `project_type = CR` in `project_data.json`.
+
+Required: `project_data.json`, `notes.md`, `_cr-docs/` (empty in Piece A; Piece B fills with uat-signoff, prod-lv, .msg files).
+
+### 7.6 Drone Folder (was "Sub Project")
+
+```
+{ROOT}\\{APPCODE}\\{YEAR}\\CR\\{STATE}\\{PROJECT_NAME}\\{DRONE_NAME}\\
+  UAT\\
+  PRD\\
+  notes.md
+```
 
 - Shares the same CR number as parent project.
-- May have its own Drone ticket.
+- **Must** contain `UAT/` and `PRD/` subfolders + own `notes.md`.
 - No independent CR state or folder state.
-- May have own files and `notes.md`.
-- Does **not** have its own `project_data.json`.
+- "Sub project" terminology retired; the term is now "drone" throughout.
 
-### 7.6 Organizational Folder Exclusion (Case-insensitive)
-
-These folder names are excluded from sub-project detection:
+### 7.7 Non-CR Project Folder
 
 ```
-doc, docs, document, documents,
-bak, backup, before, after,
-script, scripts, cicd,
-log, logs, temp, tmp, archive
+{ROOT}\\{APPCODE}\\{YEAR}\\Non-CR\\{PROJECT_NAME}\\
 ```
 
-Folders matching this list appear as normal folder entries in the file browser, not as sub-projects.
+`project_type = NON_CR`. No state folders; state in `project_data.json` (`non_cr_state`).
+Non-CR state machine: PLANNING -> IN_PROGRESS -> DONE (with DONE -> IN_PROGRESS reopen).
+No CR Number, no Drone Tickets, no `_cr-docs/`.
 
-### 7.7 Folder Name Validation
+### 7.8 Organizational Folder Exclusion
 
-Reject names containing: `\ / : * ? " < > |`
+Excluded from drone detection: `doc, docs, document, documents, bak, backup, before, after, script, scripts, cicd, log, logs, temp, tmp, archive` + `_cr-docs`.
 
-Also reject:
+### 7.9 CICD Folder
 
-- Empty string.
-- Trailing space or dot.
-- Duplicate name in target parent folder.
-- Windows reserved device names: `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`.
+`{ROOT}/{APPCODE}/CICD/` (per-appcode, default) or `{ROOT}/CICD/` (shared root, optional).
+Configurable via `appcode.json`. Piece A creates empty; Piece D adds clone helper.
 
-Frontend disables Save in real-time while invalid. Backend enforces the same validation as authoritative guard.
+### 7.10 Folder Name Validation
 
----
 
 ## 8. Data Models
 

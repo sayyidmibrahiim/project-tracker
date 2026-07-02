@@ -14,6 +14,9 @@ def _api_with_root(tmp_path: Path):
 
     root = tmp_path / "root"
     root.mkdir()
+    appcode = root / "MYAPP"
+    appcode.mkdir()
+    (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
     settings = SettingsStore(config_dir=tmp_path / "config")
     settings.write(replace(settings.read(), root_folder=root))
     return app_web.create_js_api(settings_store=settings), root
@@ -30,16 +33,16 @@ def test_year_create_makes_year_and_state_folders(tmp_path: Path) -> None:
     api, root = _api_with_root(tmp_path)
     result = api.year_create("2027")
     assert result["ok"] is True
-    year_dir = root / "2027"
+    year_dir = root / "MYAPP" / "2027"
     assert year_dir.is_dir()
     for state in ProjectState:
-        assert (year_dir / state.value).is_dir()
+        assert (year_dir / "CR" / state.value).is_dir()
     assert "2027" in api.year_list()["data"]
 
 
 def test_year_create_existing_folder_fails(tmp_path: Path) -> None:
     api, root = _api_with_root(tmp_path)
-    (root / "2028").mkdir()
+    (root / "MYAPP" / "2028").mkdir()
     result = api.year_create("2028")
     assert result["ok"] is False
     assert result["error"]["code"] == "YEAR_CREATE_FAILED"

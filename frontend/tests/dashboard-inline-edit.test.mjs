@@ -131,12 +131,9 @@ test("Header no longer renders unused All CR filter dropdown", () => {
   assert.doesNotMatch(HEADER, /aria-label="Filter"/);
 });
 
-test("Sidebar is bottom dock with activity-hide notifications", () => {
-  const SIDEBAR = readFileSync(resolve(__dirname, "../src/lib/components/Sidebar.svelte"), "utf8");
-  assert.match(SIDEBAR, /dock-hover-zone/);
-  assert.match(SIDEBAR, /hidden-by-activity/);
-  assert.match(SIDEBAR, /handleGlobalActivity/);
-  assert.match(SIDEBAR, /dock-notification-popover/);
-  assert.match(SIDEBAR, /unreadCount/);
-  assert.doesNotMatch(SIDEBAR, /collapseBtn/);
+test("TitleBar renders notification state in the chrome", () => {
+  const TITLE_BAR = readFileSync(resolve(__dirname, "../src/lib/components/TitleBar.svelte"), "utf8");
+  assert.match(TITLE_BAR, /unreadCount/);
+  assert.match(TITLE_BAR, /notif-badge/);
+  assert.match(TITLE_BAR, /Notifications/);
 });

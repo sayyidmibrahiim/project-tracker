@@ -73,7 +73,10 @@ export interface DashboardProject {
   end_datetime: string | null;
   t10_status: string;
   drone_ticket_count: number;
-  subprojects: string[];
+  appcode: string;
+  project_type: "CR" | "NON_CR";
+  non_cr_state: "PLANNING" | "IN_PROGRESS" | "DONE" | null;
+  drones: string[];
   updated_at: string | null;
   scanned_at: string | null;
   drone_tickets: DashboardRowDrone[];
@@ -131,8 +134,11 @@ export interface ProjectDetail {
   drone_tickets: DroneTicket[];
   implementation_plan?: string | null;
   history?: HistoryEntry[];
-  is_subproject?: boolean;
-  subprojects?: string[];
+  appcode?: string;
+  project_type?: "CR" | "NON_CR";
+  non_cr_state?: "PLANNING" | "IN_PROGRESS" | "DONE" | null;
+  drones?: string[];
+  drone_paths?: string[];
 }
 
 /** Mirrors HistoryEntry metadata rows returned by project_get. */
@@ -150,6 +156,15 @@ export interface DroneTicket {
   drone_ticket?: string;
   drone_state: string;
   owner: string;
+}
+
+/** Mirrors AppCodeEntry from infrastructure.filesystem. */
+export interface AppCode {
+  name: string;
+  path: string;
+  display_name: string;
+  cicd_location: "per_appcode" | "shared_root";
+  cicd_shared_path: string | null;
 }
 
 /** Mirrors project row returned by project_list. */

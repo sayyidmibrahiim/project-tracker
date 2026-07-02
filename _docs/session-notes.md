@@ -8,7 +8,7 @@
 
 ---
 
-**Now:** Production-readiness pass done on `general/global-plan`, pending user manual verify.
+**Now:** Appcode folder structure + CR/Non-CR project types implementation on `general/appcode-structure`. Piece A core domain + infrastructure layers done (Tasks 1-9). Bridge/app_web + frontend + existing test updates + docs in progress.
 
 Cross-menu fix sweep (one-time branch scope override approved by user):
 
@@ -18,11 +18,11 @@ Cross-menu fix sweep (one-time branch scope override approved by user):
 - Second Brain: wired search/sort/type/date filters to real filesystem notes; added Link Bank export/import/rename/restore.
 - Settings: removed Theme switch (PRD = fixed theme); added T-10/numeric validation, trailing-slash guard, restart-required notice.
 
-**Next:** User manual verify across all menus. Then Windows runtime verification + packaging (needs real Windows).
+**Next:** Complete Tasks 8 (bridge/app_web), 10 (frontend), 11 (existing tests), 12 (docs) for Piece A.
 
 **Blocked:** None in code. Windows runtime + packaging need a real Windows machine.
 
-**active_menu:** general/global-plan (cross-menu sweep)
+**active_menu:** general/appcode-structure
 
 ---
 
