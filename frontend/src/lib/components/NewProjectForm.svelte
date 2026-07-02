@@ -1,35 +1,35 @@
 <script lang="ts">
   /**
-   * NEW_PROJECT create form — PRD §12.4.
+   * NEW_PROJECT create form — PRD §12.4 (Piece A).
    *
-   * Minimal create flow that matches the backend `project_create` contract,
-   * which accepts only `project_name` + `year` (creating
-   * {ROOT}/{YEAR}/UAT_PREPARE/{NAME}/ with default metadata). The project name
-   * is validated in realtime via the `util_validate_windows_folder_name` bridge;
-   * Save is disabled while the name is empty or invalid. On success the parent
-   * navigates to SHOW_EDIT for the new project, where the optional fields (CR
-   * link, drone, implementation plan) are already editable.
-   *
-   * Deviation from PRD §12.4: the optional CR/drone/plan/schedule fields are not
-   * collected here because `project_create` ignores them; they are filled in the
-   * detail screen the user lands on. Schedule (start/end) has no editor anywhere
-   * yet (pre-existing gap, tracked in the parity matrix).
+   * Project Type radio (CR / Non-CR only), appcode dropdown with inline "+"
+   * create, and optional start/end datetime. Drone creation is lazy (done in
+   * Project Details), so this form never sends drone_name.
    */
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
+  import type { AppCode } from "../types";
 
   interface Props {
     yearOptions: string[];
     defaultYear: string;
-    defaultAppcode: string;
     onCancel: () => void;
     onCreated: (projectPath: string, appcode: string) => void;
   }
-  let { yearOptions, defaultYear, defaultAppcode, onCancel, onCreated }: Props = $props();
+  let { yearOptions, defaultYear = "", onCancel, onCreated }: Props = $props();
 
+  type ProjectTypeChoice = "CR" | "NON_CR";
+  let projectType = $state<ProjectTypeChoice>("CR");
   let name = $state("");
-  let appcode = $state(untrack(() => defaultAppcode));
+  let appcode = $state("");
   let year = $state(untrack(() => defaultYear || String(new Date().getFullYear())));
+  let appcodes = $state<AppCode[]>([]);
+  let showAppcodeCreate = $state(false);
+  let newAppcode = $state("");
+  let appcodeError = $state("");
+  let addingAppcode = $state(false);
+  let startDatetime = $state("");
+  let endDatetime = $state("");
   let nameValid = $state<boolean | null>(null);
   let nameError = $state("");
   let busy = $state(false);
@@ -37,7 +37,14 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const yearChoices = $derived(yearOptions.length > 0 ? yearOptions : [String(new Date().getFullYear())]);
-  const canSave = $derived(!busy && appcode.trim().length > 0 && year.trim().length > 0 && name.trim().length > 0 && nameValid !== false);
+  const targetSegment = $derived(projectType === "NON_CR" ? "Non-CR" : "CR/UAT_PREPARE");
+  const canSave = $derived(
+    !busy &&
+      appcode.trim().length > 0 &&
+      year.trim().length > 0 &&
+      name.trim().length > 0 &&
+      nameValid !== false,
+  );
 
   function onNameInput() {
     createError = "";
@@ -49,7 +56,6 @@
       return;
     }
     if (!isPywebviewReady()) {
-      // No bridge in browser preview — defer to backend validation on create.
       nameValid = null;
       nameError = "Name is validated when you create (desktop app).";
       return;
@@ -71,6 +77,38 @@
     }, 250);
   }
 
+  async function loadAppcodes() {
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<AppCode[]>("appcode_list");
+    if (!resp.ok || !resp.data) return;
+    appcodes = resp.data;
+  }
+
+  onMount(loadAppcodes);
+
+  async function addAppcode() {
+    appcodeError = "";
+    const candidate = newAppcode.trim();
+    if (!candidate || busy || addingAppcode) return;
+    if (!isPywebviewReady()) {
+      appcodeError = "pywebview bridge unavailable. Cannot create appcode in browser preview.";
+      return;
+    }
+    addingAppcode = true;
+    const resp = await callBridge<AppCode>("appcode_add", candidate);
+    addingAppcode = false;
+    if (!resp.ok || !resp.data) {
+      appcodeError = resp.ok ? "Failed to create appcode." : resp.error.message;
+      return;
+    }
+    if (!appcodes.some((item) => item.name === resp.data!.name)) {
+      appcodes = [...appcodes, resp.data].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    appcode = resp.data.name;
+    newAppcode = "";
+    showAppcodeCreate = false;
+  }
+
   async function create() {
     const candidate = name.trim();
     if (!candidate || nameValid === false || busy) return;
@@ -83,12 +121,15 @@
       return;
     }
     const currentAppcode = appcode.trim();
-    const resp = await callBridge<{ project_path: string }>("project_create", {
+    const payload: Record<string, string> = {
       appcode: currentAppcode,
       project_name: candidate,
       year,
-      project_type: "CR",
-    });
+      project_type: projectType,
+    };
+    if (startDatetime.trim()) payload.start_datetime = startDatetime.trim();
+    if (endDatetime.trim()) payload.end_datetime = endDatetime.trim();
+    const resp = await callBridge<{ project_path: string }>("project_create", payload);
     busy = false;
     if (!resp.ok) {
       createError = resp.error.message;
@@ -109,21 +150,54 @@
   </div>
 
   <p class="np-hint">
-    Creates <code>{`{root}`}/{appcode.trim() || "{appcode}"}/{year || "{year}"}/UAT_PREPARE/{name.trim() || "{name}"}</code>. CR link,
-    drone tickets, and implementation plan are set on the next screen.
+    Creates <code>{`{root}`}/{appcode.trim() || "{appcode}"}/{year || "{year}"}/{targetSegment}/{name.trim() || "{name}"}</code>. Drone tickets are added later in Project Details.
   </p>
 
-  <label class="np-field">
+  <div class="np-field">
+    <span class="np-label">Project Type</span>
+    <div class="np-radio-row" role="radiogroup" aria-label="Project Type">
+      <label class="np-radio"><input type="radio" bind:group={projectType} value="CR" disabled={busy} /> CR</label>
+      <label class="np-radio"><input type="radio" bind:group={projectType} value="NON_CR" disabled={busy} /> Non-CR</label>
+    </div>
+  </div>
+
+  <div class="np-field">
     <span class="np-label">Appcode</span>
-    <input
-      class="np-input"
-      type="text"
-      bind:value={appcode}
-      placeholder="e.g. SSID, BIFAST, SKN"
-      disabled={busy}
-      autocomplete="off"
-    />
-  </label>
+    <div class="np-inline-row">
+      <select class="np-input" bind:value={appcode} disabled={busy}>
+        <option value="" disabled>{appcodes.length === 0 ? "Select appcode or click +" : "Select appcode"}</option>
+        {#each appcodes as item}
+          <option value={item.name}>{item.display_name || item.name}</option>
+        {/each}
+      </select>
+      <button
+        class="np-add-btn"
+        type="button"
+        onclick={() => (showAppcodeCreate = !showAppcodeCreate)}
+        disabled={busy}
+        aria-label="Create appcode"
+        title="Create appcode"
+      >+</button>
+    </div>
+    {#if showAppcodeCreate}
+      <div class="np-inline-row">
+        <input
+          class="np-input"
+          type="text"
+          bind:value={newAppcode}
+          placeholder="New appcode name"
+          disabled={busy || addingAppcode}
+          autocomplete="off"
+        />
+        <button class="np-add-btn" type="button" onclick={addAppcode} disabled={busy || addingAppcode || newAppcode.trim().length === 0}>
+          {addingAppcode ? "…" : "Add"}
+        </button>
+      </div>
+    {/if}
+    {#if appcodeError}
+      <small class="np-msg np-err">{appcodeError}</small>
+    {/if}
+  </div>
 
   <label class="np-field">
     <span class="np-label">Project Name</span>
@@ -145,6 +219,17 @@
       <small class="np-msg np-ok">✓ Valid name</small>
     {/if}
   </label>
+
+  <div class="np-grid">
+    <label class="np-field">
+      <span class="np-label">Start datetime</span>
+      <input class="np-input" type="datetime-local" bind:value={startDatetime} disabled={busy} />
+    </label>
+    <label class="np-field">
+      <span class="np-label">End datetime</span>
+      <input class="np-input" type="datetime-local" bind:value={endDatetime} disabled={busy} />
+    </label>
+  </div>
 
   <label class="np-field">
     <span class="np-label">Year</span>
@@ -182,6 +267,14 @@
   .np-input.invalid { border-color:#DC2626; }
   .np-input:disabled { background:var(--color-workspace-panel); color:var(--color-muted); }
   .np-year { max-width:160px; cursor:pointer; }
+  .np-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .np-radio-row { display:flex; gap:14px; }
+  .np-radio { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--color-ink); cursor:pointer; }
+  .np-radio input { accent-color:var(--color-dbs-red); }
+  .np-inline-row { display:flex; gap:6px; }
+  .np-add-btn { flex:0 0 auto; height:30px; min-width:34px; padding:0 8px; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink); font-size:13px; font-weight:900; cursor:pointer; }
+  .np-add-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .np-add-btn:disabled { opacity:0.5; cursor:not-allowed; }
   .np-msg { font-size:10px; font-weight:800; }
   .np-err { color:#DC2626; }
   .np-ok { color:#15803D; }

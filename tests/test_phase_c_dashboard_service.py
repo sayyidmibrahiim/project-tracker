@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, ProjectState, ProjectType
 from core.models import ProjectMetadata
 from core.rules import extract_drone_ticket
 from infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
@@ -38,6 +39,8 @@ def _project_row(
     drone_tickets_json: str = "[]",
     drone_paths_json: str = "[]",
     t10_status: str = "UNKNOWN",
+    project_type: ProjectType = ProjectType.CR,
+    created_at: datetime | None = None,
 ) -> CachedProjectRow:
     return CachedProjectRow(
         project_path=project_path,
@@ -50,6 +53,8 @@ def _project_row(
         drone_tickets_json=drone_tickets_json,
         drone_paths_json=drone_paths_json,
         t10_status=t10_status,
+        project_type=project_type,
+        created_at=created_at,
     )
 
 
@@ -83,6 +88,7 @@ def test_list_projects_returns_cache_backed_dashboard_project_dtos(tmp_path: Pat
             end_datetime=None,
             t10_status="PASS",
             drone_ticket_count=1,
+            created_at=None,
             updated_at=None,
             scanned_at=None,
             drones=(),
@@ -179,6 +185,7 @@ def test_get_summary_counts_project_states_cr_states_t10_and_drone_ticket_totals
         total_projects=3,
         by_project_state={ProjectState.UAT_PREPARE: 1, ProjectState.PROD_READY: 2},
         by_cr_state={CRState.APPROVED: 2, CRState.PENDING_SUBMISSION: 1},
+        by_project_type={ProjectType.CR: 3},
         by_t10_status={"PASS": 1, "FAIL": 1, "UNKNOWN": 1},
         total_drone_tickets=3,
     )
@@ -207,6 +214,7 @@ def test_empty_cache_returns_empty_dashboard_and_zero_summary(tmp_path: Path) ->
             total_projects=0,
             by_project_state={},
             by_cr_state={},
+            by_project_type={},
             by_t10_status={},
             total_drone_tickets=0,
         ),
@@ -232,7 +240,40 @@ def test_dashboard_summary_mappings_are_runtime_immutable(tmp_path: Path) -> Non
     with pytest.raises(TypeError):
         summary.by_cr_state[CRState.APPROVED] = 99
     with pytest.raises(TypeError):
+        summary.by_project_type[ProjectType.CR] = 99
+    with pytest.raises(TypeError):
         summary.by_t10_status["PASS"] = 99
+
+
+def test_dashboard_project_includes_created_at(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    created = datetime(2026, 7, 2, 18, 0, tzinfo=timezone.utc)
+    project_path = tmp_path / "CR" / "2026" / ProjectState.UAT_PREPARE.value / "CREATED"
+    cache.upsert_project(_project_row(project_path, project_name="CREATED", created_at=created))
+
+    project = DashboardService(cache).list_projects("2026")[0]
+
+    assert project.created_at == created
+
+
+
+def test_dashboard_summary_counts_project_types(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    cache.upsert_project(_project_row(tmp_path / "CR" / "2026" / ProjectState.UAT_PREPARE.value / "A"))
+    cache.upsert_project(
+        _project_row(
+            tmp_path / "Non-CR" / "2026" / "B",
+            project_state=None,
+            project_name="B",
+            project_type=ProjectType.NON_CR,
+        )
+    )
+
+    summary = DashboardService(cache).get_summary("2026")
+
+    assert summary.by_project_type == {ProjectType.CR: 1, ProjectType.NON_CR: 1}
+    assert all(isinstance(key, ProjectType) for key in summary.by_project_type)
+
 
 
 def test_dashboard_data_projects_are_runtime_immutable(tmp_path: Path) -> None:

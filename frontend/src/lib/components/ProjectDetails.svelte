@@ -12,7 +12,7 @@
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, defaultAppcode = "", onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; defaultAppcode?: string; onNavigateDashboard?: () => void } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -23,7 +23,7 @@
   let projects: ProjectRow[] = $state([]);
   let selectedPath: string = $state("");
   let detail: ProjectDetail | null = $state(null);
-  let isSubproject: boolean = $state(false);
+  let isNonCr: boolean = $state(false);
   let selectedSubproject: string = $state("all");
   let drones: string[] = $state([]);
   let files: FileRow[] = $state([]);
@@ -72,6 +72,18 @@
   type CrStateSave = "idle" | "saving" | "success" | "error";
   let crStateSaveState: CrStateSave = $state("idle");
   let crStateSaveError: string = $state("");
+
+  // ── Non-CR state edit state (PRD §12 / Piece A) ──
+  const NON_CR_STATE_OPTIONS = ["PLANNING", "IN_PROGRESS", "DONE"];
+  let nonCrStateEdit: string = $state("PLANNING");
+  type NonCrStateSave = "idle" | "saving" | "success" | "error";
+  let nonCrStateSaveState: NonCrStateSave = $state("idle");
+  let nonCrStateSaveError: string = $state("");
+  function nonCrStateLabel(value: string | null | undefined): string {
+    if (value === "IN_PROGRESS") return "In Progress";
+    if (value === "DONE") return "Done";
+    return "Planning";
+  }
 
   // ── Notes state ──
   // Notes editing now lives in NotesEditor.svelte (autosave + toolbar + preview,
@@ -199,10 +211,11 @@
   async function selectProject(path: string) {
     selectedPath = path;
     detailState = "loading";
-    detail = null; isSubproject = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
+    detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
+    nonCrStateEdit = "PLANNING"; nonCrStateSaveState = "idle"; nonCrStateSaveError = "";
     selectedSubprojectRow = null;
     droneLinkEdit = "";
     droneLinkBusy = false;
@@ -229,7 +242,7 @@
     ]);
 
     detail = dResp.ok ? (dResp.data ?? null) : null;
-    isSubproject = detail ? detail.project_type === "NON_CR" : false;
+    isNonCr = detail ? detail.project_type === "NON_CR" : false;
     drones = spResp.ok ? (spResp.data ?? []) : [];
     files = flResp.ok ? (flResp.data ?? []) : [];
     notes = ntResp.ok ? (ntResp.data ?? "") : "";
@@ -241,6 +254,7 @@
       crLinkCopied = false;
     }
     if (detail) crStateEdit = detail.cr_state || "";
+    if (detail) nonCrStateEdit = detail.non_cr_state ?? "PLANNING";
     if (detail) syncMetadataDrafts(detail);
 
     if (!dResp.ok) {
@@ -372,6 +386,30 @@
     pendingReopen = null;
     // Reset the dropdown back to the current detail state so the UI stays honest.
     if (detail) crStateEdit = detail.cr_state;
+  }
+
+  async function onNonCrStateChange(next: string) {
+    if (!selectedPath || !isPywebviewReady()) {
+      nonCrStateSaveError = "pywebview bridge unavailable.";
+      nonCrStateSaveState = "error";
+      return;
+    }
+    nonCrStateEdit = next;
+    nonCrStateSaveState = "saving";
+    nonCrStateSaveError = "";
+    const resp = await callBridge("set_non_cr_state", selectedPath, next);
+    if (!resp.ok) {
+      nonCrStateSaveError = resp.error.message;
+      nonCrStateSaveState = "error";
+      return;
+    }
+    if (resp.data && (resp.data as any).project_path) {
+      selectedPath = (resp.data as any).project_path;
+    }
+    nonCrStateSaveState = "success";
+    addToast("Non-CR state saved", "success", 2000);
+    setTimeout(() => { if (nonCrStateSaveState === "success") nonCrStateSaveState = "idle"; }, 2500);
+    await refreshDetail();
   }
 
   async function saveMetadataIfChanged() {
@@ -621,7 +659,7 @@
   // After project_create succeeds, leave NEW_PROJECT mode, reload the list, and
   // open the freshly created project in SHOW_EDIT (PRD §12.4 navigation).
   async function onProjectCreated(path: string, appcode: string) {
-    defaultAppcode = appcode;
+    void appcode;
     mode = "browse";
     await loadProjects();
     if (path) await selectProject(path);
@@ -680,9 +718,9 @@
         </select>
       </label>
       <label class="pd-command-field pd-command-project" for="pd-drone-select">
-        <span>Sub Project</span>
+        <span>Drone</span>
         <select id="pd-drone-select" class="pd-control" bind:value={selectedSubproject} disabled={!selectedPath || drones.length === 0 || mode === "new"}>
-          <option value="all">All Sub Projects</option>
+          <option value="all">All Drones</option>
           {#each drones as sp}
             <option value={sp}>{sp}</option>
           {/each}
@@ -704,7 +742,6 @@
         <NewProjectForm
           yearOptions={yearOptions}
           defaultYear={yearFilter !== "all" ? yearFilter : (yearOptions[0] ?? "")}
-          defaultAppcode={defaultAppcode}
           onCancel={() => (mode = "browse")}
           onCreated={onProjectCreated}
         />
@@ -731,11 +768,31 @@
               <h4 class="pd-section-title">Project Identity</h4>
               <div class="pd-meta-edit">
                 <label class="pd-meta-label" for="meta-name">Project Name</label>
-                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
+                <input id="meta-name" class="cr-link-input" bind:value={metaNameEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                 <div class="pd-meta-datetime-row">
+                  {#if isNonCr}
+                    <label class="pd-meta-field" for="meta-non-cr-state">
+                      <span class="pd-meta-label">Non-CR state</span>
+                      <select id="meta-non-cr-state" class="cr-state-select" value={nonCrStateEdit} onchange={(e) => onNonCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={nonCrStateSaveState === "saving"}>
+                        {#each NON_CR_STATE_OPTIONS as opt}
+                          <option value={opt}>{nonCrStateLabel(opt)}</option>
+                        {/each}
+                      </select>
+                      {#if nonCrStateSaveState === "saving"}
+                        <span class="cr-link-feedback">
+                          <svg class="pd-spinner" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                          Saving…
+                        </span>
+                      {:else if nonCrStateSaveState === "success"}
+                        <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
+                      {:else if nonCrStateSaveState === "error"}
+                        <span class="cr-link-feedback cr-link-err">✗ {nonCrStateSaveError}</span>
+                      {/if}
+                    </label>
+                  {:else}
                   <div class="pd-meta-field">
                     <span class="pd-meta-label">CR Number</span>
-                    {#if crLinkEditing && !isSubproject}
+                    {#if crLinkEditing}
                       <input
                         id="meta-cr-link"
                         class="cr-link-input"
@@ -760,20 +817,15 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Open CR link in browser</title><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                           </button>
                         {/if}
-                        {#if !isSubproject}
-                          <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                          </button>
-                        {/if}
+                        <button class="pd-icon-btn" type="button" onclick={editCrLink} aria-label="Edit CR link">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="pd-icon"><title>Edit CR link</title><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
                       </div>
-                    {/if}
-                    {#if isSubproject}
-                      <span class="pd-inherited-label">(Inherited from Main Project)</span>
                     {/if}
                   </div>
                   <label class="pd-meta-field" for="meta-cr-state">
                     <span class="pd-meta-label">CR State</span>
-                    <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving" || isSubproject}>
+                    <select id="meta-cr-state" class="cr-state-select" value={crStateEdit} onchange={(e) => onCrStateChange((e.currentTarget as HTMLSelectElement).value)} disabled={crStateSaveState === "saving"}>
                       {#each legalCrOptionsFor(detail.cr_state) as opt}
                         <option value={opt} disabled={opt === "IN-PROGRESS"}>{opt}</option>
                       {/each}
@@ -789,6 +841,7 @@
                       <span class="cr-link-feedback cr-link-err">✗ {crStateSaveError}</span>
                     {/if}
                   </label>
+                  {/if}
                 </div>
               </div>
             </div>
@@ -799,18 +852,15 @@
                 <div class="pd-meta-datetime-row">
                   <label class="pd-meta-field" for="meta-start">
                     <span class="pd-meta-label">Start datetime</span>
-                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
+                    <input id="meta-start" class="cr-link-input" type="datetime-local" bind:value={metaStartEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                   </label>
                   <label class="pd-meta-field" for="meta-end">
                     <span class="pd-meta-label">End datetime</span>
-                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving" || isSubproject} />
+                    <input id="meta-end" class="cr-link-input" type="datetime-local" bind:value={metaEndEdit} onblur={saveMetadataIfChanged} disabled={metaSaveState === "saving"} />
                   </label>
                 </div>
-                {#if isSubproject}
-                  <span class="pd-inherited-label">(Inherited from Main Project)</span>
-                {/if}
                 <div class="pd-notes-actions">
-                  <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail) || isSubproject}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
+                  <button class="cr-link-save-btn" onclick={saveMetadata} disabled={metaSaveState === "saving" || metadataUnchanged(detail)}>{#if metaSaveState === "saving"}⏳ Saving…{:else}Save identity + schedule{/if}</button>
                   {#if metaSaveState === "success"}
                     <span class="cr-link-feedback cr-link-ok">✓ Saved</span>
                   {:else if metaSaveState === "error"}
@@ -820,13 +870,13 @@
               </div>
             </div>
 
-            {#if !isSubproject}
+            {#if !isNonCr}
               <div class="pd-section">
                 <div class="pd-section-head">
-                  <h4 class="pd-section-title">Sub Project (DRONE)</h4>
+                  <h4 class="pd-section-title">Drone Tickets</h4>
                   <div class="pd-inline-create">
-                    <input class="pd-control" placeholder="Sub project name…" bind:value={newSubprojectName} disabled={droneBusy} />
-                    <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={droneBusy || !newSubprojectName.trim()}>Add Sub Project</button>
+                    <input class="pd-control" placeholder="Drone name…" bind:value={newSubprojectName} disabled={droneBusy} />
+                    <button class="pd-command-btn" type="button" onclick={addSubproject} disabled={droneBusy || !newSubprojectName.trim()}>Add Drone Ticket</button>
                   </div>
                 </div>
                 <DroneTable
@@ -1000,6 +1050,5 @@
   .pd-drone-detail-title { margin: 0; font-size: 11px; font-weight: 800; color: var(--color-ink-strong); }
   .pd-history-scroll { max-height: 280px; overflow-y: auto; padding-right: 4px; }
   .pd-spinner { animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 4px; }
-  .pd-inherited-label { font-size: 10px; color: var(--color-muted); font-style: italic; margin-top: 2px; }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

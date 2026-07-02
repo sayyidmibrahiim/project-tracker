@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 import tempfile
 import uuid
@@ -13,8 +14,8 @@ from urllib.parse import urlparse
 
 import webview
 
-from core.enums import CRState, DroneState, ProjectState
-from core.models import AppSettings, ProjectMetadata, local_now
+from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
+from core.models import AppCodeConfig, AppSettings, DroneTicket, ProjectMetadata, local_now
 from core.rules import TransitionGuardResult, extract_cr_number, extract_drone_ticket
 from infrastructure.cache_db import CacheDb, rebuild_year_cache
 from infrastructure import filesystem, outlook_client
@@ -22,7 +23,9 @@ from infrastructure.filesystem import (
     create_directory,
     create_file,
     create_file_from_template,
+    discover_drone_paths,
     discover_subproject_paths,
+    ensure_appcode_year_structure,
     rename_file,
 )
 from infrastructure.link_bank_store import LinkBankStore
@@ -108,6 +111,15 @@ def _folder_state_for_path(path: Path) -> ProjectState | None:
     return None
 
 
+def _appcode_from_project_path(path: Path) -> str:
+    parts = list(Path(path).parts)
+    for marker in ("CR", "Non-CR"):
+        if marker in parts:
+            index = parts.index(marker)
+            return parts[index - 2] if index >= 2 else ""
+    return ""
+
+
 def create_js_api(
     *,
     db_path: Path | None = None,
@@ -189,17 +201,17 @@ def create_js_api(
                 for year_name in years:
                     rebuild_year_cache(self._cache, appcode_path / year_name, self._metadata_store)
 
-        def list_projects(self, year: str | None = None) -> object:
+        def list_projects(self, year: str | None = None, appcode: str | None = None) -> object:
             self._rebuild(year)
-            return self._dashboard.list_projects(year)
+            return self._dashboard.list_projects(year, appcode)
 
-        def get_summary(self, year: str | None = None) -> object:
+        def get_summary(self, year: str | None = None, appcode: str | None = None) -> object:
             self._rebuild(year)
-            return self._dashboard.get_summary(year)
+            return self._dashboard.get_summary(year, appcode)
 
-        def get_dashboard(self, year: str | None = None) -> object:
+        def get_dashboard(self, year: str | None = None, appcode: str | None = None) -> object:
             self._rebuild(year)
-            return self._dashboard.get_dashboard(year)
+            return self._dashboard.get_dashboard(year, appcode)
 
     # ── services ─────────────────────────────────────────────────────
     _metadata_store = MetadataStore()
@@ -388,8 +400,8 @@ def create_js_api(
             self._cache_db = cache_db
             self._notification_service = notification_service
 
-        def list_projects(self, year: str | None = None) -> object:
-            return self._dashboard.list_projects(year)
+        def list_projects(self, year: str | None = None, appcode: str | None = None) -> object:
+            return self._dashboard.list_projects(year, appcode)
 
         def _evaluate_h10_reminders(self, project_paths: list[Path]) -> None:
             """Emit/dedup/re-arm H-10 reminders for the visible projects.
@@ -452,10 +464,13 @@ def create_js_api(
             if metadata is None:
                 raise FileNotFoundError(f"Project metadata not found: {path}")
 
-            project_state = _folder_state_for_path(path) or ProjectState.UAT_PREPARE
+            raw_project_type = getattr(metadata, "project_type", None) or filesystem.project_type_from_path(path)
+            project_type = raw_project_type if isinstance(raw_project_type, ProjectType) else ProjectType(str(raw_project_type))
+            is_non_cr = project_type == ProjectType.NON_CR
+            project_state = None if is_non_cr else (_folder_state_for_path(path) or ProjectState.UAT_PREPARE)
 
-            # Sub-project detection: parent contains project_data.json
-            is_subproject = (path.parent / "project_data.json").is_file()
+            # Sub-project detection: parent contains project_data.json. Non-CR projects are never drones.
+            is_subproject = (not is_non_cr) and (path.parent / "project_data.json").is_file()
 
             if is_subproject:
                 parent_path = path.parent
@@ -466,17 +481,27 @@ def create_js_api(
                     metadata.start_datetime = parent_meta.start_datetime
                     metadata.end_datetime = parent_meta.end_datetime
                 drone_tickets = []
-                subprojects_list = []
+                drone_paths = []
+            elif is_non_cr:
+                drone_tickets = []
+                drone_paths = []
             else:
                 drone_tickets = getattr(metadata, "drone_tickets", None) or []
-                subprojects_list = [p.name for p in discover_subproject_paths(path)]
+                drone_paths = discover_drone_paths(path)
 
             cr_number = extract_cr_number(metadata.cr_link)
+            drone_names = [p.name for p in drone_paths]
+            project_state_value = project_state.value if project_state is not None else None
 
             return {
                 "project_name": metadata.project_name or path.name,
                 "project_path": str(path),
-                "project_state": project_state.value,
+                "project_state": project_state_value,
+                "appcode": _appcode_from_project_path(path),
+                "project_type": project_type.value,
+                "non_cr_state": metadata.non_cr_state.value if metadata.non_cr_state else None,
+                "drones": drone_names,
+                "drone_paths": [str(p) for p in drone_paths],
                 "cr_number": cr_number or "",
                 "cr_link": metadata.cr_link or "",
                 "cr_state": metadata.cr_state.value,
@@ -497,12 +522,12 @@ def create_js_api(
                     for t in drone_tickets
                 ],
                 "is_subproject": is_subproject,
-                "subprojects": subprojects_list
+                "subprojects": drone_names,
             }
 
         def list_drones(self, project_path: Path) -> object:
             """Return drone folder names under project_path."""
-            return [p.name for p in discover_subproject_paths(Path(project_path))]
+            return [p.name for p in discover_drone_paths(Path(project_path))]
 
         def list_subprojects(self, project_path: Path) -> object:
             """Backward-compatible alias for list_drones."""
@@ -771,37 +796,55 @@ def create_js_api(
 
             appcode_name = str(data.get("appcode", "")).strip()
             project_type_str = str(data.get("project_type", "CR")).strip()
-            drone_name = str(data.get("drone_name", "")).strip()
             if not appcode_name:
                 raise ValueError("Appcode is required")
-            from core.enums import NonCrState, ProjectType
-            from core.models import DroneTicket
-            from infrastructure.filesystem import _scaffold_drone
+            # Optional Piece A fields. Drone is lazy (created later in Project Details),
+            # so any legacy drone_name from old callers is ignored.
+            start_dt = _parse_optional_datetime(data.get("start_datetime"))
+            end_dt = _parse_optional_datetime(data.get("end_datetime"))
+            cr_link = str(data.get("cr_link", "")).strip()
+            implementation_plan = str(data.get("implementation_plan", "")).strip()
             appcode_path = settings.root_folder / appcode_name
             appcode_path.mkdir(parents=True, exist_ok=True)
             year_path = appcode_path / year
             project_type = ProjectType(project_type_str)
             if project_type == ProjectType.CR:
-                project_dir = year_path / "UAT_PREPARE" / name
+                ensure_appcode_year_structure(appcode_path, int(year))
+                project_dir = year_path / "CR" / "UAT_PREPARE" / name
                 if project_dir.exists():
                     raise ValueError(f"Project folder already exists: {project_dir}")
                 project_dir.mkdir(parents=True)
                 now = local_now()
-                metadata = ProjectMetadata(project_name=name, project_type=ProjectType.CR, created_at=now, updated_at=now)
+                metadata = ProjectMetadata(
+                    project_name=name,
+                    project_type=ProjectType.CR,
+                    created_at=now,
+                    updated_at=now,
+                    start_datetime=start_dt,
+                    end_datetime=end_dt,
+                    cr_link=cr_link,
+                    implementation_plan=implementation_plan,
+                )
                 (project_dir / "notes.md").touch()
                 (project_dir / "_cr-docs").mkdir()
-                if drone_name:
-                    _scaffold_drone(project_dir, drone_name)
-                    metadata.drone_tickets.append(DroneTicket(subfolder_name=drone_name))
                 self._metadata_store.write(project_dir, metadata)
                 return {"project_path": str(project_dir), "project_name": name, "project_state": "UAT_PREPARE", "project_type": "CR", "cr_state": metadata.cr_state.value}
             else:
+                ensure_appcode_year_structure(appcode_path, int(year))
                 project_dir = year_path / "Non-CR" / name
                 if project_dir.exists():
                     raise ValueError(f"Project folder already exists: {project_dir}")
                 project_dir.mkdir(parents=True)
                 now = local_now()
-                metadata = ProjectMetadata(project_name=name, project_type=ProjectType.NON_CR, non_cr_state=NonCrState.PLANNING, created_at=now, updated_at=now)
+                metadata = ProjectMetadata(
+                    project_name=name,
+                    project_type=ProjectType.NON_CR,
+                    non_cr_state=NonCrState.PLANNING,
+                    created_at=now,
+                    updated_at=now,
+                    start_datetime=start_dt,
+                    end_datetime=end_dt,
+                )
                 (project_dir / "notes.md").touch()
                 self._metadata_store.write(project_dir, metadata)
                 return {"project_path": str(project_dir), "project_name": name, "project_type": "NON_CR", "non_cr_state": "PLANNING"}
@@ -810,8 +853,24 @@ def create_js_api(
 
         def _rebuild_cache_for(self, moved_path: Path) -> None:
             """Rebuild the year cache after a successful transition (Req 4.11)."""
-            year_path = moved_path.parent.parent
+            year_path = moved_path.parent.parent.parent if moved_path.parent.parent.name == "CR" else moved_path.parent.parent
             rebuild_year_cache(self._cache_db, year_path, self._metadata_store)
+
+        def set_non_cr_state(self, project_path: Path, target_state: str) -> object:
+            """Set Non-CR state and rebuild appcode/year cache."""
+            path = Path(project_path)
+            moved = self._project_service.set_non_cr_state(
+                path,
+                NonCrState(str(target_state)),
+                self._settings_store.read(),
+            )
+            self._rebuild_cache_for(moved)
+            metadata = self._metadata_store.read(moved)
+            return {
+                "project_path": str(moved),
+                "project_type": "NON_CR",
+                "non_cr_state": metadata.non_cr_state.value if metadata and metadata.non_cr_state else None,
+            }
 
         def _run_transition(
             self,
@@ -982,7 +1041,9 @@ def create_js_api(
             path's parent (state) folder name; the backend is the authoritative
             guard regardless of the frontend lock model.
             """
-            state = ProjectState(Path(project_path).parent.name)
+            state = _folder_state_for_path(Path(project_path))
+            if state is None:
+                return ProjectState.UAT_PREPARE
             if state in (ProjectState.PROD_READY, ProjectState.IMPLEMENTED):
                 raise ValueError(
                     f"{action} is disabled while the project is in {state.value}"
@@ -1020,7 +1081,7 @@ def create_js_api(
             """
             path = Path(project_path)
             self._reject_if_locked(path, "Delete")
-            year_path = path.parent.parent
+            year_path = path.parent.parent.parent if path.parent.parent.name == "CR" else path.parent.parent
             self._project_service.delete_project(path)
             rebuild_year_cache(self._cache_db, year_path, self._metadata_store)
             return {"project_path": str(path), "deleted": True}
@@ -1029,9 +1090,21 @@ def create_js_api(
             """Delete a drone ticket by index or a drone folder by name."""
             if isinstance(drone, int):
                 return self.delete_drone_ticket(project_path, drone)
-            drone_path = Path(project_path) / drone
-            self._project_service.delete_subproject(drone_path)
-            return {"project_path": str(Path(project_path)), "drone": drone, "deleted": True}
+            project = Path(project_path)
+            drone_name = str(drone)
+            drone_path = project / drone_name
+            self._project_service.delete_drone(drone_path)
+            metadata = self._metadata_store.read(project)
+            if metadata is not None:
+                metadata.drone_tickets = [
+                    ticket
+                    for ticket in metadata.drone_tickets
+                    if (ticket.subfolder_name or "") != drone_name
+                ]
+                metadata.updated_at = local_now()
+                self._metadata_store.write(project, metadata)
+            self._rebuild_cache_for(project)
+            return {"project_path": str(project), "drone": drone_name, "deleted": True}
 
         def delete_subproject(self, project_path: Path, name: str) -> object:
             """Backward-compatible alias for delete_drone."""
@@ -1047,12 +1120,104 @@ def create_js_api(
             """Create a drone folder (UAT/PRD/notes.md) inside the project."""
             from infrastructure.filesystem import _scaffold_drone
             project = Path(project_path)
+            metadata = self._metadata_store.read(project)
+            if metadata is None:
+                raise FileNotFoundError(f"Project metadata not found: {project}")
             drone_path = _scaffold_drone(project, name)
+            if any((ticket.subfolder_name or "") == drone_path.name for ticket in metadata.drone_tickets):
+                raise ValueError(f"Drone ticket already exists: {drone_path.name}")
+            metadata.drone_tickets.append(DroneTicket(subfolder_name=drone_path.name))
+            metadata.updated_at = local_now()
+            self._metadata_store.write(project, metadata)
+            self._rebuild_cache_for(project)
             return {
                 "project_path": str(project),
                 "drone": drone_path.name,
                 "path": str(drone_path),
             }
+
+    # ── appcode service adapter (SettingsStore → appcode folders) ─────
+    class _AppCodeServiceAdapter:
+        """Appcode adapter backed by {root}/{appcode}/appcode.json."""
+
+        def __init__(self, settings_store: SettingsStore) -> None:
+            self._settings_store = settings_store
+
+        def _root(self) -> Path:
+            root = self._settings_store.read().root_folder
+            if root is None:
+                raise ValueError("Root folder is not configured")
+            root.mkdir(parents=True, exist_ok=True)
+            return root
+
+        @staticmethod
+        def _payload(entry: filesystem.AppCodeEntry) -> dict[str, object]:
+            config = entry.config
+            return {
+                "name": entry.name,
+                "path": str(entry.path),
+                "display_name": config.display_name or entry.name,
+                "cicd_location": config.cicd_location,
+                "cicd_shared_path": str(config.cicd_shared_path) if config.cicd_shared_path else None,
+            }
+
+        def _appcode_path(self, appcode: str) -> Path:
+            name = str(appcode).strip()
+            if not name:
+                raise ValueError("Appcode is required")
+            from core.rules import validate_windows_folder_name
+
+            validate_windows_folder_name(name)
+            return self._root() / name
+
+        def list_appcodes(self) -> object:
+            return [self._payload(entry) for entry in filesystem.discover_appcodes(self._root())]
+
+        def add_appcode(self, name: str) -> object:
+            appcode_path = self._appcode_path(name)
+            if appcode_path.exists() and (appcode_path / "appcode.json").exists():
+                raise ValueError(f"Appcode already exists: {appcode_path.name}")
+            appcode_path.mkdir(parents=True, exist_ok=True)
+            (appcode_path / "CICD").mkdir(exist_ok=True)
+            ensure_appcode_year_structure(appcode_path, local_now().year)
+            config = AppCodeConfig(display_name=appcode_path.name, created_at=local_now())
+            (appcode_path / "appcode.json").write_text(
+                json.dumps(config.to_dict(), indent=2),
+                encoding="utf-8",
+            )
+            return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=config))
+
+        def remove_appcode(self, name: str) -> object:
+            root = self._root()
+            appcode_path = self._appcode_path(name)
+            if not appcode_path.exists():
+                raise FileNotFoundError(f"Appcode not found: {appcode_path.name}")
+            filesystem.send_to_recycle_bin(appcode_path, base=root)
+            return {"name": appcode_path.name, "path": str(appcode_path), "deleted": True}
+
+        def get_appcode_config(self, appcode: str) -> object:
+            appcode_path = self._appcode_path(appcode)
+            config_path = appcode_path / "appcode.json"
+            if not config_path.is_file():
+                raise FileNotFoundError(f"Appcode config not found: {config_path}")
+            config = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=config))
+
+        def update_appcode_config(self, appcode: str, data: dict[str, object]) -> object:
+            appcode_path = self._appcode_path(appcode)
+            config_path = appcode_path / "appcode.json"
+            current = AppCodeConfig()
+            if config_path.is_file():
+                current = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            if "display_name" in data:
+                current.display_name = str(data.get("display_name") or "").strip() or appcode_path.name
+            if "cicd_location" in data:
+                current.cicd_location = str(data.get("cicd_location") or "per_appcode")
+            if "cicd_shared_path" in data:
+                shared = str(data.get("cicd_shared_path") or "").strip()
+                current.cicd_shared_path = Path(shared) if shared else None
+            config_path.write_text(json.dumps(current.to_dict(), indent=2), encoding="utf-8")
+            return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=current))
 
     # ── year service adapter (SettingsStore → year list) ──────────────
     class _YearServiceAdapter:
@@ -1092,8 +1257,7 @@ def create_js_api(
             year_dir = appcode_path / year
             if year_dir.exists():
                 raise ValueError(f"Year folder already exists: {year_dir}")
-            for state in ProjectState:
-                (year_dir / state.value).mkdir(parents=True, exist_ok=True)
+            ensure_appcode_year_structure(appcode_path, int(year))
             return {"appcode": appcode, "year": year, "path": str(year_dir)}
 
     # ── file service adapter (list / open / create / rename / delete) ─
@@ -1556,6 +1720,7 @@ def create_js_api(
         second_brain_service=second_brain_svc,
         scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
+        appcode_service=_AppCodeServiceAdapter(_settings_store),
         file_service=_FileServiceAdapter(_settings_store),
         notes_service=_NotesServiceAdapter(),
         outlook_service=_OutlookServiceAdapter(

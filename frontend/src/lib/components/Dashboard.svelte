@@ -1,6 +1,6 @@
 <script lang="ts">
   import { callBridge, isPywebviewReady, waitForPywebviewReady } from "../bridge";
-  import type { BridgeResponse, DashboardProject, DashboardSummary, DashboardRowDrone } from "../types";
+  import type { BridgeResponse, DashboardProject, DashboardSummary, DashboardRowDrone, AppCode } from "../types";
   import { BridgeErrorCode } from "../types";
   import { stateChipClass } from "../dashboardChips";
   import ConfirmModal from "./ConfirmModal.svelte";
@@ -33,7 +33,38 @@
   let loadState: LoadState = $state("idle");
   let errorMessage: string = $state("");
   let errorCode: string = $state("");
-  let activeStatus: string = $state("all");
+  // Piece A filters: 3 multi-select checklist dropdowns (OR within, AND across).
+  // Menu uses position:fixed (portal-style) so it escapes the header's overflow
+  // clipping — mirrors the DashboardRowMenu pattern.
+  type FilterKey = "cr" | "appcode" | "type";
+  let openFilter: FilterKey | null = $state(null);
+  let menuX = $state(0);
+  let menuY = $state(0);
+  let selectedCrStates = $state<string[]>(["all"]);
+  let selectedAppcodes = $state<string[]>(["all"]);
+  let selectedProjectTypes = $state<string[]>(["all"]);
+  let appcodes: AppCode[] = $state([]);
+
+  function toggleFilterMenu(key: FilterKey, triggerEl: HTMLElement | null) {
+    if (openFilter === key) {
+      openFilter = null;
+      return;
+    }
+    if (triggerEl) {
+      const r = triggerEl.getBoundingClientRect();
+      menuX = r.left;
+      menuY = r.bottom + 4;
+    }
+    openFilter = key;
+  }
+
+  function closeFilter() {
+    openFilter = null;
+  }
+
+  function onFilterKey(event: KeyboardEvent) {
+    if (event.key === "Escape") openFilter = null;
+  }
   let isBridgeUnavailable = $derived(errorCode === BridgeErrorCode.BRIDGE_UNAVAILABLE);
   let dashboardErrorTitle = $derived(isBridgeUnavailable ? "Open in Project Tracker desktop app" : "Dashboard could not load");
   let dashboardErrorDetail = $derived(isBridgeUnavailable
@@ -126,35 +157,73 @@
     const drones = p.drone_tickets ?? [];
     return !p.cr_link?.trim() || !p.start_datetime || !p.end_datetime || drones.some((d) => !d.drone_link?.trim());
   }
+  void projectNeedsReview; // ponytail: kept for future "needs review" filter; upgrade by wiring into a 4th dropdown.
 
-  // ── Status filter tabs (counts from real summary) ──
-  interface StatusTab { key: string; label: string; count: number }
-  let statuses: StatusTab[] = $derived.by(() => {
-    const by = summary?.by_project_state ?? {};
-    return [
-      { key: "all", label: "All", count: summary?.total_projects ?? projects.length },
-      { key: "UAT_PREPARE", label: "UAT Prepare", count: by["UAT_PREPARE"] ?? 0 },
-      { key: "PROD_READY", label: "Prod Ready", count: by["PROD_READY"] ?? 0 },
-      { key: "IMPLEMENTED", label: "Implemented", count: by["IMPLEMENTED"] ?? 0 },
-      { key: "POSTPONED", label: "Postponed", count: by["POSTPONED"] ?? 0 },
-      { key: "CANCELED", label: "Canceled", count: by["CANCELED"] ?? 0 },
-    ];
+  // ── Piece A filter dropdown option sets ──
+  const CR_STATE_FILTER_OPTIONS = [
+    "UAT_PREPARE", "PROD_READY", "IMPLEMENTED", "POSTPONED", "CANCELED",
+  ];
+  let appcodeFilterOptions = $derived.by(() => {
+    const fromProjects = projects
+      .map((p) => p.appcode)
+      .filter((value): value is string => !!value && value.trim().length > 0);
+    const fromStore = appcodes.map((a) => a.name);
+    return Array.from(new Set([...fromProjects, ...fromStore])).sort();
   });
-  const columns = ["No", "Project", "Sub Project", "Start", "End", "Drone Ticket", "Drone State", "CR Number", "CR State", "More"];
+  const PROJECT_TYPE_FILTER_OPTIONS = ["CR", "NON_CR"];
 
-  // ── Filter: status tab + search ──
+  const columns = ["No", "Project", "Drone", "Start", "End", "Drone Ticket", "Drone State", "CR Number", "CR State", "More"];
+
+  function includesFilter(selected: string[], value: string | null | undefined): boolean {
+    return selected.includes("all") || selected.length === 0 || (!!value && selected.includes(value));
+  }
+
+  function toggleFilter(selected: string[], value: string): string[] {
+    if (value === "all") return ["all"];
+    const withoutAll = selected.filter((v) => v !== "all");
+    if (withoutAll.includes(value)) {
+      const next = withoutAll.filter((v) => v !== value);
+      return next.length === 0 ? ["all"] : next;
+    }
+    return [...withoutAll, value];
+  }
+
+  function crStateLabel(value: string): string {
+    return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function projectTypeLabel(value: string | null | undefined): string {
+    return value === "NON_CR" ? "Non-CR" : "CR";
+  }
+
+  function fmtFullDate(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "long", year: "numeric" });
+  }
+
+  function nonCrStateLabel(value: string | null | undefined): string {
+    if (value === "IN_PROGRESS") return "In Progress";
+    if (value === "DONE") return "Done";
+    return "Planning";
+  }
+
+  // ── Filter: 3 checklist dropdowns (AND across, OR within) + search ──
   let filteredProjects: DashboardProject[] = $derived.by(() => {
-    let result = activeStatus === "needs-review"
-      ? projects.filter(projectNeedsReview)
-      : activeStatus === "all"
-        ? projects
-        : projects.filter((p) => p.project_state === activeStatus);
+    let result = projects.filter((p) => {
+      const stateOk = p.project_type === "NON_CR" || includesFilter(selectedCrStates, p.project_state);
+      const appOk = includesFilter(selectedAppcodes, p.appcode);
+      const typeOk = includesFilter(selectedProjectTypes, p.project_type);
+      return stateOk && appOk && typeOk;
+    });
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       result = result.filter((p) => {
         const drones = p.drone_tickets ?? [];
         const haystack = [
           p.project_name, p.cr_number, p.cr_state, p.project_state, p.year, p.project_path,
+          p.appcode, p.project_type, p.non_cr_state ?? "",
           ...drones.map((d) => `${d.subfolder_name ?? ""} ${d.drone_ticket} ${d.drone_link} ${d.drone_state} ${d.owner}`),
         ].join(" ").toLowerCase();
         return haystack.includes(q);
@@ -281,6 +350,13 @@
     projects = response.data?.projects ?? [];
     summary = response.data?.summary ?? null;
     loadState = "loaded";
+    void loadAppcodes();
+  }
+
+  async function loadAppcodes() {
+    if (!isPywebviewReady()) return;
+    const r = await callBridge<AppCode[]>("appcode_list");
+    if (r.ok && r.data) appcodes = r.data;
   }
 
   // Re-fetch on year or refresh-token change.
@@ -408,6 +484,8 @@
   }
 </script>
 
+<svelte:window onkeydown={onFilterKey} />
+
 <section class="screen active" id="screen-dashboard">
   <div class="page-header">
     <div class="page-header-left">
@@ -416,18 +494,44 @@
     </div>
     <div class="page-header-actions">
       {#if loadState !== "idle"}
-        <div class="dashboard-status-bar" aria-label="Dashboard status filters">
-          {#each statuses as s}
-            <button class="status-tab" class:active={activeStatus === s.key} onclick={() => (activeStatus = s.key)}>
-              {s.label} ({s.count})
-            </button>
-          {/each}
-          <button class="dash-reset-filter" type="button" disabled={activeStatus === "all"} onclick={() => (activeStatus = "all")} title="Clear status filter">Clear</button>
+        <div class="dashboard-filter-bar" aria-label="Dashboard filters">
+          <button class="dash-filter-trigger" type="button" onclick={(e) => toggleFilterMenu("cr", e.currentTarget)}>
+            CR State{#if !selectedCrStates.includes("all")} ({selectedCrStates.length}){/if} ▾
+          </button>
+          <button class="dash-filter-trigger" type="button" onclick={(e) => toggleFilterMenu("appcode", e.currentTarget)}>
+            Appcode{#if !selectedAppcodes.includes("all")} ({selectedAppcodes.length}){/if} ▾
+          </button>
+          <button class="dash-filter-trigger" type="button" onclick={(e) => toggleFilterMenu("type", e.currentTarget)}>
+            Project Type{#if !selectedProjectTypes.includes("all")} ({selectedProjectTypes.length}){/if} ▾
+          </button>
+          <button class="dash-reset-filter" type="button" disabled={selectedCrStates.includes("all") && selectedAppcodes.includes("all") && selectedProjectTypes.includes("all")} onclick={() => { selectedCrStates = ["all"]; selectedAppcodes = ["all"]; selectedProjectTypes = ["all"]; }} title="Clear filters">Clear</button>
           <span class="project-count">{filteredProjects.length} project(s)</span>
         </div>
       {/if}
     </div>
   </div>
+
+  {#if openFilter}
+    <button class="dash-filter-scrim" type="button" aria-label="Close filters" onclick={closeFilter}></button>
+    <div class="dash-filter-menu" role="menu" style="left:{menuX}px; top:{menuY}px;">
+      {#if openFilter === "cr"}
+        <label class="dash-check-row"><input type="checkbox" checked={selectedCrStates.includes("all")} onchange={() => (selectedCrStates = toggleFilter(selectedCrStates, "all"))} /><span>All</span></label>
+        {#each CR_STATE_FILTER_OPTIONS as opt}
+          <label class="dash-check-row"><input type="checkbox" checked={selectedCrStates.includes(opt)} onchange={() => (selectedCrStates = toggleFilter(selectedCrStates, opt))} /><span>{crStateLabel(opt)}</span></label>
+        {/each}
+      {:else if openFilter === "appcode"}
+        <label class="dash-check-row"><input type="checkbox" checked={selectedAppcodes.includes("all")} onchange={() => (selectedAppcodes = toggleFilter(selectedAppcodes, "all"))} /><span>All</span></label>
+        {#each appcodeFilterOptions as opt}
+          <label class="dash-check-row"><input type="checkbox" checked={selectedAppcodes.includes(opt)} onchange={() => (selectedAppcodes = toggleFilter(selectedAppcodes, opt))} /><span>{opt}</span></label>
+        {/each}
+      {:else}
+        <label class="dash-check-row"><input type="checkbox" checked={selectedProjectTypes.includes("all")} onchange={() => (selectedProjectTypes = toggleFilter(selectedProjectTypes, "all"))} /><span>All</span></label>
+        {#each PROJECT_TYPE_FILTER_OPTIONS as opt}
+          <label class="dash-check-row"><input type="checkbox" checked={selectedProjectTypes.includes(opt)} onchange={() => (selectedProjectTypes = toggleFilter(selectedProjectTypes, opt))} /><span>{projectTypeLabel(opt)}</span></label>
+        {/each}
+      {/if}
+    </div>
+  {/if}
 
   {#if actionError}
     <div class="dash-action-error" role="alert"><span aria-hidden="true">!</span> {actionError}</div>
@@ -472,14 +576,16 @@
   <div class="table-cell dash-name-cell">
   <div class="dash-name-wrap">
   <button class="dash-name-btn dash-truncate" type="button" title={p.project_name || "Untitled"} onclick={() => openFolder(p.project_path)}>{#each hlSegments(p.project_name || "Untitled") as seg}{#if seg.hit}<mark class="dash-hl">{seg.text}</mark>{:else}{seg.text}{/if}{/each}</button>
-  <div class="project-folder">project folder · {p.year || "—"}</div>
+  <div class="project-folder">{projectTypeLabel(p.project_type)} · {p.appcode || "—"} · {fmtDate(p.created_at, "time")} · {fmtFullDate(p.created_at)}</div>
   </div>
   </div>
 
-  <!-- Sub Project (click → open subfolder) -->
+  <!-- Drone (click → open subfolder) -->
   <div class="table-cell">
   <div class="stack-lines">
-  {#if rows.length === 0}
+  {#if p.project_type === "NON_CR"}
+  <div class="stack-line"><span class="muted-text">Non-CR</span></div>
+  {:else if rows.length === 0}
   <div class="stack-line"><span class="muted-text">—</span></div>
   {:else}
   {#each rows as row}
@@ -520,7 +626,9 @@
   <!-- Drone Ticket (inline paste + open link + edit) -->
   <div class="table-cell">
   <div class="stack-lines">
-  {#if rows.length === 0}
+  {#if p.project_type === "NON_CR"}
+  <div class="stack-line"><span class="muted-text">Non-CR</span></div>
+  {:else if rows.length === 0}
   <div class="stack-line"><span class="muted-text">—</span></div>
   {:else}
   {#each rows as d}
@@ -562,7 +670,9 @@
   <!-- Drone State (inline dropdown + guard) -->
   <div class="table-cell">
   <div class="stack-lines">
-  {#if rows.length === 0}
+  {#if p.project_type === "NON_CR"}
+  <div class="stack-line"><span class="muted-text">Non-CR</span></div>
+  {:else if rows.length === 0}
   <div class="stack-line"><span class="muted-text">—</span></div>
   {:else}
   {#each rows as d}
@@ -586,7 +696,9 @@
   <!-- CR Number (inline paste + open link + edit) -->
   <div class="table-cell">
   <div class="dash-link-cell">
-  {#if p.cr_link && !crEditing[p.project_path]}
+  {#if p.project_type === "NON_CR"}
+  <span class="dash-id-label saved">{nonCrStateLabel(p.non_cr_state)}</span>
+  {:else if p.cr_link && !crEditing[p.project_path]}
   <span class="dash-id-label saved" title={p.cr_link}>{p.cr_number || "CR Link"}</span>
   <button class="dash-icon-btn" type="button" title="Copy CR link" aria-label="Copy CR link" onclick={() => copyRichLink(p.cr_link, p.cr_number || "CR Link")}>
     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
@@ -618,7 +730,9 @@
   <!-- CR State (inline dropdown + guard + confirm) -->
   <div class="table-cell">
   <div class="dash-link-cell">
-  {#if !p.cr_link}
+  {#if p.project_type === "NON_CR"}
+  <span class="dash-id-label">{nonCrStateLabel(p.non_cr_state)}</span>
+  {:else if !p.cr_link}
   <select class="dash-state-select dash-state-guard" disabled title="Add CR Link First"><option>Add CR Link First</option></select>
   {:else}
   <select class="dash-state-select {stateChipClass(p.cr_state)}" value={p.cr_state} onchange={(e) => onCrStateChange(p, (e.currentTarget as HTMLSelectElement).value)} disabled={isSaving(`${p.project_path}:crstate`)}>
@@ -635,7 +749,7 @@
   <div class="table-cell cell-center">
   <DashboardRowMenu
   projectPath={p.project_path}
-  projectState={p.project_state}
+  projectState={p.project_state ?? ""}
   projectName={p.project_name}
   onOpenDetails={(path) => onOpenProjectDetails?.(path)}
   onChanged={() => loadDashboard()}
@@ -661,6 +775,15 @@
 
 <style>
   .dashboard-status-bar { display:flex; align-items:center; gap:6px; min-width:0; }
+  .dashboard-filter-bar { display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap; }
+  .dash-filter { position:relative; }
+  .dash-filter-scrim { position:fixed; inset:0; z-index:60; border:0; background:transparent; cursor:default; }
+  .dash-filter-trigger { height:26px; border:1px solid var(--light-border); border-radius:5px; background:#fff; color:var(--text-strong); font-size:10px; font-weight:900; padding:0 9px; cursor:pointer; white-space:nowrap; }
+  .dash-filter-trigger:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .dash-filter-menu { position:fixed; z-index:61; min-width:180px; max-height:280px; overflow-y:auto; background:#fff; border:1px solid var(--light-border); border-radius:6px; box-shadow:var(--shadow-subtle); padding:6px; display:flex; flex-direction:column; gap:2px; }
+  .dash-check-row { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:800; color:var(--text-strong); padding:3px 4px; border-radius:4px; cursor:pointer; }
+  .dash-check-row:hover { background:var(--row-alt); }
+  .dash-check-row input { accent-color:var(--color-dbs-red); }
   .dash-filter-tabs { display:flex; align-items:center; gap:4px; min-width:0; }
   .dash-reset-filter { height:26px; border:1px solid transparent; border-radius:5px; background:#fff; color:var(--text-secondary); font-weight:900; padding:0 9px; }
   .dash-reset-filter:hover:not(:disabled) { background:var(--row-alt); border-color:var(--light-border); color:var(--text-strong); }

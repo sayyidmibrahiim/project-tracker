@@ -161,6 +161,7 @@ def test_project_index_schema_matches_prd_cache_columns(tmp_path: Path) -> None:
         "appcode",
         "project_type",
         "non_cr_state",
+        "created_at",
         "updated_at",
         "scanned_at",
     ]

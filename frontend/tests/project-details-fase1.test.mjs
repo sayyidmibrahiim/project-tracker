@@ -58,10 +58,10 @@ test("App.svelte wires onNavigateDashboard to navigate('dashboard')", () => {
   assert.match(APP, /onNavigateDashboard=\{\(\)\s*=>\s*navigate\("dashboard"\)\}/);
 });
 
-// --- Sub Project box (Section 3) ---------------------------------------------
+// --- Drone box (Section 3) ---------------------------------------------
 
-test("Sub Project box is titled 'Sub Project (DRONE)'", () => {
-  assert.match(PD, /Sub Project \(DRONE\)/);
+test("Drone box is titled 'Drone Tickets'", () => {
+  assert.match(PD, /Drone Tickets/);
 });
 
 test("DroneTable is presentational (no callBridge inside)", () => {

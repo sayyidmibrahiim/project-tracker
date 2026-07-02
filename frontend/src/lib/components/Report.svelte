@@ -300,7 +300,7 @@
         <tbody>
           {#if loadState === "loaded" && visibleProjects.length > 0}
             {#each visibleProjects as p, i}
-              <tr><td>{i + 1}</td><td>{p.project_name}</td><td>{p.cr_number || "—"}</td><td>{p.project_state.replace(/_/g, " ")}</td><td>{p.cr_state.charAt(0) + p.cr_state.slice(1).toLowerCase()}</td><td>{droneState(p)}</td><td>{p.t10_status}</td><td>{fmt(p.updated_at)}</td></tr>
+              <tr><td>{i + 1}</td><td>{p.project_name}</td><td>{p.cr_number || "—"}</td><td>{(p.project_state ?? "—").replace(/_/g, " ")}</td><td>{p.cr_state.charAt(0) + p.cr_state.slice(1).toLowerCase()}</td><td>{droneState(p)}</td><td>{p.t10_status}</td><td>{fmt(p.updated_at)}</td></tr>
             {/each}
           {:else}
             <tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:24px;">{loadState === "error" ? errorMessage : "No projects match the current filters."}</td></tr>

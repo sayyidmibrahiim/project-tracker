@@ -16,6 +16,8 @@ from core.models import (
     local_now,
 )
 from core.rules import extract_cr_number, extract_drone_ticket, validate_t10
+
+NON_CR_FOLDER_STATE = "NON_CR"
 from infrastructure.filesystem import ScannedProject, scan_appcode_year, scan_year
 from infrastructure.metadata_store import MetadataStore
 
@@ -35,7 +37,7 @@ def _t10_status(scanned: ScannedProject) -> str:
 class CachedProjectRow:
     project_path: Path
     year: str
-    project_state: ProjectState
+    project_state: ProjectState | None
     project_name: str
     cr_link: str = ""
     start_datetime: datetime | None = None
@@ -49,6 +51,7 @@ class CachedProjectRow:
     appcode: str = ""
     project_type: ProjectType = ProjectType.CR
     non_cr_state: NonCrState | None = None
+    created_at: datetime | None = None
     updated_at: datetime | None = None
     scanned_at: datetime | None = None
 
@@ -89,12 +92,13 @@ def cached_project_row_from_scan(scanned: ScannedProject) -> CachedProjectRow:
         cr_number=extract_cr_number(metadata.cr_link),
         cr_state=metadata.cr_state,
         cr_pending_approval_at=metadata.cr_pending_approval_at,
-                drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
+        drone_tickets_json=json.dumps([ticket.to_dict() for ticket in metadata.drone_tickets], ensure_ascii=False),
         drone_paths_json=json.dumps([path.name for path in scanned.drone_paths], ensure_ascii=False),
         t10_status=_t10_status(scanned),
         appcode=scanned.appcode,
         project_type=scanned.project_type,
         non_cr_state=metadata.non_cr_state,
+        created_at=metadata.created_at,
         updated_at=metadata.updated_at,
         scanned_at=local_now(),
     )
@@ -163,7 +167,7 @@ class CacheDb:
                         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
                     ).fetchall()
                 }
-                project_states = tuple(state.value for state in ProjectState)
+                project_states = tuple(state.value for state in ProjectState) + (NON_CR_FOLDER_STATE,)
                 cr_states = tuple(state.value for state in CRState)
                 drone_states = tuple(state.value for state in DroneState)
                 invalid_project_states = connection.execute(
@@ -220,9 +224,10 @@ class CacheDb:
                     appcode,
                     project_type,
                     non_cr_state,
+                    created_at,
                     updated_at,
                     scanned_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     name = excluded.name,
                     year = excluded.year,
@@ -238,6 +243,7 @@ class CacheDb:
                     appcode = excluded.appcode,
                     project_type = excluded.project_type,
                     non_cr_state = excluded.non_cr_state,
+                    created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
                     drone_paths_json = excluded.drone_paths_json,
                     scanned_at = excluded.scanned_at
@@ -282,9 +288,10 @@ class CacheDb:
                         appcode,
                         project_type,
                         non_cr_state,
+                        created_at,
                         updated_at,
                         scanned_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         name = excluded.name,
                         year = excluded.year,
@@ -298,6 +305,10 @@ class CacheDb:
                         drone_tickets_json = excluded.drone_tickets_json,
                         drone_paths_json = excluded.drone_paths_json,
                         t10_status = excluded.t10_status,
+                        appcode = excluded.appcode,
+                        project_type = excluded.project_type,
+                        non_cr_state = excluded.non_cr_state,
+                        created_at = excluded.created_at,
                         updated_at = excluded.updated_at,
                         scanned_at = excluded.scanned_at
                     """,
@@ -307,7 +318,8 @@ class CacheDb:
     def list_projects(self, year: str | None = None, appcode: str | None = None) -> list[CachedProjectRow]:
         cols = ("path, year, folder_state, name, cr_link, start_datetime, "
                 "end_datetime, cr_number, cr_state, cr_pending_approval_at, "
-                "drone_tickets_json, drone_paths_json, t10_status, appcode, project_type, non_cr_state, updated_at, scanned_at")
+                "drone_tickets_json, drone_paths_json, t10_status, appcode, project_type, "
+                "non_cr_state, created_at, updated_at, scanned_at")
         with self._connect() as connection:
             if year is None and appcode is None:
                 rows = connection.execute(
@@ -352,8 +364,8 @@ class CacheDb:
                         path, name, year, folder_state, cr_link, cr_number, cr_state,
                         cr_pending_approval_at, start_datetime, end_datetime,
                         drone_tickets_json, drone_paths_json, t10_status, appcode,
-                        project_type, non_cr_state, updated_at, scanned_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        project_type, non_cr_state, created_at, updated_at, scanned_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         name = excluded.name, year = excluded.year,
                         folder_state = excluded.folder_state, cr_link = excluded.cr_link,
@@ -367,6 +379,7 @@ class CacheDb:
                         appcode = excluded.appcode,
                         project_type = excluded.project_type,
                         non_cr_state = excluded.non_cr_state,
+                        created_at = excluded.created_at,
                         updated_at = excluded.updated_at,
                         scanned_at = excluded.scanned_at
                     """,
@@ -533,6 +546,7 @@ class CacheDb:
                 appcode TEXT NOT NULL DEFAULT '',
                 project_type TEXT NOT NULL DEFAULT 'CR',
                 non_cr_state TEXT,
+                created_at TEXT,
                 updated_at TEXT,
                 scanned_at TEXT DEFAULT (datetime('now'))
             )
@@ -615,16 +629,40 @@ class CacheDb:
             connection.execute(
                 "ALTER TABLE project_index ADD COLUMN non_cr_state TEXT"
             )
+        if "created_at" not in project_columns:
+            connection.execute(
+                "ALTER TABLE project_index ADD COLUMN created_at TEXT"
+            )
 
     @staticmethod
     def _project_values(
         row: CachedProjectRow,
-    ) -> tuple[str, str, str, str, str, str | None, str, str | None, str | None, str | None, str, str, str, str | None, str | None]:
+    ) -> tuple[
+        str,
+        str,
+        str,
+        str,
+        str,
+        str | None,
+        str,
+        str | None,
+        str | None,
+        str | None,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str | None,
+        str | None,
+        str | None,
+        str | None,
+    ]:
         return (
             str(row.project_path),
             row.project_name,
             row.year,
-            row.project_state.value,
+            row.project_state.value if row.project_state else NON_CR_FOLDER_STATE,
             row.cr_link,
             row.cr_number or "",
             row.cr_state.value,
@@ -637,6 +675,7 @@ class CacheDb:
             row.appcode,
             row.project_type.value,
             row.non_cr_state.value if row.non_cr_state else None,
+            datetime_to_json(row.created_at),
             datetime_to_json(row.updated_at),
             datetime_to_json(row.scanned_at),
         )
@@ -664,7 +703,7 @@ class CacheDb:
         return CachedProjectRow(
             project_path=Path(row[0]),
             year=row[1],
-            project_state=ProjectState(row[2]),
+            project_state=None if row[2] == NON_CR_FOLDER_STATE else ProjectState(row[2]),
             project_name=row[3],
             cr_link=row[4] or "",
             start_datetime=datetime_from_json(row[5]),
@@ -678,8 +717,9 @@ class CacheDb:
             appcode=row[13] or "",
             project_type=ProjectType(row[14]) if row[14] else ProjectType.CR,
             non_cr_state=NonCrState(row[15]) if row[15] else None,
-            updated_at=datetime_from_json(row[16]),
-            scanned_at=datetime_from_json(row[17]),
+            created_at=datetime_from_json(row[16]),
+            updated_at=datetime_from_json(row[17]),
+            scanned_at=datetime_from_json(row[18]),
         )
 
     @staticmethod
