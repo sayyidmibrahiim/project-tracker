@@ -22,11 +22,11 @@ Cross-menu fix sweep (one-time branch scope override approved by user):
 - Second Brain: wired search/sort/type/date filters to real filesystem notes; added Link Bank export/import/rename/restore.
 - Settings: removed Theme switch (PRD = fixed theme); added T-10/numeric validation, trailing-slash guard, restart-required notice.
 
-**Next:** User manual verify Piece A audit, then approve merge to `main`. After merge, plan Piece B (`project-details/cr-docs-rte`).
+**Next:** Piece A merged to `main`. Plan Piece B (`project-details/cr-docs-rte`): `_cr-docs` editable files + multi-file RTE editor dropdown.
 
 **Blocked:** None in startup. Windows manual verification needed for real filesystem/create/move flows.
 
-**active_menu:** general/appcode-structure-audit
+**active_menu:** main; next branch `project-details/cr-docs-rte`
 
 **Changed files:** `frontend/src/lib/components/NewProjectForm.svelte`, `frontend/src/lib/components/Dashboard.svelte`, `frontend/src/lib/components/ProjectDetails.svelte`, `frontend/src/lib/components/DroneTable.svelte`, `frontend/src/lib/components/Report.svelte`, `frontend/src/lib/types.ts`, `app_web.py`, plus updated assertions in `frontend/tests/components.test.mjs`, `frontend/tests/as-is-prototype-parity.test.mjs`, `frontend/tests/dashboard-inline-edit.test.mjs`, `frontend/tests/project-details-fase1.test.mjs`, `frontend/tests/project-details-fase3-fase4.test.mjs`, `_docs/PROGRESS.md`, `_docs/session-notes.md`.
 

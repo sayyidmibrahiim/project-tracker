@@ -6,8 +6,8 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `general/appcode-structure-audit`.
-Active slice: Piece A UI/UX implemented + manual-check fixes applied — Dashboard 3 multi-select checklist filters (CR State / Appcode / Project Type) now use fixed-position menu so header overflow cannot clip them; 2-line project metadata (`Type · Appcode · time · full date`); Add Project form (CR/Non-CR radio + appcode placeholder dropdown/+create + start/end only; no CR link/implementation plan; lazy drone); Project Details Non-CR identity (Non-CR state dropdown via `set_non_cr_state`, CR/Drone hidden, schedule editable), Drone copy rename (`Sub Project` → `Drone`). Backend `create_project` persists optional start/end + ignores `drone_name`; `appcode_add` creates current-year `CR/{states}` and `Non-CR`; appcode discovery includes manual appcode folders with year subfolders. Awaiting user manual verification before merge.
+Active branch: `main`.
+Active slice: Piece A UI/UX completed and merged — Dashboard 3 multi-select checklist filters (CR State / Appcode / Project Type) use fixed-position menus so header overflow cannot clip them; 2-line project metadata (`Type · Appcode · time · full date`); Add Project form (CR/Non-CR radio + appcode placeholder dropdown/+create + start/end only; no CR link/implementation plan; lazy drone); Project Details Non-CR identity (Non-CR state dropdown via `set_non_cr_state`, CR/Drone hidden, schedule editable), Drone copy rename (`Sub Project` → `Drone`). Backend `create_project` persists optional start/end + ignores `drone_name`; `appcode_add` creates current-year `CR/{states}` and `Non-CR`; appcode discovery includes manual appcode folders with year subfolders. Next planned slice: Piece B (`project-details/cr-docs-rte`).
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 
@@ -26,6 +26,7 @@ Previous completed area remains fixed: frameless titlebar, Dashboard, and Projec
 | Second Brain        | Done, pending user verify |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
+| Piece B CR docs RTE | Ready to plan |
 | Windows verify      | Not started (needs real Windows) |
 | Packaging           | Not started |
 
