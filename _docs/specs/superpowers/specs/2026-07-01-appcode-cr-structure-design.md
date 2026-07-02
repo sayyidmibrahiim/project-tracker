@@ -480,6 +480,86 @@ Per CLAUDE.md, `_reference/` is legacy visual reference only. The prototype stil
 | `_cr-docs` file contents (uat-signoff, prod-lv, .msg) + multi-file RTE editor dropdown | B |
 | Approval automation (conditional buttons, email polling, auto-download .msg) | C |
 | CICD Bitbucket clone helper + repo file browser + git detection | D |
+## Out of Scope (Deferred to Pieces B, C, D)
+
+| Item | Piece |
+|------|-------|
+| `_cr-docs` file contents (uat-signoff, prod-lv, .msg) + multi-file RTE editor dropdown | B |
+| Approval automation (conditional buttons, email polling, auto-download .msg) | C |
+| CICD Bitbucket clone helper + repo file browser + git detection | D |
+
+---
+
+## UI/UX Design (Piece A)
+
+### Dashboard — Filters
+
+Current state filter buttons (`All | UAT_PREPARE | PROD_READY | IMPLEMENTED | POSTPONED | CANCELED`) are replaced with **3 multi-select checklist dropdowns**:
+
+```
+[CR State ▾ ✓]  [Appcode ▾ ✓]  [Project Type ▾ ✓]  [Search...]  [+ Add Project]  [🔄]
+```
+
+- **CR State dropdown**: checklist — All, UAT_PREPARE, PROD_READY, IMPLEMENTED, POSTPONED, CANCELED. User can check 1 or more.
+- **Appcode dropdown**: checklist — All, + list of discovered appcodes. User can check 1 or more.
+- **Project Type dropdown**: checklist — All, CR, Non-CR. User can check 1 or more.
+- Filters combine with AND logic (e.g. CR State=UAT_PREPARE AND Appcode=MYAPP AND Type=CR).
+- Multiple selections within a filter use OR logic (e.g. CR State=UAT_PREPARE OR PROD_READY).
+
+### Dashboard — Data Table Project Name Column
+
+Each project row shows **2 lines** in the project name column:
+
+```
+Line 1: testing project only                          <- project name
+Line 2: CR · APPCODE · 18:00:00 · Thu, 02 July 2026   <- type · appcode · time · full date
+```
+
+- Line 2 always visible (not hover/expand only).
+- For Non-CR projects: `Non-CR · APPCODE · 18:00:00 · Thu, 02 July 2026` (same format, different type label).
+- Time and date = project creation timestamp (`created_at` from `project_data.json`).
+
+### Add Project Form — Project Type
+
+**Radio buttons** (not dropdown, not 3 options):
+```
+Project Type:
+  ( ) CR
+  ( ) Non-CR
+```
+
+- Only 2 options. **No "CR with drone"** — drone is created on-demand in Project Details.
+- Selecting CR: shows all CR fields (CR link, start/end datetime, implementation plan).
+- Selecting Non-CR: hides CR/Drone fields, shows only name + start/end datetime.
+
+### Add Project Form — Appcode Field
+
+**Dropdown of existing appcodes + "+" button:**
+```
+Appcode: [MYAPP ▾] [+]
+```
+
+- Dropdown shows appcodes discovered from filesystem (folders with `appcode.json`).
+- "+" button: opens inline input for new appcode name → on confirm, creates folder + `appcode.json` + `CICD/` + auto-creates year structure. New appcode appears in dropdown.
+- If no appcodes exist yet, dropdown is empty with placeholder "Select appcode or click +".
+
+### Drone Creation — Lazy (On-Demand)
+
+- Drone folder (`{droneName}/UAT/ + PRD/ + notes.md`) is **NOT** created at project creation time.
+- Created when user clicks **"Add Drone Ticket"** button in Project Details (first time for each drone).
+- **Delete drone** = `send2trash` the drone folder + remove `DroneTicket` from metadata.
+- This replaces the earlier "CR with drone" option — drone is always added later from Project Details.
+
+### Project Details — Non-CR Projects
+
+For Non-CR projects, CR/Drone/`_cr-docs` sections are **hidden completely**:
+- Identity card shows: Project Name + Non-CR state dropdown (Planning / In Progress / Done) + Owner + Start/End datetime.
+- No CR Number, no CR State, no Drone section, no _cr-docs section.
+- Files and Notes sections remain (notes.md exists for Non-CR projects).
+
+### Titlebar — No CICD Icon Yet (Piece D)
+
+Piece D will add a CICD icon to the titlebar. Not part of Piece A UI.
 
 ---
 
@@ -487,13 +567,15 @@ Per CLAUDE.md, `_reference/` is legacy visual reference only. The prototype stil
 
 1. User can add multiple appcodes under the root folder, each with appcode.json + CICD/.
 2. User can add years under an appcode, creating CR/ + 5 state folders + Non-CR/.
-3. Add Project offers 3 types: CR only, CR with drone, Non-CR.
+3. Add Project offers 2 types via radio buttons: CR, Non-CR.
 4. CR projects scaffold correctly (project_data.json, notes.md, _cr-docs/).
-5. Drones scaffold with UAT/ + PRD/ + notes.md; can be added/renamed/deleted.
+5. Drones created on-demand via Add Drone Ticket in Project Details (UAT/ + PRD/ + notes.md). Delete drone = folder deleted.
 6. Non-CR projects have Planning/In Progress/Done state in metadata (no state folders).
 7. Scanner discovers appcodes, years, CR + Non-CR projects, and drones correctly.
 8. Cache stores appcode + project_type + non_cr_state; appcode-scoped rebuilds work.
-9. Dashboard shows appcode selector + Non-CR rows with non_cr_state.
+9. Dashboard shows 3 multi-select checklist dropdowns (CR State, Appcode, Project Type) + 2-line project name column.
 10. All "sub project" references renamed to "drone" across code, docs, UI, tests.
 11. PRD Section 7 + ARCHITECTURE + DECISIONS updated to reflect the new structure.
-12. All existing tests pass with updated path scaffolds; new tests pass.
+12. Non-CR projects in Project Details hide CR/Drone/_cr-docs sections, show state dropdown.
+13. Add Project appcode field = dropdown + button for new appcode.
+14. All existing tests pass with updated path scaffolds; new tests pass.

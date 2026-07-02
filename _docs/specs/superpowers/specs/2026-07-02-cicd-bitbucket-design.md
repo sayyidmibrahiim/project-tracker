@@ -156,6 +156,42 @@ Piece D adds UI in Settings to switch between per-appcode and shared root, and s
 
 Manual: open CICD folder -> verify git detection -> paste clone URL -> verify clone -> verify file tree -> click file -> verify opens externally.
 
+## UI/UX Design (Piece D)
+
+### CICD as Titlebar Menu
+
+CICD icon added to **titlebar** (like other menu icons). Click opens **full page CICD browser**.
+
+### Full Page CICD Browser Layout
+
+`
+[Appcode: MYAPP v]  [Clone URL: ___________] [Clone]
+
+CICD Repos:
+  myapp.git/          (modified: 3, untracked: 1)
+  anotherapp.git/     (clean)
+
+File Tree (when repo selected):
+  [M] bitbucket-pipelines.yml
+  [U] new-script.sh
+      src/
+        [ ] main.py
+        [ ] config.py
+      README.md
+`
+
+- Appcode dropdown: select which appcode CICD folder to browse
+- Clone URL input + Clone button: paste Bitbucket HTTP URL, clone branch=cicd
+- Repo list: shows cloned repos with git status summary
+- File tree: VSCode-like expand/collapse, git status badges per file
+  - [M] = modified (orange), [U] = untracked (green), [S] = staged (green check), [ ] = clean
+- Click file name: opens in default OS app (os.startfile)
+
+### Empty States
+
+1. Git not installed: notification with install instructions + Recheck button
+2. CICD folder empty: notification with Bitbucket link + clone URL input
+
 ## Out of Scope
 
 - Approval automation (Piece C)

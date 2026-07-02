@@ -112,6 +112,32 @@ Frontend: ProjectDetails (toggle + buttons + status), Automations/Settings (temp
 
 Manual: create CR + drone -> set states -> fill uat-signoff -> verify button -> click -> verify email sent + polling -> simulate reply -> verify .msg downloaded -> verify timeout.
 
+## UI/UX Design (Piece C)
+
+### Automation Toggle + Buttons Position
+
+In **Project Details header**, next to project/drone selectors:
+`
+[Project v]  [Drone v]  [Automation: ON/OFF]  [Send UAT Approval]  [Send LV]
+`
+
+- Toggle: switch (ON/OFF). When OFF, buttons hidden.
+- Send UAT Approval button: only visible when conditions met. Disabled state = Waiting for reply (countdown). Success = Approval received. Timeout = No reply received (timeout).
+- Send LV button: same pattern.
+
+### Template Editor
+
+In Automation menu, new section Approval Templates:
+- Two tabs: UAT Approval | LV Approval
+- Fields: To, CC, Subject (with {CR_NUMBER} placeholder), Body (rich text or plain), Mode (Draft/Send)
+- Preview button: renders template with real project data
+
+### Settings - Polling Config
+
+In Settings menu, new fields:
+- Polling interval (minutes): default 5
+- Max polling duration (hours): default 3
+
 ## Out of Scope
 
 - CICD Bitbucket integration (Piece D)

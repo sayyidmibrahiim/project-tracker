@@ -136,6 +136,31 @@ Update `app_web.py` `create_project` for CR type to also create the 2 empty file
 
 ---
 
+## UI/UX Design (Piece B)
+
+### RTE File Dropdown Position
+
+Dropdown is in the **RTE toolbar**, leftmost position, before format buttons:
+`
+[notes.md v]  [B][I][H1][H2][Code][Link]...
+`
+
+- Shows current file name (e.g. notes.md, uat-signoff, prod-lv)
+- Click to see list of files in active folder context
+- Selecting a file loads it into the Tiptap editor
+- .msg files show in dropdown but selecting them shows Open Externally button instead of editor
+
+### Context Sensitivity
+
+- **Project level**: dropdown lists notes.md + _cr-docs/uat-signoff + _cr-docs/prod-lv + _cr-docs/*.msg (if exist) + other files in project folder
+- **Drone level**: dropdown lists drone/notes.md + other files in drone folder
+
+### .msg File Handling
+
+When .msg file selected from dropdown:
+- Editor area shows: This is an Outlook message. [Open Externally]
+- Button opens file with os.startfile (default Windows app)
+
 ## Out of Scope
 
 - `.msg` file auto-download (Piece C — approval automation)
