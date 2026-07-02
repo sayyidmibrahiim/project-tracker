@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.enums import CRState, DroneState, ProjectState
+from core.enums import CRState, DroneState, ProjectState, ProjectType
 from core.models import DroneTicket, ProjectMetadata
 from infrastructure.cache_db import cached_drone_rows_from_scan, cached_project_row_from_scan
 from infrastructure.filesystem import ScannedProject
@@ -19,9 +19,11 @@ def _scanned_project(
     return ScannedProject(
         path=project_path,
         year="2026",
+        appcode="MYAPP",
+        project_type=ProjectType.CR,
         project_state=project_state,
         metadata=metadata or ProjectMetadata(project_name="PAYMENT_MODULE_UPGRADE"),
-        subproject_paths=[project_path / "APP_COMPONENT"],
+        drone_paths=[project_path / "APP_COMPONENT"],
     )
 
 

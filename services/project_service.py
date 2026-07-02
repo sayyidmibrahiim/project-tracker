@@ -31,10 +31,6 @@ def state_from_project_path(project_path: Path) -> ProjectState:
 
 
 def year_path_from_project_path(project_path: Path) -> Path:
-    from infrastructure.filesystem import project_type_from_path
-
-    if project_type_from_path(project_path) == ProjectType.CR:
-        return project_path.parent.parent.parent
     return project_path.parent.parent
 
 

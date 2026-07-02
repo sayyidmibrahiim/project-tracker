@@ -60,3 +60,5 @@ _docs/_archive/
 
 # Local AI/tool artifacts
 .mimocode/
+
+.pytest_tmp/

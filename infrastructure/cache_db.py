@@ -16,7 +16,7 @@ from core.models import (
     local_now,
 )
 from core.rules import extract_cr_number, extract_drone_ticket, validate_t10
-from infrastructure.filesystem import ScannedProject, scan_year
+from infrastructure.filesystem import ScannedProject, scan_appcode_year, scan_year
 from infrastructure.metadata_store import MetadataStore
 
 
@@ -124,11 +124,20 @@ def rebuild_year_cache(
     metadata_store: MetadataStore | None = None,
 ) -> list[str]:
     store = metadata_store or MetadataStore()
-    scanned_projects = scan_year(year_path, store)
-    cache.replace_projects_for_year(
-        year_path.name,
-        [cached_project_row_from_scan(scanned) for scanned in scanned_projects],
-    )
+    is_appcode_year = year_path.parent.is_dir() and not year_path.parent.name.isdigit() and year_path.parent.name != "CR"
+    if is_appcode_year:
+        scanned_projects = scan_appcode_year(year_path.parent, year_path.name, store)
+        cache.replace_projects_for_appcode_year(
+            year_path.parent.name,
+            year_path.name,
+            [cached_project_row_from_scan(scanned) for scanned in scanned_projects],
+        )
+    else:
+        scanned_projects = scan_year(year_path, store)
+        cache.replace_projects_for_year(
+            year_path.name,
+            [cached_project_row_from_scan(scanned) for scanned in scanned_projects],
+        )
     for scanned in scanned_projects:
         cache.replace_drone_tickets_for_project(scanned.path, cached_drone_rows_from_scan(scanned))
     return list(store.warnings)
@@ -270,6 +279,9 @@ class CacheDb:
                         drone_tickets_json,
                         drone_paths_json,
                         t10_status,
+                        appcode,
+                        project_type,
+                        non_cr_state,
                         updated_at,
                         scanned_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -590,6 +602,18 @@ class CacheDb:
         if "drone_paths_json" not in project_columns:
             connection.execute(
                 "ALTER TABLE project_index ADD COLUMN drone_paths_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        if "appcode" not in project_columns:
+            connection.execute(
+                "ALTER TABLE project_index ADD COLUMN appcode TEXT NOT NULL DEFAULT ''"
+            )
+        if "project_type" not in project_columns:
+            connection.execute(
+                "ALTER TABLE project_index ADD COLUMN project_type TEXT NOT NULL DEFAULT 'CR'"
+            )
+        if "non_cr_state" not in project_columns:
+            connection.execute(
+                "ALTER TABLE project_index ADD COLUMN non_cr_state TEXT"
             )
 
     @staticmethod

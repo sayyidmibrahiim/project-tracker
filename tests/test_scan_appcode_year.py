@@ -8,8 +8,7 @@ from infrastructure.filesystem import (
 from infrastructure.metadata_store import MetadataStore
 
 
-def _make_cr_project(appcode_path, year, state, name):
-    project = appcode_path / str(year) / "CR" / state.value / name
+def _write_cr_project(project, name):
     project.mkdir(parents=True)
     (project / "project_data.json").write_text(
         f'{{"$schema":"project_data_v1","project_name":"{name}","project_type":"CR"}}',
@@ -18,6 +17,14 @@ def _make_cr_project(appcode_path, year, state, name):
     (project / "notes.md").touch()
     (project / "_cr-docs").mkdir()
     return project
+
+
+def _make_cr_project(appcode_path, year, state, name):
+    return _write_cr_project(appcode_path / str(year) / "CR" / state.value / name, name)
+
+
+def _make_direct_cr_project(appcode_path, year, state, name):
+    return _write_cr_project(appcode_path / str(year) / state.value / name, name)
 
 
 def _make_non_cr_project(appcode_path, year, name):
@@ -42,6 +49,20 @@ def test_scan_finds_cr_project(tmp_path):
     assert result[0].project_state == ProjectState.UAT_PREPARE
     assert result[0].appcode == "MYAPP"
     assert result[0].year == "2026"
+
+
+def test_scan_finds_direct_appcode_year_cr_project(tmp_path):
+    appcode = tmp_path / "SSID"
+    appcode.mkdir()
+    _make_direct_cr_project(appcode, 2026, ProjectState.PROD_READY, "ssid")
+
+    result = scan_appcode_year(appcode, "2026")
+
+    assert len(result) == 1
+    assert result[0].project_type == ProjectType.CR
+    assert result[0].project_state == ProjectState.PROD_READY
+    assert result[0].appcode == "SSID"
+    assert result[0].path == appcode / "2026" / "PROD_READY" / "ssid"
 
 
 def test_scan_finds_non_cr_project(tmp_path):

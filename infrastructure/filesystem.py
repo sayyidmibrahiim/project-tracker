@@ -26,6 +26,10 @@ class ScannedProject:
     metadata: ProjectMetadata
     drone_paths: list[Path]
 
+    @property
+    def subproject_paths(self) -> list[Path]:
+        return self.drone_paths
+
 
 @dataclass(frozen=True, slots=True)
 class AppCodeEntry:
@@ -192,14 +196,21 @@ def scan_appcode_year(
     if not year_path.exists():
         return projects
 
-    # CR branch: year/CR/{STATE}/project
-    cr_root = year_path / "CR"
-    if cr_root.is_dir():
+    # CR branch: support both year/CR/{STATE}/project and legacy/direct
+    # appcode layout year/{STATE}/project. Appcode is only the top folder name;
+    # users can name it SSID, BIFAST, SKN, WGID, RTGS, or anything else.
+    cr_roots = [year_path / "CR"] if (year_path / "CR").is_dir() else []
+    cr_roots.append(year_path)
+    seen_paths: set[Path] = set()
+    for cr_root in cr_roots:
         for state in ProjectState:
             state_path = cr_root / state.value
             if not state_path.is_dir():
                 continue
             for project_path in sorted(child for child in state_path.iterdir() if child.is_dir()):
+                if project_path in seen_paths:
+                    continue
+                seen_paths.add(project_path)
                 metadata = store.read(project_path)
                 if metadata is None:
                     continue

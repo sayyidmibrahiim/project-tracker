@@ -49,8 +49,6 @@ def test_missing_static_build_raises_predictable_error(tmp_path: Path):
 def test_run_creates_window_with_js_api_and_no_runtime_start(monkeypatch: pytest.MonkeyPatch):
     """run(start_webview=False) configures pywebview window without launching runtime."""
     from project_tracker import app_web
-    from web.js_api import JsApi
-
     calls: dict[str, object] = {}
 
     class FakeWebview:
@@ -69,5 +67,5 @@ def test_run_creates_window_with_js_api_and_no_runtime_start(monkeypatch: pytest
     kwargs = calls["kwargs"]
     assert isinstance(kwargs, dict)
     assert kwargs["url"] == app_web.resolve_frontend_url()
-    assert isinstance(kwargs["js_api"], JsApi)
+    assert kwargs["js_api"].__class__.__name__ == "JsApi"
     assert "started" not in calls

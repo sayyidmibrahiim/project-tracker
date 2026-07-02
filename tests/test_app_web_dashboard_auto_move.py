@@ -69,7 +69,10 @@ def temp_project_approved_uat():
     """Project in UAT_PREPARE, CR APPROVED, no drones, move-ready dates."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        proj_dir = root / "2024" / "UAT_PREPARE" / "auto-move-proj"
+        appcode = root / "MYAPP"
+        appcode.mkdir(parents=True, exist_ok=True)
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        proj_dir = root / "MYAPP" / "2024" / "CR" / "UAT_PREPARE" / "auto-move-proj"
         proj_dir.mkdir(parents=True)
 
         start = local_now() + timedelta(days=1)
@@ -114,7 +117,7 @@ def test_apply_auto_move_moves_folder_to_prod_ready(adapter, temp_project_approv
     result = adapter._apply_auto_move(proj_dir)
 
     old_path = proj_dir
-    new_path = root / "2024" / ProjectState.PROD_READY.value / "auto-move-proj"
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / "auto-move-proj"
 
     # Success contract: helper reports the moved path + target state so callers
     # can refresh their response instead of returning the stale pre-move path.
@@ -184,7 +187,7 @@ def test_apply_auto_move_blocked_guard_returns_banner_and_does_not_move(
 
     # Folder did NOT move: still in UAT_PREPARE, nothing in PROD_READY.
     assert proj_dir.is_dir(), "Project must remain in UAT_PREPARE when blocked"
-    new_path = root / "2024" / ProjectState.PROD_READY.value / proj_dir.name
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / proj_dir.name
     assert not new_path.is_dir(), "Project must not appear in PROD_READY when blocked"
 
     # No AUTO_MOVE event pushed.
@@ -208,7 +211,10 @@ def temp_project_pending_uat():
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        proj_dir = root / "2024" / "UAT_PREPARE" / "pending-proj"
+        appcode = root / "MYAPP"
+        appcode.mkdir(parents=True, exist_ok=True)
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        proj_dir = root / "MYAPP" / "2024" / "CR" / "UAT_PREPARE" / "pending-proj"
         proj_dir.mkdir(parents=True)
 
         start = local_now() + timedelta(days=1)
@@ -269,7 +275,7 @@ def test_g1_blocks_cr_approved_with_unapproved_drone(
 
     # Folder did NOT move and CR state was not persisted as APPROVED.
     assert proj_dir.is_dir(), "Project must remain in UAT_PREPARE when G1 blocks"
-    new_path = root / "2024" / ProjectState.PROD_READY.value / proj_dir.name
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / proj_dir.name
     assert not new_path.is_dir()
     assert store.read(proj_dir).cr_state == CRState.PENDING_APPROVAL
 
@@ -320,7 +326,7 @@ def test_cr_approved_no_drones_auto_moves_and_history(
 
     adapter_pending.update_cr_state(proj_dir, CRState.APPROVED.value)
 
-    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / "pending-proj"
     assert new_path.is_dir(), f"Project not moved to PROD_READY: {new_path}"
     assert not proj_dir.is_dir(), "Old UAT_PREPARE folder still exists"
 
@@ -366,7 +372,7 @@ def test_update_drone_approved_lands_pending_cr_move(
         proj_dir, 0, {"drone_state": DroneState.APPROVED.value}
     )
 
-    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / "pending-proj"
     assert new_path.is_dir(), f"Project not moved to PROD_READY: {new_path}"
     assert not proj_dir.is_dir(), "Old UAT_PREPARE folder still exists"
 
@@ -404,7 +410,7 @@ def test_update_drone_field_only_edit_does_not_move(
 
     # No state change -> state_changed gate stays closed -> no auto-move.
     assert proj_dir.is_dir(), "Folder must not move on a field-only edit"
-    new_path = root / "2024" / ProjectState.PROD_READY.value / "pending-proj"
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.PROD_READY.value / "pending-proj"
     assert not new_path.is_dir(), "Project must not appear in PROD_READY"
     assert response["project_path"] == str(proj_dir)
     assert not any(e["type"] == "AUTO_MOVE" for e in drain_events())
@@ -437,7 +443,10 @@ def h10_project():
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        proj_dir = root / "2024" / "UAT_PREPARE" / "h10-proj"
+        appcode = root / "MYAPP"
+        appcode.mkdir(parents=True, exist_ok=True)
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        proj_dir = root / "MYAPP" / "2024" / "CR" / "UAT_PREPARE" / "h10-proj"
         proj_dir.mkdir(parents=True)
 
         start = local_now() + timedelta(days=3)
@@ -458,7 +467,7 @@ def h10_project():
         db_path = root / "cache.db"
         cache = CacheDb(db_path)
         cache.initialize()
-        rebuild_year_cache(cache, root / "2024", store)
+        rebuild_year_cache(cache, root / "MYAPP" / "2024", store)
 
         yield {
             "root": root,
@@ -529,7 +538,10 @@ def h10_not_due_project():
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        proj_dir = root / "2024" / "UAT_PREPARE" / "not-due-proj"
+        appcode = root / "MYAPP"
+        appcode.mkdir(parents=True, exist_ok=True)
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        proj_dir = root / "MYAPP" / "2024" / "CR" / "UAT_PREPARE" / "not-due-proj"
         proj_dir.mkdir(parents=True)
 
         start = local_now() + timedelta(days=60)
@@ -550,7 +562,7 @@ def h10_not_due_project():
         db_path = root / "cache.db"
         cache = CacheDb(db_path)
         cache.initialize()
-        rebuild_year_cache(cache, root / "2024", store)
+        rebuild_year_cache(cache, root / "MYAPP" / "2024", store)
 
         yield {
             "root": root,
@@ -607,7 +619,10 @@ def temp_project_prod_ready_cr_finished():
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        proj_dir = root / "2024" / "PROD_READY" / "r4-proj"
+        appcode = root / "MYAPP"
+        appcode.mkdir(parents=True, exist_ok=True)
+        (appcode / "appcode.json").write_text('{"display_name":"MYAPP"}', encoding="utf-8")
+        proj_dir = root / "MYAPP" / "2024" / "CR" / "PROD_READY" / "r4-proj"
         proj_dir.mkdir(parents=True)
 
         metadata = ProjectMetadata(
@@ -657,7 +672,7 @@ def test_apply_auto_move_blocks_implemented_when_drone_cannot_finish(
 
     # Folder did NOT move: still in PROD_READY, nothing in IMPLEMENTED.
     assert proj_dir.is_dir(), "Project must remain in PROD_READY when R4 blocks"
-    new_path = root / "2024" / ProjectState.IMPLEMENTED.value / proj_dir.name
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.IMPLEMENTED.value / proj_dir.name
     assert not new_path.is_dir(), "Project must not appear in IMPLEMENTED when blocked"
 
     # No AUTO_MOVE event pushed.
@@ -696,7 +711,7 @@ def test_apply_auto_move_implemented_succeeds_when_all_drones_finished(
     assert "banner" not in result
     assert result["to_state"] == ProjectState.IMPLEMENTED.value
 
-    new_path = root / "2024" / ProjectState.IMPLEMENTED.value / proj_dir.name
+    new_path = root / "MYAPP" / "2024" / "CR" / ProjectState.IMPLEMENTED.value / proj_dir.name
     assert result["moved_path"] == str(new_path)
     assert new_path.is_dir(), f"Project not found in IMPLEMENTED: {new_path}"
     assert not proj_dir.is_dir(), "Old PROD_READY folder still exists"

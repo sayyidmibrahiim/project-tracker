@@ -183,9 +183,11 @@ def create_js_api(
             root = settings.root_folder
             if root is None or not root.exists():
                 return
-            years = [str(year)] if year and str(year) != "all" else [p.name for p in root.iterdir() if p.is_dir() and p.name.isdigit()]
-            for year_name in years:
-                rebuild_year_cache(self._cache, root / year_name, self._metadata_store)
+            appcodes = [p for p in root.iterdir() if p.is_dir()]
+            for appcode_path in appcodes:
+                years = [str(year)] if year and str(year) != "all" else [p.name for p in appcode_path.iterdir() if p.is_dir() and p.name.isdigit()]
+                for year_name in years:
+                    rebuild_year_cache(self._cache, appcode_path / year_name, self._metadata_store)
 
         def list_projects(self, year: str | None = None) -> object:
             self._rebuild(year)
@@ -498,9 +500,13 @@ def create_js_api(
                 "subprojects": subprojects_list
             }
 
-        def list_subprojects(self, project_path: Path) -> object:
-            """Return subproject folder names under project_path."""
+        def list_drones(self, project_path: Path) -> object:
+            """Return drone folder names under project_path."""
             return [p.name for p in discover_subproject_paths(Path(project_path))]
+
+        def list_subprojects(self, project_path: Path) -> object:
+            """Backward-compatible alias for list_drones."""
+            return self.list_drones(project_path)
 
         # ── wired mutation: update_cr_link (metadata-only) ──
 
@@ -620,7 +626,7 @@ def create_js_api(
                     response["project_path"] = result["moved_path"]
             return response
 
-        def delete_drone(self, project_path: Path, drone_index: int) -> object:
+        def delete_drone_ticket(self, project_path: Path, drone_index: int) -> object:
             """Remove drone ticket at index."""
             path = Path(project_path)
             metadata = self._metadata_store.read(path)
@@ -772,10 +778,11 @@ def create_js_api(
             from core.models import DroneTicket
             from infrastructure.filesystem import _scaffold_drone
             appcode_path = settings.root_folder / appcode_name
+            appcode_path.mkdir(parents=True, exist_ok=True)
             year_path = appcode_path / year
             project_type = ProjectType(project_type_str)
             if project_type == ProjectType.CR:
-                project_dir = year_path / "CR" / "UAT_PREPARE" / name
+                project_dir = year_path / "UAT_PREPARE" / name
                 if project_dir.exists():
                     raise ValueError(f"Project folder already exists: {project_dir}")
                 project_dir.mkdir(parents=True)
@@ -1018,17 +1025,17 @@ def create_js_api(
             rebuild_year_cache(self._cache_db, year_path, self._metadata_store)
             return {"project_path": str(path), "deleted": True}
 
-        def delete_subproject(self, project_path: Path, name: str) -> object:
-            """Route a subproject-folder delete to the Recycle Bin (Req 5.7-5.8).
+        def delete_drone(self, project_path: Path, drone: int | str) -> object:
+            """Delete a drone ticket by index or a drone folder by name."""
+            if isinstance(drone, int):
+                return self.delete_drone_ticket(project_path, drone)
+            drone_path = Path(project_path) / drone
+            self._project_service.delete_subproject(drone_path)
+            return {"project_path": str(Path(project_path)), "drone": drone, "deleted": True}
 
-            Resolves the subproject path under ``project_path`` and routes to
-            ``ProjectService.delete_subproject`` → ``SafeDeleteService``. On a
-            ``send2trash`` failure the exception propagates and the folder is left
-            in place.
-            """
-            subproject_path = Path(project_path) / name
-            self._project_service.delete_subproject(subproject_path)
-            return {"project_path": str(Path(project_path)), "subproject": name, "deleted": True}
+        def delete_subproject(self, project_path: Path, name: str) -> object:
+            """Backward-compatible alias for delete_drone."""
+            return self.delete_drone(project_path, name)
 
         def open_folder(self, project_path: Path) -> object:
             """Open a project folder through the infrastructure helper."""
@@ -1054,23 +1061,22 @@ def create_js_api(
         def __init__(self, settings_store: SettingsStore) -> None:
             self._settings_store = settings_store
 
-        def list_years(self, appcode: str) -> object:
+        def list_years(self, appcode: str = "") -> object:
             settings = self._settings_store.read()
             root_folder = settings.root_folder
             if root_folder is None or not root_folder.exists():
                 return []
-            appcode_path = root_folder / appcode
-            if not appcode_path.is_dir():
-                return []
-            return sorted(
-                child.name
-                for child in appcode_path.iterdir()
-                if child.is_dir() and child.name.isdigit()
-            )
+            appcode = str(appcode).strip()
+            appcode_paths = [root_folder / appcode] if appcode else [p for p in root_folder.iterdir() if p.is_dir()]
+            years: set[str] = set()
+            for appcode_path in appcode_paths:
+                if not appcode_path.is_dir():
+                    continue
+                years.update(child.name for child in appcode_path.iterdir() if child.is_dir() and child.name.isdigit())
+            return sorted(years)
 
         def create_year(self, appcode: str, year: str) -> object:
-            """Create {root}/{appcode}/{year}/CR/{5 states} + Non-CR/."""
-            from infrastructure.filesystem import ensure_appcode_year_structure
+            """Create {root}/{appcode}/{year}/{5 states}."""
             year = str(year).strip()
             if not year.isdigit():
                 raise ValueError("Year must be numeric (e.g. 2026)")
@@ -1078,13 +1084,16 @@ def create_js_api(
             root_folder = settings.root_folder
             if root_folder is None:
                 raise ValueError("Root folder is not configured")
+            appcode = str(appcode).strip()
+            if not appcode:
+                raise ValueError("Appcode is required")
             appcode_path = root_folder / appcode
-            if not appcode_path.is_dir():
-                raise ValueError(f"Appcode folder not found: {appcode_path}")
+            appcode_path.mkdir(parents=True, exist_ok=True)
             year_dir = appcode_path / year
             if year_dir.exists():
                 raise ValueError(f"Year folder already exists: {year_dir}")
-            ensure_appcode_year_structure(appcode_path, int(year))
+            for state in ProjectState:
+                (year_dir / state.value).mkdir(parents=True, exist_ok=True)
             return {"appcode": appcode, "year": year, "path": str(year_dir)}
 
     # ── file service adapter (list / open / create / rename / delete) ─
@@ -1593,8 +1602,9 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
         easy_drag=False,
     )
     _app_window = window  # keep reference for window-control bridge methods
-    from web.js_api import register_win_events  # noqa: PLC0415
-    register_win_events(window)
+    if hasattr(window, "events"):
+        from web.js_api import register_win_events  # noqa: PLC0415
+        register_win_events(window)
     if start_webview:
         webview.start(http_server=True)
 

@@ -758,21 +758,27 @@ class JsApi:
         encoded = base64.b64encode(raw).decode("ascii")
         return ok({"data_uri": f"data:{mime};base64,{encoded}", "name": p.name})
 
-    def year_list(self) -> dict[str, object]:
+    def year_list(self, appcode: str = "") -> dict[str, object]:
         """Return years from injected year service."""
         try:
             if self._year_service is None:
                 raise RuntimeError("year_service is not configured")
-            return ok(_to_frontend_safe(self._year_service.list_years()))
+            try:
+                years = self._year_service.list_years(appcode)
+            except TypeError as exc:
+                if "positional argument" not in str(exc):
+                    raise
+                years = self._year_service.list_years()
+            return ok(_to_frontend_safe(years))
         except Exception as exc:
             return fail(str(exc), code="YEAR_LIST_FAILED")
 
-    def year_create(self, year: str) -> dict[str, object]:
-        """Create a year folder and its five Folder_State subfolders."""
+    def year_create(self, year: str, appcode: str = "") -> dict[str, object]:
+        """Create an appcode-scoped year folder."""
         try:
             if self._year_service is None:
                 raise RuntimeError("year_service is not configured")
-            return ok(_to_frontend_safe(self._year_service.create_year(year)))
+            return ok(_to_frontend_safe(self._year_service.create_year(appcode, year)))
         except Exception as exc:
             return fail(str(exc), code="YEAR_CREATE_FAILED")
 
@@ -1108,12 +1114,12 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="DRONE_UPDATE_FAILED")
 
-    def drone_delete(self, project_path: str, drone_index: int) -> dict[str, object]:
-        """Delete Drone ticket through service layer."""
+    def drone_delete(self, project_path: str, drone: int | str) -> dict[str, object]:
+        """Delete Drone ticket or folder through service layer."""
         try:
             return ok(
                 _to_frontend_safe(
-                    self._project_service.delete_drone(Path(project_path), drone_index)
+                    self._project_service.delete_drone(Path(project_path), drone)
                 )
             )
         except Exception as exc:
@@ -1184,44 +1190,43 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="FOLDER_REOPEN_FAILED")
 
-    def subproject_list(self, project_path: str) -> dict[str, object]:
-        """List subprojects through service layer."""
+    def drone_list(self, project_path: str) -> dict[str, object]:
+        """List drone folders through service layer."""
         try:
             if self._project_service is None:
                 return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
             return ok(
                 _to_frontend_safe(
-                    self._project_service.list_subprojects(Path(project_path))
+                    self._project_service.list_drones(Path(project_path))
                 )
             )
         except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_LIST_FAILED")
+            return fail(str(exc), code="DRONE_LIST_FAILED")
+
+    def drone_create(self, project_path: str, name: str) -> dict[str, object]:
+        """Create drone folder through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.create_drone(Path(project_path), name)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="DRONE_CREATE_FAILED")
+
+    def subproject_list(self, project_path: str) -> dict[str, object]:
+        """Backward-compatible alias for drone_list."""
+        return self.drone_list(project_path)
 
     def subproject_create(self, project_path: str, name: str) -> dict[str, object]:
-        """Create subproject through service layer."""
-        try:
-            if self._project_service is None:
-                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(
-                _to_frontend_safe(
-                    self._project_service.create_subproject(Path(project_path), name)
-                )
-            )
-        except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_CREATE_FAILED")
+        """Backward-compatible alias for drone_create."""
+        return self.drone_create(project_path, name)
 
     def subproject_delete(self, project_path: str, name: str) -> dict[str, object]:
-        """Delete subproject through service layer."""
-        try:
-            if self._project_service is None:
-                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(
-                _to_frontend_safe(
-                    self._project_service.delete_subproject(Path(project_path), name)
-                )
-            )
-        except Exception as exc:
-            return fail(str(exc), code="SUBPROJECT_DELETE_FAILED")
+        """Backward-compatible alias for drone_delete."""
+        return self.drone_delete(project_path, name)
 
     def file_list(self, path: str) -> dict[str, object]:
         """List files through service layer."""
