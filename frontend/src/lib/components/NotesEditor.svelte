@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { callBridge, isPywebviewReady } from "../bridge";
+  import { callBridge, isPywebviewReady, saveRteFile } from "../bridge";
   import { renderMarkdown } from "../markdown";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
@@ -26,8 +26,28 @@
     projectPath: string;
     initialNotes: string;
     onSaved?: (notes: string) => void;
+    /** Optional explicit file path (Piece B CR Docs). When set, the editor saves
+     *  via saveRteFile instead of notes_update. Defaults to ``${projectPath}/notes.md``. */
+    filePath?: string;
+    /** How to interpret {@link initialNotes} / serialize editor output.
+     *  ``markdown`` (default) round-trips through markdown.ts; ``html`` loads
+     *  Tiptap-native HTML directly with no markdown conversion (used by the
+     *  ``_cr-docs`` signoff files). */
+    fileFormat?: "markdown" | "html";
+    /** When false the editor is read-only (e.g. IMPLEMENTED project state). */
+    editable?: boolean;
   }
-  let { projectPath, initialNotes, onSaved }: Props = $props();
+  let {
+    projectPath,
+    initialNotes,
+    onSaved,
+    filePath,
+    fileFormat = "markdown",
+    editable = true,
+  }: Props = $props();
+
+  /** Resolved target file: explicit path, else the project's notes.md. */
+  const targetFile = $derived(filePath ?? `${projectPath.replace(/\/$/, "")}/notes.md`);
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
@@ -122,7 +142,10 @@
     if (!isPywebviewReady()) { status = "offline"; return; }
     status = "saving";
     errorText = "";
-    const resp = await callBridge("notes_update", projectPath, text);
+    // CR Docs HTML files save through save_rte_file; notes.md keeps notes_update.
+    const resp = fileFormat === "html"
+      ? await saveRteFile(targetFile, text)
+      : await callBridge("notes_update", projectPath, text);
     if (!resp.ok) { status = "error"; errorText = resp.error.message; return; }
     lastSaved = text;
     status = "saved";
@@ -282,7 +305,9 @@
 
   function onEditorUpdate() {
     if (!editor) return;
-    text = htmlToMarkdown(editor.getHTML());
+    // HTML mode (CR Docs signoff files) keeps Tiptap-native HTML; markdown mode
+    // (notes.md) round-trips through domToMarkdown to preserve the contract.
+    text = fileFormat === "html" ? editor.getHTML() : htmlToMarkdown(editor.getHTML());
     scheduleSave();
   }
 
@@ -448,19 +473,26 @@
   $effect(() => {
     if (!isBrowser || !hostEl) return;
     if (editor) {
-      // Project switch: reload content without rebuilding the editor.
-      if (projectPath !== lastPath) {
-        lastPath = projectPath;
-        editor.commands.setContent(renderMarkdown(text), { emitUpdate: false });
+      // Project/file switch: reload content without rebuilding the editor.
+      // Re-key on the resolved target file so switching CR Docs within one
+      // project (same projectPath, different file) reloads content.
+      if (targetFile !== lastPath) {
+        lastPath = targetFile;
+        const html = fileFormat === "html" ? text : renderMarkdown(text);
+        editor.commands.setContent(html, { emitUpdate: false });
         lastSaved = text;
       }
+      // Reflect the editable flag (e.g. IMPLEMENTED state flips it read-only).
+      editor.setEditable(editable);
       return;
     }
-    lastPath = projectPath;
+    lastPath = targetFile;
     const instance = new Editor({
       element: hostEl,
-      editable: true,
-      content: renderMarkdown(untrack(() => text)),
+      editable,
+      content: fileFormat === "html"
+        ? untrack(() => text)
+        : renderMarkdown(untrack(() => text)),
       extensions: [
         StarterKit.configure({
           // StarterKit v3 bundles bold/italic/strike/code, heading, blockquote,
@@ -479,7 +511,11 @@
         TaskList,
         TaskItem.configure({ nested: false }),
         TextAlign.configure({ types: ["heading", "paragraph"] }),
-        Placeholder.configure({ placeholder: "Write project notes (autosaves to notes.md)…" }),
+        Placeholder.configure({
+          placeholder: fileFormat === "html"
+            ? "Write here (autosaves)…"
+            : "Write project notes (autosaves to notes.md)…",
+        }),
         Table.configure({ resizable: true }),
         TableRow,
         TableHeader,
