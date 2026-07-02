@@ -7,7 +7,6 @@
 | `.claude/settings.json`                 | Config           | Commit; project-level Claude Code settings                            |
 | `.claude/rules/*`                       | Config           | Commit; Claude Code rules (memory, integration routing)               |
 | `.gitignore`                            | Config           | Commit; source control ignores                                        |
-| `.graphifyignore`                       | Config           | Commit; graphify scan ignores                                         |
 | `CLAUDE.md`                             | Config           | Commit; workflow/tooling rules for Claude Code                        |
 | `PRD.md`                                | Docs             | Commit; product requirements source of truth                          |
 | `CHANGELOG.md`                          | Docs             | Commit; release notes                                                 |
@@ -23,7 +22,6 @@
 | `_docs/_archive/`                       | Docs             | Commit; history snapshots (append only, don't overwrite)              |
 | `_reference/`                           | Reference        | Commit; HTML prototype files (visual AS-IS parity only)               |
 | `_specs/`                               | Docs             | Commit; raw prompt specs                                              |
-| `graphify-out/`                         | Generated        | Gitignore; rebuildable AST graph                                      |
 | `node_modules/`, `.venv/`               | Deps             | Gitignore; install artifacts                                          |
 | `web/static/`                           | Build            | Gitignore; Vite build output                                          |
 | `__pycache__/`, `.pytest_cache/`        | Cache            | Gitignore; Python cache                                               |

@@ -27,8 +27,6 @@ __pycache__/
 node_modules/
 web/static/
 
-# graphify knowledge graph (rebuildable, AST-only)
-graphify-out/
 
 # Claude/debug probe artifacts
 _memprobe*.py

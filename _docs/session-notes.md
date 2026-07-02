@@ -8,6 +8,10 @@
 
 ---
 
+## 2026-07-02
+
+Tooling update: Code graph integration retired by user request. Active docs/settings use native search/read tools for code lookup. Headroom installed in repo venv and setup reference added with proxy URL `http://localhost:8787` and install command `pip install "headroom-ai[proxy]"`. Global `ANTHROPIC_BASE_URL` remains routed to `http://127.0.0.1:20128/v1`; Headroom proxy uses `8787`.
+
 **Now:** Appcode folder structure + CR/Non-CR project types implementation on `general/appcode-structure`. Piece A core domain + infrastructure layers done (Tasks 1-9). Bridge/app_web + frontend + existing test updates + docs in progress.
 
 Cross-menu fix sweep (one-time branch scope override approved by user):
@@ -49,6 +53,6 @@ Verifikasi: svelte-check 0 errors, vite build clean
 Branch aktif: `chore/bootstrap-tooling`
 File diubah: bootstrap tooling/config docs only
 Design approved: none
-Keputusan teknis: context-mode owns tool-output compression; claude-mem owns cross-session recall; agentmemory disabled to avoid duplicate capture/injection; graphify is on-demand graph; RTK manual-only on native Windows.
-Smoke: plugin list OK; graphify query degraded/noisy but executable; RTK OK.
+Keputusan teknis: context-mode owns tool-output compression; claude-mem owns cross-session recall; agentmemory disabled to avoid duplicate capture/injection; retired code graph integration no longer used; RTK manual-only on native Windows.
+Smoke: plugin list OK; retired code graph integration was degraded/noisy; RTK OK.
 Blocked: Windows manual product verification remains separate from bootstrap.

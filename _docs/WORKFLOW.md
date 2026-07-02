@@ -38,7 +38,7 @@ This branching rule applies to **every AI agent regardless of provider/model** (
 Before coding a phase:
 
 1. Read relevant PRD section
-2. Use graphify for codebase understanding
+2. Use native search/read tools for codebase understanding
 3. Identify files to touch (minimal set)
 4. State verification criteria upfront
 
@@ -47,7 +47,7 @@ While coding:
 - Keep changes surgical — only touch what's needed
 - Do not refactor unrelated code
 - Do not delete legacy files without approval
-- Reuse existing functions/components (graphify + smart-explore to find them)
+- Reuse existing functions/components; search first, then read only the needed files
 
 After coding:
 
@@ -55,8 +55,7 @@ After coding:
 2. Run frontend build if frontend changed
 3. Generate manual checklist for user
 4. Update \_docs/PROGRESS.md
-5. Refresh graphify if installed
-6. Report: changed files, commands run, not tested, remaining risks
+5. Report: changed files, commands run, not tested, remaining risks
 
 ## Done Gate
 
