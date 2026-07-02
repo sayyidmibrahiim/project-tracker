@@ -248,7 +248,7 @@ test("DroneTable renders columns and maps drones to drones", async () => {
     legalDroneOptionsFor: (s) => [s],
   });
   // Column headers.
-  assert.match(body, /Sub Project/);
+  assert.match(body, /Drone/);
   assert.match(body, /Drone Ticket/);
   assert.match(body, /Drone State/);
   // Mapped sub-project shows its name.
@@ -269,14 +269,14 @@ test("DroneTable renders an empty state when there are no drones", async () => {
     onOpenFolder: () => {},
     legalDroneOptionsFor: (s) => [s],
   });
-  assert.match(body, /No sub projects/);
+  assert.match(body, /No drones yet/);
 });
 
 test("Dashboard renders the PRD §11.15 summary table shell and touches no bridge at render", async () => {
   const body = await renderViaLoader(DASHBOARD, { selectedYear: "2026", searchQuery: "" });
   // Column headers (real PRD §11.15 columns; compact labels allowed by design pass).
   assert.match(body, /Project/);
-  assert.match(body, /Sub Project/);
+  assert.match(body, /Drone/);
   assert.match(body, /Drone Ticket/);
   assert.match(body, /Drone State/);
   assert.match(body, /CR State/);
@@ -347,11 +347,11 @@ test("ProjectDetails source follows the prototype Project Command Center structu
 
   assert.match(src, /screen-details/);
   assert.match(src, /Project Command Center/);
-  assert.match(src, /Sub Project/);
+  assert.match(src, /Drone/);
   assert.match(src, /Project Identity/);
   assert.match(src, /Schedule/);
   assert.match(src, /Activity History/);
-  assert.match(src, /Add Sub Project/);
+  assert.match(src, /Add Drone Ticket/);
   assert.match(src, /openProjectFolder/);
   assert.match(src, /requestTopDelete/);
   assert.doesNotMatch(src, /pd-list-panel/);

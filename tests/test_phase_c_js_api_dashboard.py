@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.enums import CRState, ProjectState
+from core.enums import CRState, ProjectState, ProjectType
 from services.dashboard_service import DashboardData, DashboardSummary
 from web import js_api
 from web.js_api import JsApi
@@ -33,31 +33,32 @@ class FakeDashboardService:
             total_projects=1,
             by_project_state={ProjectState.UAT_PREPARE: 1},
             by_cr_state={CRState.APPROVED: 1},
+            by_project_type={ProjectType.CR: 1},
             by_t10_status={"READY": 1},
             total_drone_tickets=2,
         )
 
-    def list_projects(self, year: str | None = None) -> list[FakeProject]:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> list[FakeProject]:
         self.calls.append(("list_projects", year))
         return [self.project]
 
-    def get_summary(self, year: str | None = None) -> DashboardSummary:
+    def get_summary(self, year: str | None = None, appcode: str | None = None) -> DashboardSummary:
         self.calls.append(("get_summary", year))
         return self.summary
 
-    def get_dashboard(self, year: str | None = None) -> DashboardData:
+    def get_dashboard(self, year: str | None = None, appcode: str | None = None) -> DashboardData:
         self.calls.append(("get_dashboard", year))
         return DashboardData(projects=(self.project,), summary=self.summary)  # type: ignore[arg-type]
 
 
 class ExplodingDashboardService(FakeDashboardService):
-    def list_projects(self, year: str | None = None) -> list[FakeProject]:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> list[FakeProject]:
         raise RuntimeError("dashboard unavailable")
 
-    def get_summary(self, year: str | None = None) -> DashboardSummary:
+    def get_summary(self, year: str | None = None, appcode: str | None = None) -> DashboardSummary:
         raise RuntimeError("summary unavailable")
 
-    def get_dashboard(self, year: str | None = None) -> DashboardData:
+    def get_dashboard(self, year: str | None = None, appcode: str | None = None) -> DashboardData:
         raise RuntimeError("data unavailable")
 
 
@@ -92,6 +93,7 @@ def test_dashboard_summary_returns_ok_shape_and_string_keys():
             "total_projects": 1,
             "by_project_state": {"UAT_PREPARE": 1},
             "by_cr_state": {"APPROVED": 1},
+            "by_project_type": {"CR": 1},
             "by_t10_status": {"READY": 1},
             "total_drone_tickets": 2,
         },

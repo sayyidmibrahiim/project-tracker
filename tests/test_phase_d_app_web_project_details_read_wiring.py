@@ -112,6 +112,11 @@ def test_project_get_returns_detail_fields(js_api, temp_project):
     data = result["data"]
     assert data["project_name"] == "test-project"
     assert data["project_state"] == "UAT_PREPARE"
+    assert data["appcode"] == "MYAPP"
+    assert data["project_type"] == "CR"
+    assert data["non_cr_state"] is None
+    assert data["drones"] == ["sub1"]
+    assert data["drone_paths"] == [str(temp_project["project_path"] / "sub1")]
     # cr_number extracted via extract_cr_number from cr_link.
     # The fixture cr_link="https://cr.example.com/CR-999" does not match
     # the CRNumber= query-param pattern, so cr_number will be empty string.
@@ -230,6 +235,32 @@ def test_drone_create_wired_and_creates_folder(js_api, temp_project):
     assert result["ok"] is True
     assert (path / "new-sub").is_dir()
     assert result["data"]["drone"] == "new-sub"
+    metadata = MetadataStore().read(path)
+    assert metadata is not None
+    assert [ticket.subfolder_name for ticket in metadata.drone_tickets] == ["new-sub"]
+
+
+def test_drone_delete_by_name_removes_metadata_ticket(js_api, temp_project, monkeypatch):
+    """drone_delete by folder name removes matching metadata ticket."""
+    path = temp_project["project_path"]
+    store = MetadataStore()
+    metadata = store.read(path)
+    assert metadata is not None
+    from core.models import DroneTicket
+
+    metadata.drone_tickets.append(DroneTicket(subfolder_name="sub1"))
+    store.write(path, metadata)
+
+    from infrastructure import filesystem
+
+    monkeypatch.setattr(filesystem, "send_to_recycle_bin", lambda target: None)
+    result = js_api.drone_delete(str(path), "sub1")
+
+    assert result["ok"] is True
+    updated = store.read(path)
+    assert updated is not None
+    assert updated.drone_tickets == []
+
 
 
 def test_file_open_dev_skipped_off_windows(js_api):

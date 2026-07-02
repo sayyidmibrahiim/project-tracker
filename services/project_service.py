@@ -27,11 +27,22 @@ from infrastructure.metadata_store import MetadataStore
 
 
 def state_from_project_path(project_path: Path) -> ProjectState:
+    if filesystem.project_type_from_path(project_path) == ProjectType.NON_CR:
+        raise ValueError("Folder state only applies to CR projects")
     return ProjectState(project_path.parent.name)
 
 
 def year_path_from_project_path(project_path: Path) -> Path:
+    if filesystem.project_type_from_path(project_path) == ProjectType.NON_CR:
+        return project_path.parent.parent
+    if project_path.parent.parent.name == "CR":
+        return project_path.parent.parent.parent
     return project_path.parent.parent
+
+
+def target_dir_from_project_path(project_path: Path, target_state: ProjectState) -> Path:
+    year_path = year_path_from_project_path(project_path)
+    return year_path / "CR" / target_state.value if project_path.parent.parent.name == "CR" else year_path / target_state.value
 
 
 class ProjectService:
@@ -159,7 +170,7 @@ class ProjectService:
         old_folder_state = state_from_project_path(project_path)
         reopen_result = reopen_project_state(old_folder_state)
 
-        target_dir = year_path_from_project_path(project_path) / reopen_result.folder_state.value
+        target_dir = target_dir_from_project_path(project_path, reopen_result.folder_state)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -199,7 +210,7 @@ class ProjectService:
         if not guard_result.allowed:
             return guard_result
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.PROD_READY.value
+        target_dir = target_dir_from_project_path(project_path, ProjectState.PROD_READY)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -234,7 +245,7 @@ class ProjectService:
         if not guard_result.allowed:
             return guard_result
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.IMPLEMENTED.value
+        target_dir = target_dir_from_project_path(project_path, ProjectState.IMPLEMENTED)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -263,7 +274,7 @@ class ProjectService:
 
         validate_postponed_resume(ProjectState.UAT_PREPARE)
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.UAT_PREPARE.value
+        target_dir = target_dir_from_project_path(project_path, ProjectState.UAT_PREPARE)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -289,7 +300,7 @@ class ProjectService:
         old_cr_state = metadata.cr_state
         validate_project_state_transition(old_state, ProjectState.CANCELED)
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.CANCELED.value
+        target_dir = target_dir_from_project_path(project_path, ProjectState.CANCELED)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:
@@ -318,7 +329,7 @@ class ProjectService:
         old_cr_state = metadata.cr_state
         validate_project_state_transition(old_state, ProjectState.POSTPONED)
 
-        target_dir = year_path_from_project_path(project_path) / ProjectState.POSTPONED.value
+        target_dir = target_dir_from_project_path(project_path, ProjectState.POSTPONED)
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / project_path.name
         if target_path.exists() and target_path != project_path:

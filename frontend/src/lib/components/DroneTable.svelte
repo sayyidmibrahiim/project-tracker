@@ -84,11 +84,11 @@
 
 <div class="sp-root">
   {#if droneNames.length === 0}
-    <div class="sp-empty">No sub projects yet. Add one above.</div>
+    <div class="sp-empty">No drones yet. Add one above.</div>
   {:else}
-    <div class="sp-table" role="table" aria-label="Sub projects">
+    <div class="sp-table" role="table" aria-label="Drones">
       <div class="sp-tr sp-th" role="row">
-        <span>Sub Project</span><span>Drone Ticket</span><span>Drone State</span>
+        <span>Drone</span><span>Drone Ticket</span><span>Drone State</span>
       </div>
       {#each rows as row (row.name)}
         <div

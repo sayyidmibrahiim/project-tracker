@@ -64,7 +64,7 @@ export interface DashboardProject {
   project_path: string;
   year: string;
   project_name: string;
-  project_state: string;
+  project_state: string | null;
   cr_number: string | null;
   cr_link: string;
   cr_state: string;
@@ -73,6 +73,7 @@ export interface DashboardProject {
   end_datetime: string | null;
   t10_status: string;
   drone_ticket_count: number;
+  created_at: string | null;
   appcode: string;
   project_type: "CR" | "NON_CR";
   non_cr_state: "PLANNING" | "IN_PROGRESS" | "DONE" | null;
@@ -87,6 +88,7 @@ export interface DashboardSummary {
   total_projects: number;
   by_project_state: Record<string, number>;
   by_cr_state: Record<string, number>;
+  by_project_type: Record<string, number>;
   by_t10_status: Record<string, number>;
   total_drone_tickets: number;
 }
@@ -134,11 +136,11 @@ export interface ProjectDetail {
   drone_tickets: DroneTicket[];
   implementation_plan?: string | null;
   history?: HistoryEntry[];
-  appcode?: string;
-  project_type?: "CR" | "NON_CR";
-  non_cr_state?: "PLANNING" | "IN_PROGRESS" | "DONE" | null;
-  drones?: string[];
-  drone_paths?: string[];
+  appcode: string;
+  project_type: "CR" | "NON_CR";
+  non_cr_state: "PLANNING" | "IN_PROGRESS" | "DONE" | null;
+  drones: string[];
+  drone_paths: string[];
 }
 
 /** Mirrors HistoryEntry metadata rows returned by project_get. */

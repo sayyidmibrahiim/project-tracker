@@ -58,13 +58,13 @@ def poll_events(limit: int | None = None) -> dict[str, object]:
 class DashboardServiceProtocol(Protocol):
     """Read-only dashboard service surface used by JsApi."""
 
-    def list_projects(self, year: str | None = None) -> object:
+    def list_projects(self, year: str | None = None, appcode: str | None = None) -> object:
         """Return dashboard project DTOs."""
 
-    def get_summary(self, year: str | None = None) -> object:
+    def get_summary(self, year: str | None = None, appcode: str | None = None) -> object:
         """Return dashboard summary DTO."""
 
-    def get_dashboard(self, year: str | None = None) -> object:
+    def get_dashboard(self, year: str | None = None, appcode: str | None = None) -> object:
         """Return dashboard data DTO."""
 
 
@@ -483,6 +483,7 @@ class JsApi:
         outlook_service: OutlookServiceProtocol | None = None,
         teams_service: TeamsServiceProtocol | None = None,
         global_plan_service: GlobalPlanServiceProtocol | None = None,
+        appcode_service: AppCodeServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -501,6 +502,7 @@ class JsApi:
         self._outlook_service = outlook_service
         self._teams_service = teams_service
         self._global_plan_service = global_plan_service
+        self._appcode_service = appcode_service
 
     def poll_events(self, limit: int | None = None) -> dict[str, object]:
         """Drain queued bridge events."""
@@ -782,24 +784,69 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="YEAR_CREATE_FAILED")
 
-    def dashboard_list_projects(self, year: str | None = None) -> dict[str, object]:
+    def appcode_list(self) -> dict[str, object]:
+        """Return discovered appcodes."""
+        try:
+            if self._appcode_service is None:
+                return fail("appcode_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._appcode_service.list_appcodes()))
+        except Exception as exc:
+            return fail(str(exc), code="APPCODE_LIST_FAILED")
+
+    def appcode_add(self, name: str) -> dict[str, object]:
+        """Create appcode folder + config."""
+        try:
+            if self._appcode_service is None:
+                return fail("appcode_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._appcode_service.add_appcode(name)))
+        except Exception as exc:
+            return fail(str(exc), code="APPCODE_ADD_FAILED")
+
+    def appcode_remove(self, name: str) -> dict[str, object]:
+        """Remove appcode folder via service."""
+        try:
+            if self._appcode_service is None:
+                return fail("appcode_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._appcode_service.remove_appcode(name)))
+        except Exception as exc:
+            return fail(str(exc), code="APPCODE_REMOVE_FAILED")
+
+    def appcode_get_config(self, appcode: str) -> dict[str, object]:
+        """Return appcode config."""
+        try:
+            if self._appcode_service is None:
+                return fail("appcode_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._appcode_service.get_appcode_config(appcode)))
+        except Exception as exc:
+            return fail(str(exc), code="APPCODE_GET_CONFIG_FAILED")
+
+    def appcode_update_config(self, appcode: str, data: dict[str, object]) -> dict[str, object]:
+        """Update appcode config."""
+        try:
+            if self._appcode_service is None:
+                return fail("appcode_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._appcode_service.update_appcode_config(appcode, data)))
+        except Exception as exc:
+            return fail(str(exc), code="APPCODE_UPDATE_CONFIG_FAILED")
+
+    def dashboard_list_projects(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""
         try:
-            return ok(_to_frontend_safe(self._dashboard_service.list_projects(year)))
+            return ok(_to_frontend_safe(self._dashboard_service.list_projects(year, appcode)))
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_LIST_PROJECTS_FAILED")
 
-    def dashboard_summary(self, year: str | None = None) -> dict[str, object]:
+    def dashboard_summary(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return dashboard summary."""
         try:
-            return ok(_to_frontend_safe(self._dashboard_service.get_summary(year)))
+            return ok(_to_frontend_safe(self._dashboard_service.get_summary(year, appcode)))
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_SUMMARY_FAILED")
 
-    def dashboard_data(self, year: str | None = None) -> dict[str, object]:
+    def dashboard_data(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return dashboard rows plus summary."""
         try:
-            data = self._dashboard_service.get_dashboard(year)
+            data = self._dashboard_service.get_dashboard(year, appcode)
         except Exception as exc:
             return fail(str(exc), code="DASHBOARD_DATA_FAILED")
         # H-10 reminder evaluation is a best-effort side effect that writes
@@ -995,10 +1042,10 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="PROJECT_GET_FAILED")
 
-    def project_list(self, year: str | None = None) -> dict[str, object]:
+    def project_list(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return project list."""
         try:
-            return ok(_to_frontend_safe(self._project_service.list_projects(year)))
+            return ok(_to_frontend_safe(self._project_service.list_projects(year, appcode)))
         except Exception as exc:
             return fail(str(exc), code="PROJECT_LIST_FAILED")
 
@@ -1084,6 +1131,19 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="CR_UPDATE_STATE_FAILED")
+
+    def set_non_cr_state(self, project_path: str, target_state: str) -> dict[str, object]:
+        """Update Non-CR project state through service layer."""
+        try:
+            if self._project_service is None:
+                return fail("project_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._project_service.set_non_cr_state(Path(project_path), target_state)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SET_NON_CR_STATE_FAILED")
 
     def drone_add(self, project_path: str, data: dict[str, object]) -> dict[str, object]:
         """Add Drone ticket through service layer."""

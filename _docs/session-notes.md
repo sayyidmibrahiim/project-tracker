@@ -12,7 +12,7 @@
 
 Tooling update: Code graph integration retired by user request. Active docs/settings use native search/read tools for code lookup. Headroom installed in repo venv and setup reference added with proxy URL `http://localhost:8787` and install command `pip install "headroom-ai[proxy]"`. Global `ANTHROPIC_BASE_URL` remains routed to `http://127.0.0.1:20128/v1`; Headroom proxy uses `8787`.
 
-**Now:** Appcode folder structure + CR/Non-CR project types implementation on `general/appcode-structure`. Piece A core domain + infrastructure layers done (Tasks 1-9). Bridge/app_web + frontend + existing test updates + docs in progress.
+**Now:** Piece A UI/UX implemented on `general/appcode-structure-audit`; manual-check bugs fixed. Dashboard: 3 multi-select checklist dropdowns (CR State / Appcode / Project Type) use fixed-position menu/scrim so header overflow cannot clip list; 2-line project metadata (`Type · Appcode · time · full date`); Non-CR rows render safe (no CR/Drone edit). Add Project form: CR/Non-CR radio, appcode placeholder dropdown + inline `+` create (`appcode_list`/`appcode_add`), start/end datetime only; no CR link / implementation plan; never sends `drone_name`. Project Details: `isSubproject` → `isNonCr`; Non-CR shows state dropdown (`set_non_cr_state`), hides CR/Drone sections, keeps schedule editable. Backend `create_project` persists optional start/end and ignores `drone_name` (lazy drone). `appcode_add` creates current-year `CR/{states}` and `Non-CR`; appcode discovery includes manual folders with year subfolders (e.g. SSID). Drone copy rename (`Sub Project` → `Drone`) across Dashboard/ProjectDetails/DroneTable.
 
 Cross-menu fix sweep (one-time branch scope override approved by user):
 
@@ -22,11 +22,15 @@ Cross-menu fix sweep (one-time branch scope override approved by user):
 - Second Brain: wired search/sort/type/date filters to real filesystem notes; added Link Bank export/import/rename/restore.
 - Settings: removed Theme switch (PRD = fixed theme); added T-10/numeric validation, trailing-slash guard, restart-required notice.
 
-**Next:** Complete Tasks 8 (bridge/app_web), 10 (frontend), 11 (existing tests), 12 (docs) for Piece A.
+**Next:** User manual verify Piece A audit, then approve merge to `main`. After merge, plan Piece B (`project-details/cr-docs-rte`).
 
-**Blocked:** None in code. Windows runtime + packaging need a real Windows machine.
+**Blocked:** None in startup. Windows manual verification needed for real filesystem/create/move flows.
 
-**active_menu:** general/appcode-structure
+**active_menu:** general/appcode-structure-audit
+
+**Changed files:** `frontend/src/lib/components/NewProjectForm.svelte`, `frontend/src/lib/components/Dashboard.svelte`, `frontend/src/lib/components/ProjectDetails.svelte`, `frontend/src/lib/components/DroneTable.svelte`, `frontend/src/lib/components/Report.svelte`, `frontend/src/lib/types.ts`, `app_web.py`, plus updated assertions in `frontend/tests/components.test.mjs`, `frontend/tests/as-is-prototype-parity.test.mjs`, `frontend/tests/dashboard-inline-edit.test.mjs`, `frontend/tests/project-details-fase1.test.mjs`, `frontend/tests/project-details-fase3-fase4.test.mjs`, `_docs/PROGRESS.md`, `_docs/session-notes.md`.
+
+**Verification:** `npm --prefix frontend run check` = 0 errors/0 warnings; `npm --prefix frontend test` = 149 pass/0 fail; `npm --prefix frontend run build` = ok; `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main` startup clean. No new Python test files by user hard rule; Python tests intentionally skipped.
 
 ---
 

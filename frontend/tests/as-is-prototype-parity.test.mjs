@@ -34,10 +34,10 @@ test("AS_IS header labels are present", () => {
 });
 
 test("AS_IS page titles and core sections are present", () => {
-  for (const label of ["No", "Project", "Sub Project", "Start", "End", "Drone Ticket", "Drone State", "CR Number", "CR State"]) {
+  for (const label of ["No", "Project", "Drone", "Start", "End", "Drone Ticket", "Drone State", "CR Number", "CR State"]) {
     assert.match(DASHBOARD, new RegExp(label));
   }
-  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Sub Project \\(DRONE\\)", "Files", "Notes", "Activity History"]) {
+  for (const label of ["Project Command Center", "Project Identity", "Schedule", "Drone Tickets", "Files", "Notes", "Activity History"]) {
     assert.match(PROJECT_DETAILS, new RegExp(label));
   }
   for (const label of ["Second Brain", "Notes", "Link Bank", "Backlinks", "Recent Activity"]) {

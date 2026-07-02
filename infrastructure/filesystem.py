@@ -129,7 +129,13 @@ def project_type_from_path(project_path: Path) -> ProjectType:
 
 
 def discover_appcodes(root_folder: Path) -> list[AppCodeEntry]:
-    """Scan {root}/* for folders containing appcode.json."""
+    """Scan {root}/* for appcode folders.
+
+    A folder counts as an appcode if it has an appcode.json OR a year-like
+    subfolder (so a folder created manually on disk — e.g. SSID — still shows
+    up in the appcode dropdown without an appcode.json). Missing config is
+    synthesized as a default.
+    """
     if not root_folder.exists():
         return []
     entries: list[AppCodeEntry] = []
@@ -137,17 +143,30 @@ def discover_appcodes(root_folder: Path) -> list[AppCodeEntry]:
         if not child.is_dir():
             continue
         config_path = child / "appcode.json"
-        if not config_path.exists():
+        if config_path.exists():
+            try:
+                data = json.loads(config_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            config = AppCodeConfig.from_dict(data)
+        elif _has_year_subfolder(child):
+            config = AppCodeConfig(display_name=child.name)
+        else:
             continue
-        try:
-            data = json.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        config = AppCodeConfig.from_dict(data)
         if not config.display_name:
             config.display_name = child.name
         entries.append(AppCodeEntry(path=child, name=child.name, config=config))
     return entries
+
+
+def _has_year_subfolder(folder: Path) -> bool:
+    """True if folder contains a 4-digit year directory (heuristic appcode marker)."""
+    if not folder.is_dir():
+        return False
+    for child in folder.iterdir():
+        if child.is_dir() and len(child.name) == 4 and child.name.isdigit():
+            return True
+    return False
 
 
 def state_folders_for_year(year_path: Path) -> list[Path]:

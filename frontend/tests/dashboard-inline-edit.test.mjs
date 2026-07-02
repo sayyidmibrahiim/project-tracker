@@ -80,10 +80,10 @@ test("Dashboard source aligns subprojects to placeholder drone rows and uses dro
   assert.match(fn, /callBridge\("drone_update"/);
 });
 
-test("ProjectDetails source has visible AS_IS command center and sub-project box", () => {
+test("ProjectDetails source has visible AS_IS command center and drone box", () => {
   assert.match(PROJECT_DETAILS, /screen-details/);
   assert.match(PROJECT_DETAILS, /Project Command Center/);
-  assert.match(PROJECT_DETAILS, /Sub Project \(DRONE\)/);
+  assert.match(PROJECT_DETAILS, /Drone Tickets/);
   assert.doesNotMatch(PROJECT_DETAILS, /Implementation Plan/);
   assert.doesNotMatch(PROJECT_DETAILS, /Save CR State/);
 });
@@ -115,8 +115,11 @@ test("Dashboard removes redundant command strip and grouped table chrome", () =>
   assert.doesNotMatch(DASHBOARD, /dash-group-row/);
   assert.doesNotMatch(DASHBOARD, /dash-group-cell/);
   assert.doesNotMatch(DASHBOARD, /direct-table-container/);
-  assert.match(DASHBOARD, /activeStatus === "needs-review"/);
-  assert.match(DASHBOARD, /projectNeedsReview/);
+  // Piece A: 3 multi-select checklist dropdown filters (CR State / Appcode / Project Type).
+  assert.match(DASHBOARD, /dashboard-filter-bar/);
+  assert.match(DASHBOARD, /selectedCrStates/);
+  assert.match(DASHBOARD, /selectedAppcodes/);
+  assert.match(DASHBOARD, /selectedProjectTypes/);
 });
 
 test("Dashboard project title cell is centered", () => {
