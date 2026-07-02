@@ -239,3 +239,26 @@ export interface SecondBrainItem {
   favorite: boolean;
   excerpt?: string;
 }
+
+// ── CR Docs RTE (Piece B) — mirror get_rte_file / save_rte_file shapes ──
+
+/** RTE file format reported by the backend (see _detect_rte_format). */
+export type RteFormat = "html" | "markdown" | "msg" | "text";
+
+/** A selectable entry in the CR Docs file dropdown. */
+export interface RteFile {
+  name: string;
+  path: string;
+  format: RteFormat;
+  editable: boolean;
+  /** True for files the editor cannot render (e.g. .msg → open externally). */
+  isOpenable: boolean;
+}
+
+/** Payload returned by get_rte_file. */
+export interface RteFileContent {
+  content: string;
+  format: RteFormat;
+  editable: boolean;
+}
+

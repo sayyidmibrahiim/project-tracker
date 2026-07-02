@@ -1,4 +1,4 @@
-import type { BridgeResponse, GlobalPlan, PywebviewApi } from "./types";
+import type { BridgeResponse, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
 import { BridgeErrorCode } from "./types";
 
 /** Maximum time to wait for a single bridge call before treating it as failed. */
@@ -227,4 +227,19 @@ export function globalPlanGet(): Promise<BridgeResponse<GlobalPlan>> {
 
 export function globalPlanSave(plan: GlobalPlan): Promise<BridgeResponse<GlobalPlan>> {
   return callBridge("global_plan_save", plan);
+}
+
+// ── CR Docs RTE (Piece B) ──
+
+/** Read a file for RTE editing. See backend get_rte_file. */
+export function getRteFile(filePath: string): Promise<BridgeResponse<RteFileContent>> {
+  return callBridge("get_rte_file", filePath);
+}
+
+/** Save RTE content back to a file. See backend save_rte_file. */
+export function saveRteFile(
+  filePath: string,
+  content: string,
+): Promise<BridgeResponse<{ saved: boolean }>> {
+  return callBridge("save_rte_file", filePath, content);
 }
