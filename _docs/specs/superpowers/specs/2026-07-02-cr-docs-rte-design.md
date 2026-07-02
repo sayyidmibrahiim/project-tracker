@@ -166,3 +166,37 @@ When .msg file selected from dropdown:
 - `.msg` file auto-download (Piece C — approval automation)
 - Email polling (Piece C)
 - Approval buttons (Piece C)
+
+---
+
+## Amendments (2026-07-03)
+
+Reconciliation pass against the codebase, handoff hard rules, and PRD. These amendments override the conflicting sections above and are the source of truth for implementation. Full rationale + step-by-step tasks live in the implementation plan: `_docs/specs/superpowers/plans/2026-07-03-cr-docs-rte-plan.md`.
+
+### A1. No new Python test files (supersedes Section 5)
+
+Section 5 lists `tests/test_cr_docs_creation.py` and `tests/test_rte_file_bridge.py`. **These are NOT created.** The handoff hard rule "Do not create new Python test files" (also applied to Piece A, recorded in `_docs/session-notes.md`) governs. Verification is via `svelte-check`, existing frontend tests, and the manual checklist.
+
+### A2. Lazy scaffold on read — `create_project` is NOT modified (supersedes Section 3)
+
+Section 3 modifies `create_project` to touch the two files. **This is dropped.** Instead, `get_rte_file` creates a missing `uat-signoff`/`prod-lv` (0-byte) on first read, then loads it. This is the single creation mechanism, so it works uniformly for:
+- Existing Piece A CR projects (which already have an empty `_cr-docs/` folder).
+- New CR projects created after Piece B.
+
+`notes.md`, `*.msg`, and arbitrary files are never auto-created by `get_rte_file`.
+
+### A3. State lock = treat like notes
+
+`uat-signoff`/`prod-lv` are the CR's signoff evidence, so they follow the `notes_update` lock rule (`app_web.py:1362-1370`): editable in `UAT_PREPARE`/`PROD_READY`/`POSTPONED`/`CANCELED`; **view-only in `IMPLEMENTED`** (`get_rte_file` returns `editable=false`; `save_rte_file` rejects with code `LOCKED`). This is stricter-than-files in `PROD_READY` but matches the notes/evidence allowance in PRD §9.5.
+
+### A4. Scope = project-level only (narrows Section 2 drone level)
+
+The "Drone level" dropdown in Section 2 is **not implemented in Piece B**. Piece B adds the CR Docs editor at the **project level only** (matches handoff scope and manual checklist). Drone editing is left on its existing path.
+
+### A5. `.msg` files are Piece C's creation responsibility
+
+Piece B only **displays/opens** `.msg` files if they already exist in `_cr-docs/`. It never creates, downloads, or auto-fills them. Auto-download is Piece C.
+
+### A6. `.msg` detection in the dropdown
+
+`get_rte_file` reports `format="msg"`, `content=""` (binary never read into memory), `editable=false`. The frontend renders an "Open externally" panel (button calls existing `file_open` → `os.startfile`), never the Tiptap editor.
