@@ -1369,6 +1369,67 @@ def create_js_api(
             _atomic_write_text(notes_file, notes)
             return notes
 
+        # ── _cr-docs RTE files (Piece B) ───────────────────────────────
+        # Reuses the notes adapter: same IMPLEMENTED lock rule (signoff
+        # evidence is treated like notes per spec amendment A3) and the same
+        # atomic write helper. ``uat-signoff``/``prod-lv`` are HTML; missing
+        # ones are lazily scaffolded (0-byte) on first read (amendment A2) —
+        # the single creation mechanism, so ``create_project`` is unchanged.
+        _CR_DOC_HTML_NAMES = frozenset({"uat-signoff", "prod-lv"})
+
+        def _detect_rte_format(self, path: Path) -> str:
+            """Return the RTE format for ``path``.
+
+            html → the two ``_cr-docs`` signoff names; markdown → ``*.md``;
+            msg → ``*.msg`` (binary, never read into memory); text → other.
+            """
+            name = Path(path).name
+            if name in self._CR_DOC_HTML_NAMES:
+                return "html"
+            suffix = Path(path).suffix.casefold()
+            if suffix == ".md":
+                return "markdown"
+            if suffix == ".msg":
+                return "msg"
+            return "text"
+
+        def get_rte_file(self, file_path: Path) -> object:
+            path = Path(file_path)
+            fmt = self._detect_rte_format(path)
+            state = _folder_state_for_path(path)
+            editable = state is not ProjectState.IMPLEMENTED and fmt != "msg"
+
+            if fmt == "msg":
+                # Binary Outlook message — never read into memory; the frontend
+                # renders an "Open externally" panel instead of the editor.
+                return {"content": "", "format": fmt, "editable": False}
+
+            # Lazy scaffold: create missing CR-doc HTML files so existing Piece A
+            # projects (empty ``_cr-docs/``) and new projects behave uniformly.
+            if fmt == "html" and not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+
+            if not path.is_file():
+                # Markdown/text targets are never auto-created; surface as empty.
+                return {"content": "", "format": fmt, "editable": editable}
+
+            content = path.read_text(encoding="utf-8")
+            return {"content": content, "format": fmt, "editable": editable}
+
+        def save_rte_file(self, file_path: Path, content: str) -> object:
+            path = Path(file_path)
+            fmt = self._detect_rte_format(path)
+            if fmt == "msg":
+                raise ValueError("Outlook .msg files are not editable in-app")
+            state = _folder_state_for_path(path)
+            if state is ProjectState.IMPLEMENTED:
+                raise ValueError(
+                    "CR docs are view-only while the project is in IMPLEMENTED"
+                )
+            _atomic_write_text(path, content)
+            return {"saved": True}
+
     # ── outlook service adapter (EmailService + guarded outlook_client) ─
     class _OutlookServiceAdapter:
         """Outlook automation adapter (Draft_First, guarded, layered).

@@ -280,6 +280,23 @@ class NotesServiceProtocol(Protocol):
     def update_notes(self, project_path: Path, notes: str) -> object:
         """Update project notes."""
 
+    def get_rte_file(self, file_path: Path) -> object:
+        """Read a file for RTE editing. Returns {content, format, editable}.
+
+        For ``_cr-docs/uat-signoff`` and ``_cr-docs/prod-lv`` the file is lazily
+        scaffolded (0-byte) on first read. ``format`` is one of
+        ``html`` (the two CR-doc names), ``markdown`` (``*.md``), ``msg``
+        (``*.msg``, binary never read) or ``text``. ``editable`` is False when
+        the containing project is in IMPLEMENTED or for ``msg`` files.
+        """
+
+    def save_rte_file(self, file_path: Path, content: str) -> object:
+        """Save RTE content back to ``file_path`` (atomic write).
+
+        Rejected when the containing project is IMPLEMENTED (``LOCKED``) or
+        when the target is a ``msg`` file (``NOT_EDITABLE``).
+        """
+
 
 class SettingsDependencyProtocol(Protocol):
     """Settings service/store surface used by JsApi."""
@@ -1550,6 +1567,30 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="NOTES_UPDATE_FAILED")
+
+    def get_rte_file(self, file_path: str) -> dict[str, object]:
+        """Read a file for RTE editing through the service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(self._notes_service.get_rte_file(Path(file_path)))
+            )
+        except Exception as exc:
+            return fail(str(exc), code="RTE_GET_FAILED")
+
+    def save_rte_file(self, file_path: str, content: str) -> dict[str, object]:
+        """Save RTE content back to ``file_path`` through the service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._notes_service.save_rte_file(Path(file_path), content)
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="RTE_SAVE_FAILED")
 
     def global_plan_get(self) -> dict[str, object]:
         """Return global app plan."""
