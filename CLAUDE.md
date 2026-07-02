@@ -55,15 +55,11 @@ D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main
 
 # Package
 D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe scripts/package.py
-
-# Graphify (from repo root only)
-graphify query "<question>"
-graphify update .
 ```
 
 ## Repo-Root Guard
 
-All app/tests/build/graphify run from `D:/Ibrahim/Projects/project_tracker`, never worktrees.
+All app/tests/build/runtime verification commands run from `D:/Ibrahim/Projects/project_tracker`, never worktrees.
 Write/Edit target repo-root paths, never `.claude/worktrees/*/...`.
 PreToolUse hook enforces this — if it fires, switch to the command shown in error.
 
@@ -71,17 +67,25 @@ PreToolUse hook enforces this — if it fires, switch to the command shown in er
 
 `pywebview.start()` → main thread. COM calls → background thread with `pythoncom.CoInitialize()/CoUninitialize()`.
 
-## Graphify
+## Headroom
 
-Graph: `D:/Ibrahim/Projects/project_tracker/graphify-out/graph.json`. Always check absolute path (worktrees won't have it locally).
-Use `graphify query/path/explain` before raw file reads. Refresh after code changes.
+Setup Headroom:
+
+- Status: Installed in repo venv; proxy runs at Start/manual launch
+- Proxy URL: `http://localhost:8787`
+- Use a local proxy for Start/Stop, or an external Docker sidecar like `http://headroom:8787`.
+- Install then click Start:
+
+```bash
+pip install "headroom-ai[proxy]"
+```
 
 ## Integration Routing
 
 - **caveman:** response style only; ultra is session-level, not product behavior.
 - **context-mode:** owns tool/CLI output compression + in-session continuity; do not add duplicate compression hooks.
 - **claude-mem:** active cross-session recall. Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
-- **graphify:** on-demand graph for blast radius/cross-file lookup; source code remains authority.
+- **Headroom:** optional local proxy at `http://localhost:8787`; source code remains authority.
 - **RTK:** manual-only on native Windows (`rtk ...`); do not claim auto-rewrite outside WSL/Unix shell.
 
 Full routing → `.claude/rules/integration-routing.md` and `_docs/SKILL_ROUTING.md`.
@@ -89,14 +93,13 @@ Full routing → `.claude/rules/integration-routing.md` and `_docs/SKILL_ROUTING
 ## Session vs Turn
 
 Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
-`graphify` → only before code lookups / blast-radius checks, not every turn.
 
 ## Session Lifecycle
 
 | Phase           | Actions                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Start**       | Once per session: read cold-start docs in truth order → git status                                           |
-| **Before code** | Use graphify before code lookup/blast-radius checks, not every turn                                         |
+| **Before code** | Use native search/read tools before code changes; keep lookup scoped to the files needed                    |
 | **After code**  | Run app for simple verification → fix surfaced errors → update docs → generate manual checklist for user    |
 | **End**         | Report: changed files, verification run, not tested, next task. Save stable decisions to memory.            |
 
@@ -166,7 +169,7 @@ Workflow/tooling change → CLAUDE.md. Stable decision → save memory.
 
 ## Do Not Touch Without Approval
 
-`graphify-out/`, `_reference/`, active worktrees, active branches, PRD.md product rules.
+`_reference/`, active worktrees, active branches, PRD.md product rules.
 
 ## On-Demand Detail Files
 

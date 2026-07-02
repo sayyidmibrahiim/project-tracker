@@ -55,7 +55,7 @@ Setelah baca, report:
 
 --- RULES KODE WAJIB ---
 1. Branch: {menu}/{desc} — dari main, merge ke main
-2. graphify DULU sebelum code lookup
+2. Search/read existing code before changing files
 3. Satu menu per session
 4. UI: mockup dulu → user approve → code
 5. Python logic di services/core, bukan Svelte
@@ -87,7 +87,7 @@ BALAS singkat padat jelas kalau lu sudah melakukan seluruh perintah di atas
 - **Claude Code / opencode:** Paste langsung di chat / CLI
 - **Cursor:** Paste di chat, dia akan baca file-file yang disebut
 - **Gemini CLI:** Paste, auto-activate tools
-- **Copilot / Codex:** Paste. Mungkin perlu manual run command untuk graphify
+- **Copilot / Codex:** Paste. Mungkin perlu manual file access untuk code search
 
 ---
 
@@ -104,7 +104,7 @@ Do:
 1. Read _docs/PROGRESS.md
 2. Read _docs/session-notes.md
 3. git status + git branch
-4. graphify check (D:/Ibrahim/Projects/project_tracker/graphify-out/graph.json)
+4. Check active tooling notes in CLAUDE.md if needed
 5. Report: active menu, last slice done, dirty files, next task
 6. Ask: continue or switch?
 ```
@@ -161,7 +161,7 @@ Skills:
 Rules:
 - Buat branch: fix/[menu]-[desc]
 - Jangan tebak — reproduce atau locate failing path dulu
-- graphify first from D:/Ibrahim/Projects/project_tracker
+- Search/read existing code first from D:/Ibrahim/Projects/project_tracker
 - Find root cause → smallest fix → verify
 - Jangan weaken tests
 - Generate checklist setelah fix
@@ -200,7 +200,7 @@ Rules:
 - Check PRD.md — fitur ini sudah ada di PRD atau baru?
 - Kalau baru dan mengubah product behavior → update PRD.md juga
 - Design mockup dulu kalau ada UI → gw approve → baru code
-- graphify first — cari existing code yang bisa di-reuse
+- Search existing code first — cari existing code yang bisa di-reuse
 - Generate checklist setelah code
 ```
 
@@ -340,7 +340,7 @@ Rules:
 - If product behavior changes → update PRD.md + _docs/PROGRESS.md
 - If only visual changes → update _docs/PROGRESS.md
 - Keep change bounded to [NAMA_MENU]
-- graphify first → smart-explore
+- Search existing code first → focused file reads
 ```
 
 ---
@@ -356,9 +356,9 @@ Skills:
 - /project-cleanup (if available)
 
 Rules:
-- Inspect: git status, worktrees, untracked files, graphify health
+- Inspect: git status, worktrees, untracked files, tooling notes
 - Remove only: stale clean agent worktrees, temp folders
-- Do NOT delete: source files, graphify-out, _reference/, active branches
+- Do NOT delete: source files, _reference/, active branches
 - Do NOT change product behavior
 - Report: removed items, kept risky items, remaining dirty files
 ```
@@ -380,7 +380,7 @@ Context:
 Rules:
 - Update _docs/PROGRESS.md
 - claude-mem:remember — save stable decisions
-- Refresh graphify if available
+- Check active tooling notes in CLAUDE.md if needed
 - Jangan commit/stash kecuali gw bilang
 - Report: branch, dirty files, tests run, not tested, next prompt
 ```
@@ -404,7 +404,7 @@ Rules:
 | Commit         | `/caveman:caveman-commit`                     |
 | Memory save    | `claude-mem:remember`                         |
 | Memory load    | `claude-mem:recall`                           |
-| Codebase query | `/graphify`                                   |
+| Codebase query | Native search/read tools                     |
 | Verify done    | `/superpowers:verification-before-completion` |
 | Run app        | `/verify` atau `/run`                         |
 | Security check | `/fullstack-dev-skills:security-reviewer`     |
@@ -418,7 +418,7 @@ Rules:
 | Style ringkas      | caveman ultra | Session-level; normal mode untuk teks stakeholder       |
 | Output tool besar  | context-mode  | Plugin otomatis; jangan bikin hook kompresi sendiri     |
 | Memory lintas sesi | claude-mem    | claude-mem is the one active tool                       |
-| Blast radius code  | graphify      | `graphify query`, bukan `/graphify .` di PowerShell     |
+| Optional proxy     | Headroom      | `http://localhost:8787`; install `pip install "headroom-ai[proxy]"` |
 | CLI verbose manual | RTK           | `rtk ...` manual-only; auto-rewrite cuma WSL/Unix shell |
 
 ---

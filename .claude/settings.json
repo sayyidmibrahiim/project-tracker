@@ -2,14 +2,11 @@
   "autoMemoryEnabled": true,
   "permissions": {
     "allow": [
-      "Bash(graphify query *)",
       "Bash(rtk git *)",
       "Bash(git diff *)",
       "Bash(git status *)",
       "Bash(npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check)",
       "Bash(node --import ./tests/register-hooks.mjs --test tests/dashboard-inline-edit.test.mjs tests/components.test.mjs tests/dashboard-reopen.test.mjs)",
-      "Bash(command -v graphify)",
-      "Bash(graphify update *)",
       "Bash(npm --prefix frontend run check)",
       "Bash(npm --prefix frontend run build)",
       "Bash(D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe *)"
@@ -52,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -c \"import json; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'ROOT GUARD ACTIVE: Project Tracker app/tests/build/graphify must run from D:/Ibrahim/Projects/project_tracker, not .claude/worktrees/*. User launch command is D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main. Use absolute repo-root paths for runtime verification.'}}))\"",
+            "command": "python -c \"import json; print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': 'ROOT GUARD ACTIVE: Project Tracker app/tests/build/runtime verification must run from D:/Ibrahim/Projects/project_tracker, not .claude/worktrees/*. User launch command is D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main. Use absolute repo-root paths for runtime verification.'}}))\"",
             "timeout": 10,
             "statusMessage": "Loading Project Tracker root guard..."
           }
