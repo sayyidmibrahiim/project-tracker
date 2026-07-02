@@ -2,7 +2,8 @@
   import type { DroneTicket } from "../types";
 
   interface Props {
-    subprojects: string[];
+    subprojects?: string[];
+    drones?: string[];
     droneTickets: DroneTicket[];
     selectedRow: string | null;
     droneStateBusyName: string | null;
@@ -15,6 +16,7 @@
   }
   let {
     subprojects,
+    drones,
     droneTickets,
     selectedRow,
     droneStateBusyName,
@@ -33,8 +35,10 @@
     droneState: string;
   }
 
+  const droneNames = $derived(drones ?? subprojects ?? []);
+
   const rows = $derived<Row[]>(
-    subprojects.map((name) => {
+    droneNames.map((name) => {
       const drone = droneTickets.find((t) => (t.subfolder_name ?? "") === name);
       return {
         name,
@@ -79,7 +83,7 @@
 </script>
 
 <div class="sp-root">
-  {#if subprojects.length === 0}
+  {#if droneNames.length === 0}
     <div class="sp-empty">No sub projects yet. Add one above.</div>
   {:else}
     <div class="sp-table" role="table" aria-label="Sub projects">
@@ -92,6 +96,8 @@
           role="row"
           class:sp-selected={selectedRow === row.name}
           onclick={() => onOpenFolder(row.name)}
+          onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenFolder(row.name); } }}
+          tabindex="0"
           style="cursor:pointer;"
         >
           <span class="sp-name" title={row.name}>{row.name}</span>
@@ -122,7 +128,7 @@
               </div>
             {/if}
           </span>
-          <span class="sp-state" onclick={(e) => e.stopPropagation()}>
+          <span class="sp-state">
             {#if row.droneState}
               <select
                 class="sp-state-select"

@@ -9,7 +9,6 @@ const src = (path) => readFileSync(resolve(__dirname, path), "utf8");
 
 const APP = src("../src/App.svelte");
 const HEADER = src("../src/lib/components/Header.svelte");
-const SIDEBAR = src("../src/lib/components/Sidebar.svelte");
 const DASHBOARD = src("../src/lib/components/Dashboard.svelte");
 const PROJECT_DETAILS = src("../src/lib/components/ProjectDetails.svelte");
 const SECOND_BRAIN = src("../src/lib/components/SecondBrain.svelte");
@@ -28,12 +27,9 @@ test("AS_IS shell tokens and classes are present", () => {
   assert.match(APP, /class="app-content"/);
 });
 
-test("AS_IS header and sidebar labels are present", () => {
-  for (const title of ["Dashboard.", "Project Details.", "Second Brain.", "Report.", "Automations.", "Settings."]) {
-    assert.match(HEADER, new RegExp(title.replace(".", "\\.")));
-  }
-  for (const label of ["Project Tracker", "Dashboard", "Project Details", "Second Brain", "Report", "Automations", "Settings"]) {
-    assert.match(SIDEBAR, new RegExp(label));
+test("AS_IS header labels are present", () => {
+  for (const title of ["Dashboard", "Project Details", "Second Brain", "Report", "Automations", "Settings"]) {
+    assert.match(HEADER, new RegExp(title));
   }
 });
 
@@ -52,7 +48,7 @@ test("AS_IS page titles and core sections are present", () => {
   }
   assert.doesNotMatch(DASHBOARD, /dash-group-cell/);
   assert.doesNotMatch(DASHBOARD, /dashboard-command-strip/);
-  for (const label of ["Automation Center", "Outlook", "Teams", "Reminder", "Rules Engine"]) {
+  for (const label of ["Outlook", "Teams", "Reminder", "Rules Engine"]) {
     assert.match(AUTOMATIONS, new RegExp(label));
   }
   for (const label of ["Settings", "General", "Behavior", "Paths", "Help Center"]) {

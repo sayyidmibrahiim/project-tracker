@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
   import { renderMarkdown } from "../markdown";
   import { Editor } from "@tiptap/core";
@@ -417,11 +417,24 @@
 
   // ── Lifecycle ──
 
+  function resetEditorChrome() {
+    fullscreen = false;
+    closeAllPopovers();
+    if (typeof document !== "undefined") document.body.style.overflow = '';
+    const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
+    if (area) { area.style.maxHeight = ''; area.style.height = ''; }
+  }
+
+  onMount(() => {
+    window.addEventListener("app:navigate-away", resetEditorChrome);
+  });
+
   onDestroy(() => {
     if (timer) clearTimeout(timer);
-    window.removeEventListener('resize', recalcHeight);
-    document.body.style.overflow = '';
-    window.removeEventListener('click', onWindowClick);
+    if (typeof window !== "undefined") window.removeEventListener('resize', recalcHeight);
+    if (typeof document !== "undefined") document.body.style.overflow = '';
+    if (typeof window !== "undefined") window.removeEventListener('click', onWindowClick);
+    if (typeof window !== "undefined") window.removeEventListener("app:navigate-away", resetEditorChrome);
   });
 
   let lastPath = "";

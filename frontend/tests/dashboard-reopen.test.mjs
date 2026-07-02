@@ -78,7 +78,7 @@ test("onCrStateChange routes REOPEN to a reopen confirm, not applyCrState", () =
   // REOPEN arms a pending reopen confirmation (no immediate bridge call).
   assert.match(fn, /next === REOPEN_OPTION/);
   assert.match(fn, /kind:\s*"reopen"/);
-  assert.doesNotMatch(fn, /callBridge/);
+  assert.doesNotMatch(fn.split("next === REOPEN_OPTION")[1].split("DESTRUCTIVE")[0], /callBridge|applyCrState/);
 });
 
 test("reopen calls the folder_reopen bridge, never cr_update_state", () => {

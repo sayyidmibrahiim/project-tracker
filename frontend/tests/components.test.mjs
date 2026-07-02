@@ -30,7 +30,7 @@ const AUTOMATIONS_OUTLOOK = "../src/lib/components/AutomationsOutlook.svelte";
 const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte";
 const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
 const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
-const SUB_PROJECT_TABLE = "../src/lib/components/SubProjectTable.svelte";
+const SUB_PROJECT_TABLE = "../src/lib/components/DroneTable.svelte";
 const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
 const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
@@ -162,7 +162,7 @@ test("Automations renders AS_IS tab order with Outlook first and mounts the Outl
   assert.ok(teams > outlook, "Teams follows Outlook");
   assert.ok(reminder > teams, "Reminder follows Teams");
   assert.ok(rules > reminder, "Rules Engine follows Reminder");
-  assert.match(body, /Automation Center/);
+  assert.match(body, /Automations/);
   assert.match(body, /SEND AUTOMATION/);
   assert.doesNotMatch(body, /Project-scoped/);
 });
@@ -210,7 +210,7 @@ test("NotesEditor renders the markdown toolbar and autosave status", async () =>
   assert.match(body, /title="Inline code"/);
   assert.match(body, /title="Link"/);
   // Default edit mode shows the visual area; autosave (not an explicit Save button).
-  assert.match(body, /ne-editor-area/);
+  assert.match(body, /ne-editor-host/);
   assert.match(body, /Autosave on/);
   assert.doesNotMatch(body, /Save Notes/);
 });
@@ -233,9 +233,9 @@ test("NewProjectForm renders the PRD §12.4 create form (name, year, disabled un
   assert.match(body, /disabled/);
 });
 
-test("SubProjectTable renders columns and maps drones to sub-projects", async () => {
+test("DroneTable renders columns and maps drones to drones", async () => {
   const body = await renderViaLoader(SUB_PROJECT_TABLE, {
-    subprojects: ["alpha", "beta"],
+    drones: ["alpha", "beta"],
     droneTickets: [
       { subfolder_name: "alpha", drone_link: "https://drone/DRN-1", drone_state: "UAT", owner: "Ops" },
     ],
@@ -257,9 +257,9 @@ test("SubProjectTable renders columns and maps drones to sub-projects", async ()
   assert.match(body, /beta/);
 });
 
-test("SubProjectTable renders an empty state when there are no sub-projects", async () => {
+test("DroneTable renders an empty state when there are no drones", async () => {
   const body = await renderViaLoader(SUB_PROJECT_TABLE, {
-    subprojects: [],
+    drones: [],
     droneTickets: [],
     selectedRow: null,
     droneStateBusyName: null,

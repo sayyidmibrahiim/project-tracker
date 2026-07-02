@@ -21,20 +21,23 @@
   interface Props {
     yearOptions: string[];
     defaultYear: string;
+    defaultAppcode: string;
     onCancel: () => void;
-    onCreated: (projectPath: string) => void;
+    onCreated: (projectPath: string, appcode: string) => void;
   }
-  let { yearOptions, defaultYear, onCancel, onCreated }: Props = $props();
+  let { yearOptions, defaultYear, defaultAppcode, onCancel, onCreated }: Props = $props();
 
   let name = $state("");
-  let year = $state(untrack(() => defaultYear));
+  let appcode = $state(untrack(() => defaultAppcode));
+  let year = $state(untrack(() => defaultYear || String(new Date().getFullYear())));
   let nameValid = $state<boolean | null>(null);
   let nameError = $state("");
   let busy = $state(false);
   let createError = $state("");
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const canSave = $derived(!busy && name.trim().length > 0 && nameValid !== false);
+  const yearChoices = $derived(yearOptions.length > 0 ? yearOptions : [String(new Date().getFullYear())]);
+  const canSave = $derived(!busy && appcode.trim().length > 0 && year.trim().length > 0 && name.trim().length > 0 && nameValid !== false);
 
   function onNameInput() {
     createError = "";
@@ -79,9 +82,12 @@
       createError = "pywebview bridge unavailable. Cannot create a project in browser preview.";
       return;
     }
+    const currentAppcode = appcode.trim();
     const resp = await callBridge<{ project_path: string }>("project_create", {
+      appcode: currentAppcode,
       project_name: candidate,
       year,
+      project_type: "CR",
     });
     busy = false;
     if (!resp.ok) {
@@ -89,7 +95,7 @@
       return;
     }
     const path = resp.data?.project_path ?? "";
-    onCreated(path);
+    onCreated(path, currentAppcode);
   }
 </script>
 
@@ -103,9 +109,21 @@
   </div>
 
   <p class="np-hint">
-    Creates <code>{`{root}`}/{year || "{year}"}/UAT_PREPARE/{name.trim() || "{name}"}</code>. CR link,
+    Creates <code>{`{root}`}/{appcode.trim() || "{appcode}"}/{year || "{year}"}/UAT_PREPARE/{name.trim() || "{name}"}</code>. CR link,
     drone tickets, and implementation plan are set on the next screen.
   </p>
+
+  <label class="np-field">
+    <span class="np-label">Appcode</span>
+    <input
+      class="np-input"
+      type="text"
+      bind:value={appcode}
+      placeholder="e.g. SSID, BIFAST, SKN"
+      disabled={busy}
+      autocomplete="off"
+    />
+  </label>
 
   <label class="np-field">
     <span class="np-label">Project Name</span>
@@ -131,7 +149,7 @@
   <label class="np-field">
     <span class="np-label">Year</span>
     <select class="np-input np-year" bind:value={year} disabled={busy}>
-      {#each yearOptions as y}
+      {#each yearChoices as y}
         <option value={y}>{y}</option>
       {/each}
     </select>

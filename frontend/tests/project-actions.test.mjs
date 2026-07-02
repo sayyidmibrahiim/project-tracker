@@ -1,5 +1,5 @@
 /**
- * Component tests for rename/delete/subproject-delete gating —
+ * Component tests for rename/delete/drone-delete gating —
  * ProjectActions.svelte (Task 7.5).
  *
  * No DOM testing library is installed and dependencies are frozen by the
@@ -44,10 +44,10 @@ function baseProps(overrides) {
     projectPath: "/Temp_Root/2024/UAT_PREPARE/Acme-Migration",
     projectState: "UAT_PREPARE",
     projectName: "Acme-Migration",
-    subprojects: ["Phase-1", "Phase-2"],
+    drones: ["Phase-1", "Phase-2"],
     onRenamed: undefined,
     onDeleted: undefined,
-    onSubprojectsChanged: undefined,
+    onDronesChanged: undefined,
     ...overrides,
   };
 }
@@ -92,7 +92,7 @@ test("UAT_PREPARE renders active rename/delete controls and touches no bridge (R
   assert.doesNotMatch(body, /confirm-overlay/);
 });
 
-test("PROD_READY locks rename/delete/subproject-delete with DisabledHints naming the state (Req 3.5, 5.3, 5.5)", () => {
+test("PROD_READY locks rename/delete/drone-delete with DisabledHints naming the state (Req 3.5, 5.3, 5.5)", () => {
   const body = renderBody({ projectState: "PROD_READY" });
   assert.match(body, /aria-disabled="true"/);
   assert.match(body, /PROD_READY/);
@@ -102,7 +102,7 @@ test("PROD_READY locks rename/delete/subproject-delete with DisabledHints naming
   assert.equal(bridgeTouched, false);
 });
 
-test("IMPLEMENTED locks rename/delete/subproject-delete with DisabledHints naming the state (Req 3.5, 5.3, 5.5)", () => {
+test("IMPLEMENTED locks rename/delete/drone-delete with DisabledHints naming the state (Req 3.5, 5.3, 5.5)", () => {
   const body = renderBody({ projectState: "IMPLEMENTED" });
   assert.match(body, /aria-disabled="true"/);
   assert.match(body, /IMPLEMENTED/);
@@ -110,9 +110,9 @@ test("IMPLEMENTED locks rename/delete/subproject-delete with DisabledHints namin
   assert.equal(bridgeTouched, false);
 });
 
-test("renders an empty-subprojects message when there are none", () => {
-  const body = renderBody({ projectState: "UAT_PREPARE", subprojects: [] });
-  assert.match(body, /No subprojects/);
+test("renders an empty-drones message when there are none", () => {
+  const body = renderBody({ projectState: "UAT_PREPARE", drones: [] });
+  assert.match(body, /No drones/);
   assert.equal(bridgeTouched, false);
 });
 
@@ -134,7 +134,7 @@ test("every bridge call is gated behind ConfirmModal.onConfirm (Req 3.1)", () =>
   assert.match(runAction, /callBridge/);
   assert.match(runAction, /"project_rename"/);
   assert.match(runAction, /"project_delete"/);
-  assert.match(runAction, /"subproject_delete"/);
+  assert.match(runAction, /"drone_delete"/);
 
   const confirmPending = extractFunction(SOURCE, "confirmPending");
   assert.ok(confirmPending, "confirmPending should exist");
