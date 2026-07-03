@@ -30,10 +30,9 @@
      *  via saveRteFile instead of notes_update. Defaults to ``${projectPath}/notes.md``. */
     filePath?: string;
     /** How to interpret {@link initialNotes} / serialize editor output.
-     *  ``markdown`` (default) round-trips through markdown.ts; ``html`` loads
-     *  Tiptap-native HTML directly with no markdown conversion (used by the
-     *  ``_cr-docs`` signoff files). */
-    fileFormat?: "markdown" | "html";
+     *  ``markdown`` (default) round-trips through markdown.ts; ``html``/``docx``
+     *  load Tiptap-native HTML directly with no markdown conversion. */
+    fileFormat?: "markdown" | "html" | "docx";
     /** When false the editor is read-only (e.g. IMPLEMENTED project state). */
     editable?: boolean;
   }
@@ -48,6 +47,7 @@
 
   /** Resolved target file: explicit path, else the project's notes.md. */
   const targetFile = $derived(filePath ?? `${projectPath.replace(/\/$/, "")}/notes.md`);
+  const directHtmlMode = $derived(fileFormat === "html" || fileFormat === "docx");
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
@@ -58,6 +58,9 @@
   let editor: Editor | null = $state(null);
   let toolbarEl = $state<HTMLElement | null>(null);
   let lastSaved = $state(untrack(() => initialNotes ?? ""));
+  // Cheap dirty flag. The expensive serialize (getHTML + DOMParser + markdown
+  // walk) runs only in flush(), not on every keystroke.
+  let dirty = $state(false);
   let fullscreen = $state(false);
   // Reactive refresh token: bumped on every editor transaction so isActive() /
   // getAttributes() in the markup re-evaluate (Editor is not a rune proxy).
@@ -138,18 +141,23 @@
 
   async function flush() {
     if (timer) { clearTimeout(timer); timer = undefined; }
-    if (text === lastSaved) { status = "saved"; return; }
+    if (!dirty) { status = "saved"; return; }
+    if (!editor) { status = "idle"; return; }
     if (!isPywebviewReady()) { status = "offline"; return; }
     status = "saving";
     errorText = "";
-    // CR Docs HTML files save through save_rte_file; notes.md keeps notes_update.
-    const resp = fileFormat === "html"
-      ? await saveRteFile(targetFile, text)
-      : await callBridge("notes_update", projectPath, text);
+    // Serialize ONCE at debounced save time. Never on every keystroke.
+    const nextText = directHtmlMode ? editor.getHTML() : htmlToMarkdown(editor.getHTML());
+    if (nextText === lastSaved) { dirty = false; status = "saved"; return; }
+    const resp = directHtmlMode
+      ? await saveRteFile(targetFile, nextText)
+      : await callBridge("notes_update", projectPath, nextText);
     if (!resp.ok) { status = "error"; errorText = resp.error.message; return; }
-    lastSaved = text;
+    text = nextText;
+    lastSaved = nextText;
+    dirty = false;
     status = "saved";
-    onSaved?.(text);
+    onSaved?.(nextText);
   }
 
   function toggleFullscreen() {
@@ -305,9 +313,7 @@
 
   function onEditorUpdate() {
     if (!editor) return;
-    // HTML mode (CR Docs signoff files) keeps Tiptap-native HTML; markdown mode
-    // (notes.md) round-trips through domToMarkdown to preserve the contract.
-    text = fileFormat === "html" ? editor.getHTML() : htmlToMarkdown(editor.getHTML());
+    dirty = true;
     scheduleSave();
   }
 
@@ -478,9 +484,10 @@
       // project (same projectPath, different file) reloads content.
       if (targetFile !== lastPath) {
         lastPath = targetFile;
-        const html = fileFormat === "html" ? text : renderMarkdown(text);
+        const html = directHtmlMode ? text : renderMarkdown(text);
         editor.commands.setContent(html, { emitUpdate: false });
         lastSaved = text;
+        dirty = false;
       }
       // Reflect the editable flag (e.g. IMPLEMENTED state flips it read-only).
       editor.setEditable(editable);
@@ -490,7 +497,7 @@
     const instance = new Editor({
       element: hostEl,
       editable,
-      content: fileFormat === "html"
+      content: directHtmlMode
         ? untrack(() => text)
         : renderMarkdown(untrack(() => text)),
       extensions: [
@@ -512,9 +519,11 @@
         TaskItem.configure({ nested: false }),
         TextAlign.configure({ types: ["heading", "paragraph"] }),
         Placeholder.configure({
-          placeholder: fileFormat === "html"
-            ? "Write here (autosaves)…"
-            : "Write project notes (autosaves to notes.md)…",
+          placeholder: fileFormat === "docx"
+            ? "Write here (autosaves to Word)…"
+            : fileFormat === "html"
+              ? "Write here (autosaves)…"
+              : "Write project notes (autosaves to notes.md)…",
         }),
         Table.configure({ resizable: true }),
         TableRow,
