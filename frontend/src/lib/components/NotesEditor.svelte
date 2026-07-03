@@ -449,11 +449,15 @@
   // ── Lifecycle ──
 
   function resetEditorChrome() {
-    fullscreen = false;
-    closeAllPopovers();
-    if (typeof document !== "undefined") document.body.style.overflow = '';
-    const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
-    if (area) { area.style.maxHeight = ''; area.style.height = ''; }
+    try {
+      fullscreen = false;
+      closeAllPopovers();
+      if (typeof document !== "undefined") document.body.style.overflow = '';
+      const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
+      if (area) { area.style.maxHeight = ''; area.style.height = ''; }
+    } catch {
+      // Best-effort cleanup only. Never block top-level menu navigation.
+    }
   }
 
   onMount(() => {

@@ -86,8 +86,12 @@
   function handleClose() { winClose(); }
 
   function navigateTo(id: string) {
-    window.dispatchEvent(new CustomEvent("app:navigate-away"));
-    onNavigate(id);
+    try {
+      window.dispatchEvent(new CustomEvent("app:navigate-away"));
+    } finally {
+      // Navigation must not be blocked by a page cleanup listener (e.g. RTE reset).
+      onNavigate(id);
+    }
   }
 
   function formatTime(iso: string): string {
