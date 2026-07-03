@@ -55,7 +55,7 @@
   let status = $state<SaveStatus>("idle");
   let errorText = $state("");
   let hostEl = $state<HTMLDivElement | null>(null);
-  let editor: Editor | null = $state(null);
+  let editor: Editor | null = null;
   let toolbarEl = $state<HTMLElement | null>(null);
   let lastSaved = $state(untrack(() => initialNotes ?? ""));
   // Cheap dirty flag. The expensive serialize (getHTML + DOMParser + markdown
@@ -546,6 +546,7 @@
     instance.on("selectionUpdate", () => { rev++; });
     instance.on("update", onEditorUpdate);
     editor = instance;
+    rev++;
     if (!windowClickBound) {
       windowClickBound = true;
       window.addEventListener('click', onWindowClick);
@@ -557,6 +558,7 @@
         console.warn("NotesEditor destroy failed", err);
       }
       editor = null;
+      rev++;
     };
   });
 
