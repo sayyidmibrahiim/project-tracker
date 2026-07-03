@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { callBridge, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
+  import { callBridge, exportToDocx, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
   import type { ProjectRow, ProjectDetail, FileRow, DroneTicket, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
@@ -10,6 +10,7 @@
   import ConfirmModal from "./ConfirmModal.svelte";
   import { addToast } from "../stores/toastStore";
   import type { ToastAction } from "../stores/toastStore";
+  import { renderMarkdown } from "../markdown";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
   let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
@@ -32,12 +33,12 @@
 
   // ── CR Docs (Piece B): multi-file RTE selector for CR projects ──
   // For CR projects the Notes section becomes "Notes & CR Docs" with a dropdown
-  // to switch between notes.md (markdown) and _cr-docs/uat-signoff |
-  // _cr-docs/prod-lv (html) plus any _cr-docs/*.msg (open externally). Non-CR
-  // projects keep the plain Notes section unchanged.
+  // to switch between notes.md (markdown), _cr-docs/*.docx (Word), and any
+  // _cr-docs/*.msg (open externally). Non-CR keeps plain Notes unchanged.
   let crDocsFiles: RteFile[] = $state([]);
   let selectedCrDocPath: string = $state("");
   let crDocContent: RteFileContent | null = $state(null);
+  let crDocContentPath: string = $state("");
   let crDocsLoading: boolean = $state(false);
   let crDocsError: string = $state("");
   type TopActionState = "idle" | "saving" | "success" | "error";
@@ -223,7 +224,7 @@
     selectedPath = path;
     detailState = "loading";
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
-    crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocsLoading = false; crDocsError = "";
+    crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocsLoading = false; crDocsError = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -614,10 +615,11 @@
 
   /** Mirror backend _detect_rte_format so the dropdown label matches behavior. */
   function rteFormatForName(name: string): RteFile["format"] {
-    if (name === "uat-signoff" || name === "prod-lv") return "html";
     const suffix = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+    if (suffix === "docx") return "docx";
     if (suffix === "md") return "markdown";
     if (suffix === "msg") return "msg";
+    if (suffix === "html" || suffix === "htm") return "html";
     return "text";
   }
 
@@ -628,8 +630,8 @@
     const isLocked = detail.project_state === "IMPLEMENTED";
     const list: RteFile[] = [
       { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, isOpenable: false },
-      { name: "uat-signoff", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff`, format: "html", editable: !isLocked, isOpenable: false },
-      { name: "prod-lv", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv`, format: "html", editable: !isLocked, isOpenable: false },
+      { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+      { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, isOpenable: false },
     ];
     // Append any .msg files already present in _cr-docs/ (created by Piece C).
     const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
@@ -650,14 +652,19 @@
   /** Load the selected CR doc content (or prepare the .msg open-external panel). */
   async function selectCrDoc(path: string) {
     selectedCrDocPath = path;
+    crDocContent = null;
+    crDocContentPath = "";
     const file = crDocsFiles.find((f) => f.path === path);
-    if (!file) { crDocContent = null; return; }
-    if (file.format === "msg") { crDocContent = null; return; } // rendered as open-external panel
+    if (!file) return;
+    if (file.format === "msg") return; // rendered as open-external panel
     crDocsLoading = true; crDocsError = "";
     const resp = await getRteFile(path);
     crDocsLoading = false;
-    if (!resp.ok) { crDocContent = null; crDocsError = resp.error.message; return; }
+    if (!resp.ok) { crDocsError = resp.error.message; return; }
+    // A3 fix: only mount the editor after content for the selected path is ready.
+    if (selectedCrDocPath !== path) return;
     crDocContent = resp.data;
+    crDocContentPath = path;
   }
 
   /** Open a .msg (or any external) file via the OS default app. */
@@ -666,8 +673,21 @@
     if (!resp.ok) addToast(`Could not open file: ${resp.error.message}`, "error");
   }
 
+  async function exportSelectedDocToWord() {
+    const selected = selectedCrDoc;
+    const name = selected?.name ?? "notes.md";
+    const suggested = `${name.replace(/\.(md|docx|html?)$/i, "")}.docx`;
+    const html = selected && selected.format !== "markdown"
+      ? (crDocContent?.content ?? "")
+      : renderMarkdown(notes);
+    const resp = await exportToDocx(html, suggested);
+    if (!resp.ok) { addToast(`Export failed: ${resp.error.message}`, "error"); return; }
+    if (resp.data?.written) addToast(`Exported Word file: ${resp.data.path}`, "success");
+  }
+
   /** The currently selected CR Docs file (or null). */
   const selectedCrDoc = $derived(crDocsFiles.find((f) => f.path === selectedCrDocPath) ?? null);
+  const crDocReady = $derived(crDocContent !== null && crDocContentPath === selectedCrDocPath);
 
   async function openProjectFolder() {
     if (!selectedPath || !isPywebviewReady()) {
@@ -1027,9 +1047,12 @@
               {#if isNonCr}
                 <div class="pd-section-headline">
                   <h4 class="pd-section-title">Notes</h4>
-                  <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
-                    {showNotesEditor ? "Close Notes" : "Edit Notes"}
-                  </button>
+                  <div class="pd-doc-actions">
+                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord}>Export to Word</button>
+                    <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
+                      {showNotesEditor ? "Close Notes" : "Edit Notes"}
+                    </button>
+                  </div>
                 </div>
                 {#if showNotesEditor}
                   {#key detail.project_path}
@@ -1043,16 +1066,21 @@
               {:else}
                 <div class="pd-section-headline">
                   <h4 class="pd-section-title">Notes &amp; CR Docs</h4>
-                  <select
-                    class="pd-doc-select"
-                    aria-label="Select document to edit"
-                    value={selectedCrDocPath}
-                    onchange={(e) => selectCrDoc(e.currentTarget.value)}
-                  >
-                    {#each crDocsFiles as f}
-                      <option value={f.path}>{f.name}</option>
-                    {/each}
-                  </select>
+                  <div class="pd-doc-actions">
+                    <select
+                      class="pd-doc-select"
+                      aria-label="Select document to edit"
+                      value={selectedCrDocPath}
+                      onchange={(e) => selectCrDoc(e.currentTarget.value)}
+                    >
+                      {#each crDocsFiles as f}
+                        <option value={f.path}>{f.name}</option>
+                      {/each}
+                    </select>
+                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord} disabled={selectedCrDoc?.format === "msg"}>
+                      Export to Word
+                    </button>
+                  </div>
                 </div>
                 {#if crDocsLoading}
                   <p class="pd-muted">Loading…</p>
@@ -1069,25 +1097,29 @@
                   {#if !selectedCrDoc.editable}
                     <p class="pd-muted pd-locked-text">View only — project is in IMPLEMENTED state.</p>
                   {/if}
-                  {#key selectedCrDoc.path}
-                    {#if selectedCrDoc.format === "html"}
-                      <NotesEditor
-                        projectPath={detail.project_path}
-                        filePath={selectedCrDoc.path}
-                        fileFormat="html"
-                        initialNotes={crDocContent?.content ?? ""}
-                        editable={selectedCrDoc.editable}
-                        onSaved={(n: string) => { if (crDocContent) crDocContent.content = n; }}
-                      />
-                    {:else}
-                      <NotesEditor
-                        projectPath={detail.project_path}
-                        initialNotes={crDocContent?.content ?? notes}
-                        editable={selectedCrDoc.editable}
-                        onSaved={(n: string) => { notes = n; if (crDocContent) crDocContent.content = n; }}
-                      />
-                    {/if}
-                  {/key}
+                  {#if !crDocReady}
+                    <p class="pd-muted">Loading…</p>
+                  {:else}
+                    {#key selectedCrDoc.path}
+                      {#if selectedCrDoc.format === "html" || selectedCrDoc.format === "docx"}
+                        <NotesEditor
+                          projectPath={detail.project_path}
+                          filePath={selectedCrDoc.path}
+                          fileFormat={selectedCrDoc.format}
+                          initialNotes={crDocContent?.content ?? ""}
+                          editable={selectedCrDoc.editable}
+                          onSaved={(n: string) => { if (crDocContent) crDocContent.content = n; }}
+                        />
+                      {:else}
+                        <NotesEditor
+                          projectPath={detail.project_path}
+                          initialNotes={crDocContent?.content ?? notes}
+                          editable={selectedCrDoc.editable}
+                          onSaved={(n: string) => { notes = n; if (crDocContent) crDocContent.content = n; }}
+                        />
+                      {/if}
+                    {/key}
+                  {/if}
                 {:else}
                   <p class="pd-muted">No document selected.</p>
                 {/if}
@@ -1147,6 +1179,7 @@
   .pd-section-headline { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
   .pd-section-headline .pd-section-title { margin:0; }
   .pd-notes-preview { white-space:pre-wrap; font-size:11px; line-height:1.5; color:var(--color-ink); background:var(--color-workspace); border:1px dashed var(--color-border); border-radius:6px; padding:10px; max-height:160px; overflow:auto; }
+  .pd-doc-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .pd-doc-select { height:28px; padding:0 8px; border:1px solid var(--color-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; cursor:pointer; max-width:200px; }
   .pd-doc-select:focus { border-color:var(--color-dbs-red); outline:none; box-shadow:0 0 0 2px var(--color-dbs-red-active); }
   .pd-msg-panel { display:flex; flex-direction:column; gap:8px; align-items:flex-start; padding:10px; border:1px dashed var(--color-border); border-radius:6px; background:var(--color-workspace); }
