@@ -1395,6 +1395,56 @@ def create_js_api(
                 return "html"
             return "text"
 
+        def _rte_capability_for(self, path: Path, fmt: str, state: ProjectState | None) -> dict[str, object]:
+            """Return honest editor capability metadata for an RTE target."""
+            if fmt == "msg":
+                return {
+                    "capability": "unsupported",
+                    "editable": False,
+                    "message": f"Format {Path(path).suffix or Path(path).name} belum dapat dibuka di editor ini.",
+                    "saveStrategy": "none",
+                    "supportedEditorFeatures": [],
+                }
+            if fmt == "docx":
+                return {
+                    "capability": "read_only",
+                    "editable": False,
+                    "message": "Read-only: format ini dapat ditampilkan tetapi belum dapat diedit dengan aman.",
+                    "saveStrategy": "none",
+                    "supportedEditorFeatures": [],
+                }
+            if state is ProjectState.IMPLEMENTED:
+                return {
+                    "capability": "read_only",
+                    "editable": False,
+                    "message": "Read-only: project is in IMPLEMENTED state.",
+                    "saveStrategy": "none",
+                    "supportedEditorFeatures": [],
+                }
+            if fmt == "text":
+                return {
+                    "capability": "editable",
+                    "editable": True,
+                    "message": "Plain text only.",
+                    "saveStrategy": "plain_text",
+                    "supportedEditorFeatures": ["plain_text"],
+                }
+            if fmt == "html":
+                return {
+                    "capability": "editable",
+                    "editable": True,
+                    "message": "Saved as HTML.",
+                    "saveStrategy": "html",
+                    "supportedEditorFeatures": ["bold", "italic", "strike", "heading", "list", "link", "code", "image", "table"],
+                }
+            return {
+                "capability": "editable",
+                "editable": True,
+                "message": "Saved as Markdown.",
+                "saveStrategy": "markdown",
+                "supportedEditorFeatures": ["bold", "italic", "strike", "heading", "list", "task_list", "link", "code", "image", "table"],
+            }
+
         def _html_to_docx_bytes(self, html: str) -> bytes:
             from docx import Document
             from htmldocx import HtmlToDocx
@@ -1432,40 +1482,34 @@ def create_js_api(
             path = Path(file_path)
             fmt = self._detect_rte_format(path)
             state = _folder_state_for_path(path)
-            editable = state is not ProjectState.IMPLEMENTED and fmt != "msg"
+            capability = self._rte_capability_for(path, fmt, state)
 
             if fmt == "msg":
                 # Binary Outlook message — never read into memory; the frontend
                 # renders an "Open externally" panel instead of the editor.
-                return {"content": "", "format": fmt, "editable": False}
+                return {"content": "", "format": fmt, **capability}
 
             if fmt == "docx" and path.name in self._CR_DOC_NAMES and not path.exists():
                 self._write_docx_bytes(path, self._html_to_docx_bytes(""))
 
             if not path.is_file():
                 # Markdown/text/html arbitrary targets are never auto-created.
-                return {"content": "", "format": fmt, "editable": editable}
+                return {"content": "", "format": fmt, **capability}
 
             if fmt == "docx":
-                return {"content": self._docx_to_html(path), "format": fmt, "editable": editable}
+                return {"content": self._docx_to_html(path), "format": fmt, **capability}
 
             content = path.read_text(encoding="utf-8")
-            return {"content": content, "format": fmt, "editable": editable}
+            return {"content": content, "format": fmt, **capability}
 
         def save_rte_file(self, file_path: Path, content: str) -> object:
             path = Path(file_path)
             fmt = self._detect_rte_format(path)
-            if fmt == "msg":
-                raise ValueError("Outlook .msg files are not editable in-app")
             state = _folder_state_for_path(path)
-            if state is ProjectState.IMPLEMENTED:
-                raise ValueError(
-                    "CR docs are view-only while the project is in IMPLEMENTED"
-                )
-            if fmt == "docx":
-                self._write_docx_bytes(path, self._html_to_docx_bytes(content))
-            else:
-                _atomic_write_text(path, content)
+            capability = self._rte_capability_for(path, fmt, state)
+            if capability["capability"] != "editable" or capability["saveStrategy"] == "none":
+                raise ValueError(str(capability["message"]))
+            _atomic_write_text(path, content)
             return {"saved": True}
 
         def export_to_docx(self, content_html: str) -> str:
