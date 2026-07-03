@@ -233,21 +233,23 @@
       {openAddYearToken}
     />
     <div class="app-content">
-      {#if currentPage === "dashboard"}
-        <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
-      {:else if currentPage === "report"}
-        <Report {selectedYear} {searchQuery} key={refreshKey} />
-      {:else if currentPage === "settings"}
-        <Settings />
-      {:else if currentPage === "second-brain"}
-        <SecondBrain />
-      {:else if currentPage === "project-detail"}
-        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
-      {:else if currentPage === "automations"}
-        <Automations />
-      {:else if currentPage === "global-plan"}
-        <GlobalPlan />
-      {/if}
+      {#key currentPage}
+        {#if currentPage === "dashboard"}
+          <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
+        {:else if currentPage === "report"}
+          <Report {selectedYear} {searchQuery} key={refreshKey} />
+        {:else if currentPage === "settings"}
+          <Settings />
+        {:else if currentPage === "second-brain"}
+          <SecondBrain />
+        {:else if currentPage === "project-detail"}
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
+        {:else if currentPage === "automations"}
+          <Automations />
+        {:else if currentPage === "global-plan"}
+          <GlobalPlan />
+        {/if}
+      {/key}
     </div>
   </main>
   {#if rootUnset}
