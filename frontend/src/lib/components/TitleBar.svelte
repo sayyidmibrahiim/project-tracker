@@ -144,8 +144,8 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
-        onclick={(e) => { e.stopPropagation(); navigateTo(item.id); }}
-        onpointerdown={(e) => e.stopPropagation()}
+        onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onpointerdown={(e) => { e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
       >
         <span class="nav-tab-icon">{@html navIcons[item.id]}</span>
         <span class="nav-tab-tooltip">{item.label}</span>
@@ -243,6 +243,7 @@
   .titlebar-left { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
   .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; pointer-events:auto; }
   .titlebar-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  .titlebar button, .titlebar input, .titlebar svg, .titlebar span { -webkit-app-region: no-drag; }
 
   .user-avatar {
     position: relative;
