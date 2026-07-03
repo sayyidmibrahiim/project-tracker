@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from core.rules import validate_windows_folder_name
 from web.event_queue import drain_events
+from infrastructure.app_logger import log_backend_event, log_frontend_event
 from infrastructure.outlook_client import get_current_user_name
 
 
@@ -280,6 +281,26 @@ class NotesServiceProtocol(Protocol):
     def update_notes(self, project_path: Path, notes: str) -> object:
         """Update project notes."""
 
+    def get_rte_file(self, file_path: Path) -> object:
+        """Read a file for RTE editing. Returns {content, format, editable}.
+
+        For ``_cr-docs/uat-signoff`` and ``_cr-docs/prod-lv`` the file is lazily
+        scaffolded (0-byte) on first read. ``format`` is one of
+        ``html`` (the two CR-doc names), ``markdown`` (``*.md``), ``msg``
+        (``*.msg``, binary never read) or ``text``. ``editable`` is False when
+        the containing project is in IMPLEMENTED or for ``msg`` files.
+        """
+
+    def save_rte_file(self, file_path: Path, content: str) -> object:
+        """Save RTE content back to ``file_path`` (atomic write).
+
+        Rejected when the containing project is IMPLEMENTED (``LOCKED``) or
+        when the target is a ``msg`` file (``NOT_EDITABLE``).
+        """
+
+    def export_to_docx(self, content_html: str) -> str:
+        """Return a base64-encoded .docx byte stream for rendered HTML."""
+
 
 class SettingsDependencyProtocol(Protocol):
     """Settings service/store surface used by JsApi."""
@@ -504,11 +525,20 @@ class JsApi:
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
 
+    def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
+        """Persist a frontend activity/debug event to the AppData frontend log."""
+        try:
+            log_frontend_event(dict(event or {}))
+            return ok({"logged": True})
+        except Exception as exc:
+            return fail(str(exc), code="FRONTEND_LOG_FAILED")
+
     def poll_events(self, limit: int | None = None) -> dict[str, object]:
         """Drain queued bridge events."""
         try:
             return ok(drain_events(limit))
         except Exception as exc:
+            log_backend_event("bridge.poll_events.failed", {"error": str(exc)})
             return fail(str(exc), code="EVENT_POLL_FAILED")
 
     def app_get_status(self) -> dict[str, object]:
@@ -687,6 +717,51 @@ class JsApi:
                 if is_csv:
                     file.write(b"\xef\xbb\xbf")
                 file.write(payload.encode("utf-8"))
+        except Exception as exc:
+            return fail(str(exc), code="SAVE_DIALOG_WRITE_FAILED")
+        return ok({"path": str(out_path), "written": True})
+
+    def util_save_bytes(self, suggested_name: str, data_b64: str) -> dict[str, object]:
+        """Open the native save dialog and write base64-encoded binary data.
+
+        Used for .docx export. pywebview bridge args are JSON, so bytes cross the
+        bridge as base64 text and are decoded here before writing in binary mode.
+        """
+        try:
+            import webview  # lazy: not imported at module load
+        except Exception as exc:  # pragma: no cover
+            return fail(f"Save dialog unavailable: {exc}", code="SAVE_DIALOG_UNAVAILABLE")
+
+        windows = getattr(webview, "windows", []) or []
+        if not windows:
+            return fail("No application window is available to host the save dialog.", code="SAVE_DIALOG_UNAVAILABLE")
+
+        try:
+            file_dialog = getattr(webview, "FileDialog", None)
+            save_dialog = (
+                getattr(file_dialog, "SAVE", None)
+                if file_dialog is not None
+                else None
+            )
+            if save_dialog is None:
+                save_dialog = getattr(webview, "SAVE_DIALOG")
+            result = windows[0].create_file_dialog(
+                save_dialog, save_filename=str(suggested_name or "export.docx")
+            )
+        except Exception as exc:
+            return fail(str(exc), code="SAVE_DIALOG_FAILED")
+
+        path_str: str | None = None
+        if result:
+            first = result[0] if isinstance(result, (list, tuple)) else result
+            path_str = str(first) if first else None
+        if not path_str:
+            return ok({"path": None, "written": False})
+
+        try:
+            out_path = Path(path_str)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(base64.b64decode(data_b64 or ""))
         except Exception as exc:
             return fail(str(exc), code="SAVE_DIALOG_WRITE_FAILED")
         return ok({"path": str(out_path), "written": True})
@@ -1550,6 +1625,43 @@ class JsApi:
             )
         except Exception as exc:
             return fail(str(exc), code="NOTES_UPDATE_FAILED")
+
+    def get_rte_file(self, file_path: str) -> dict[str, object]:
+        """Read a file for RTE editing through the service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(self._notes_service.get_rte_file(Path(file_path)))
+            )
+        except Exception as exc:
+            log_backend_event("bridge.get_rte_file.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code="RTE_GET_FAILED")
+
+    def save_rte_file(self, file_path: str, content: str) -> dict[str, object]:
+        """Save RTE content back to ``file_path`` through the service layer."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(
+                _to_frontend_safe(
+                    self._notes_service.save_rte_file(Path(file_path), content)
+                )
+            )
+        except Exception as exc:
+            log_backend_event("bridge.save_rte_file.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code="RTE_SAVE_FAILED")
+
+    def export_to_docx(self, content_html: str, source_format: str = "html", suggested_name: str = "export.docx") -> dict[str, object]:
+        """Export rendered HTML to a user-chosen .docx file."""
+        try:
+            if self._notes_service is None:
+                return fail("notes_service is not configured", code="SERVICE_UNAVAILABLE")
+            data_b64 = self._notes_service.export_to_docx(content_html)
+            return self.util_save_bytes(suggested_name, data_b64)
+        except Exception as exc:
+            log_backend_event("bridge.export_to_docx.failed", {"suggested_name": suggested_name, "source_format": source_format, "error": str(exc)})
+            return fail(str(exc), code="DOCX_EXPORT_FAILED")
 
     def global_plan_get(self) -> dict[str, object]:
         """Return global app plan."""

@@ -11,9 +11,9 @@ clear "unsupported on this platform" message and a non-zero exit. Packaging is
 a manual Windows step performed only after the Windows manual RC test gate
 passes (see ``docs/windows-manual-test-checklist.md``).
 
-Dependency policy: packaging must NOT add, remove, or upgrade any dependency.
-PyInstaller is already declared in ``pyproject.toml`` / ``requirements.txt``.
-Any dependency change requires explicit user approval before it is made.
+Dependency policy: packaging uses dependencies declared in ``pyproject.toml`` /
+``requirements.txt``. Dependency additions are allowed when justified (rule relaxed
+2026-07-03).
 
 Build (Windows, manual):
     python scripts/package.py
@@ -69,6 +69,11 @@ hiddenimports = [
     "win32com.client",
     "pyperclip",
     "pyautogui",
+    "mammoth",
+    "htmldocx",
+    "docx",
+    "bs4",
+    "lxml",
 ]
 
 

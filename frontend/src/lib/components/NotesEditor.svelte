@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { callBridge, isPywebviewReady } from "../bridge";
+  import { callBridge, isPywebviewReady, saveRteFile } from "../bridge";
   import { renderMarkdown } from "../markdown";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
@@ -26,8 +26,28 @@
     projectPath: string;
     initialNotes: string;
     onSaved?: (notes: string) => void;
+    /** Optional explicit file path (Piece B CR Docs). When set, the editor saves
+     *  via saveRteFile instead of notes_update. Defaults to ``${projectPath}/notes.md``. */
+    filePath?: string;
+    /** How to interpret {@link initialNotes} / serialize editor output.
+     *  ``markdown`` (default) round-trips through markdown.ts; ``html``/``docx``
+     *  load Tiptap-native HTML directly with no markdown conversion. */
+    fileFormat?: "markdown" | "html" | "docx";
+    /** When false the editor is read-only (e.g. IMPLEMENTED project state). */
+    editable?: boolean;
   }
-  let { projectPath, initialNotes, onSaved }: Props = $props();
+  let {
+    projectPath,
+    initialNotes,
+    onSaved,
+    filePath,
+    fileFormat = "markdown",
+    editable = true,
+  }: Props = $props();
+
+  /** Resolved target file: explicit path, else the project's notes.md. */
+  const targetFile = $derived(filePath ?? `${projectPath.replace(/\/$/, "")}/notes.md`);
+  const directHtmlMode = $derived(fileFormat === "html" || fileFormat === "docx");
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
@@ -35,9 +55,12 @@
   let status = $state<SaveStatus>("idle");
   let errorText = $state("");
   let hostEl = $state<HTMLDivElement | null>(null);
-  let editor: Editor | null = $state(null);
+  let editor: Editor | null = null;
   let toolbarEl = $state<HTMLElement | null>(null);
   let lastSaved = $state(untrack(() => initialNotes ?? ""));
+  // Cheap dirty flag. The expensive serialize (getHTML + DOMParser + markdown
+  // walk) runs only in flush(), not on every keystroke.
+  let dirty = $state(false);
   let fullscreen = $state(false);
   // Reactive refresh token: bumped on every editor transaction so isActive() /
   // getAttributes() in the markup re-evaluate (Editor is not a rune proxy).
@@ -118,15 +141,23 @@
 
   async function flush() {
     if (timer) { clearTimeout(timer); timer = undefined; }
-    if (text === lastSaved) { status = "saved"; return; }
+    if (!dirty) { status = "saved"; return; }
+    if (!editor) { status = "idle"; return; }
     if (!isPywebviewReady()) { status = "offline"; return; }
     status = "saving";
     errorText = "";
-    const resp = await callBridge("notes_update", projectPath, text);
+    // Serialize ONCE at debounced save time. Never on every keystroke.
+    const nextText = directHtmlMode ? editor.getHTML() : htmlToMarkdown(editor.getHTML());
+    if (nextText === lastSaved) { dirty = false; status = "saved"; return; }
+    const resp = directHtmlMode
+      ? await saveRteFile(targetFile, nextText)
+      : await callBridge("notes_update", projectPath, nextText);
     if (!resp.ok) { status = "error"; errorText = resp.error.message; return; }
-    lastSaved = text;
+    text = nextText;
+    lastSaved = nextText;
+    dirty = false;
     status = "saved";
-    onSaved?.(text);
+    onSaved?.(nextText);
   }
 
   function toggleFullscreen() {
@@ -282,7 +313,7 @@
 
   function onEditorUpdate() {
     if (!editor) return;
-    text = htmlToMarkdown(editor.getHTML());
+    dirty = true;
     scheduleSave();
   }
 
@@ -418,11 +449,15 @@
   // ── Lifecycle ──
 
   function resetEditorChrome() {
-    fullscreen = false;
-    closeAllPopovers();
-    if (typeof document !== "undefined") document.body.style.overflow = '';
-    const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
-    if (area) { area.style.maxHeight = ''; area.style.height = ''; }
+    try {
+      fullscreen = false;
+      closeAllPopovers();
+      if (typeof document !== "undefined") document.body.style.overflow = '';
+      const area = hostEl?.querySelector('.ne-textarea') as HTMLElement | null;
+      if (area) { area.style.maxHeight = ''; area.style.height = ''; }
+    } catch {
+      // Best-effort cleanup only. Never block top-level menu navigation.
+    }
   }
 
   onMount(() => {
@@ -448,19 +483,27 @@
   $effect(() => {
     if (!isBrowser || !hostEl) return;
     if (editor) {
-      // Project switch: reload content without rebuilding the editor.
-      if (projectPath !== lastPath) {
-        lastPath = projectPath;
-        editor.commands.setContent(renderMarkdown(text), { emitUpdate: false });
+      // Project/file switch: reload content without rebuilding the editor.
+      // Re-key on the resolved target file so switching CR Docs within one
+      // project (same projectPath, different file) reloads content.
+      if (targetFile !== lastPath) {
+        lastPath = targetFile;
+        const html = directHtmlMode ? text : renderMarkdown(text);
+        editor.commands.setContent(html, { emitUpdate: false });
         lastSaved = text;
+        dirty = false;
       }
+      // Reflect the editable flag (e.g. IMPLEMENTED state flips it read-only).
+      editor.setEditable(editable);
       return;
     }
-    lastPath = projectPath;
+    lastPath = targetFile;
     const instance = new Editor({
       element: hostEl,
-      editable: true,
-      content: renderMarkdown(untrack(() => text)),
+      editable,
+      content: directHtmlMode
+        ? untrack(() => text)
+        : renderMarkdown(untrack(() => text)),
       extensions: [
         StarterKit.configure({
           // StarterKit v3 bundles bold/italic/strike/code, heading, blockquote,
@@ -479,7 +522,13 @@
         TaskList,
         TaskItem.configure({ nested: false }),
         TextAlign.configure({ types: ["heading", "paragraph"] }),
-        Placeholder.configure({ placeholder: "Write project notes (autosaves to notes.md)…" }),
+        Placeholder.configure({
+          placeholder: fileFormat === "docx"
+            ? "Write here (autosaves to Word)…"
+            : fileFormat === "html"
+              ? "Write here (autosaves)…"
+              : "Write project notes (autosaves to notes.md)…",
+        }),
         Table.configure({ resizable: true }),
         TableRow,
         TableHeader,
@@ -497,11 +546,20 @@
     instance.on("selectionUpdate", () => { rev++; });
     instance.on("update", onEditorUpdate);
     editor = instance;
+    rev++;
     if (!windowClickBound) {
       windowClickBound = true;
       window.addEventListener('click', onWindowClick);
     }
-    return () => { instance.destroy(); editor = null; };
+    return () => {
+      try {
+        instance.destroy();
+      } catch (err) {
+        console.warn("NotesEditor destroy failed", err);
+      }
+      editor = null;
+      rev++;
+    };
   });
 
   // Reflect editor font family/size into the selects (after each transaction).

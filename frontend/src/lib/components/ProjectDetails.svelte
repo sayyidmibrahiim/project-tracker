@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { callBridge, isPywebviewReady, waitForPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow, DroneTicket } from "../types";
+  import { callBridge, exportToDocx, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
+  import type { ProjectRow, ProjectDetail, FileRow, DroneTicket, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
@@ -10,6 +10,7 @@
   import ConfirmModal from "./ConfirmModal.svelte";
   import { addToast } from "../stores/toastStore";
   import type { ToastAction } from "../stores/toastStore";
+  import { renderMarkdown } from "../markdown";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
   let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
@@ -29,6 +30,17 @@
   let files: FileRow[] = $state([]);
   let notes: string = $state("");
   let showNotesEditor: boolean = $state(false);
+
+  // ── CR Docs (Piece B): multi-file RTE selector for CR projects ──
+  // For CR projects the Notes section becomes "Notes & CR Docs" with a dropdown
+  // to switch between notes.md (markdown), _cr-docs/*.docx (Word), and any
+  // _cr-docs/*.msg (open externally). Non-CR keeps plain Notes unchanged.
+  let crDocsFiles: RteFile[] = $state([]);
+  let selectedCrDocPath: string = $state("");
+  let crDocContent: RteFileContent | null = $state(null);
+  let crDocContentPath: string = $state("");
+  let crDocsLoading: boolean = $state(false);
+  let crDocsError: string = $state("");
   type TopActionState = "idle" | "saving" | "success" | "error";
   let topActionState: TopActionState = $state("idle");
   let topActionError: string = $state("");
@@ -212,6 +224,7 @@
     selectedPath = path;
     detailState = "loading";
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
+    crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocsLoading = false; crDocsError = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -227,42 +240,54 @@
     newSubprojectName = ""; droneBusy = false; droneFeedback = ""; droneFeedbackKind = "idle";
     errorCode = ""; errorMessage = "";
 
-    if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
-      errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
-      errorMessage = "pywebview bridge unavailable.";
-      detailState = "error";
-      return;
-    }
+    try {
+      if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
+        errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
+        errorMessage = "pywebview bridge unavailable.";
+        detailState = "error";
+        return;
+      }
 
-    const [dResp, spResp, flResp, ntResp] = await Promise.all([
-      callBridge<ProjectDetail>("project_get", path),
-      callBridge<string[]>("drone_list", path),
-      callBridge<FileRow[]>("file_list", path),
-      callBridge<string>("notes_get", path),
-    ]);
+      const [dResp, spResp, flResp, ntResp] = await Promise.all([
+        callBridge<ProjectDetail>("project_get", path),
+        callBridge<string[]>("drone_list", path),
+        callBridge<FileRow[]>("file_list", path),
+        callBridge<string>("notes_get", path),
+      ]);
 
-    detail = dResp.ok ? (dResp.data ?? null) : null;
-    isNonCr = detail ? detail.project_type === "NON_CR" : false;
-    drones = spResp.ok ? (spResp.data ?? []) : [];
-    files = flResp.ok ? (flResp.data ?? []) : [];
-    notes = ntResp.ok ? (ntResp.data ?? "") : "";
-    showNotesEditor = false;
+      if (!dResp.ok) {
+        errorCode = dResp.error.code;
+        errorMessage = dResp.error.message;
+        detailState = "error";
+        return;
+      }
 
-    if (detail) {
-      crLinkEdit = detail.cr_link || "";
-      crLinkEditing = !detail.cr_link;
-      crLinkCopied = false;
-    }
-    if (detail) crStateEdit = detail.cr_state || "";
-    if (detail) nonCrStateEdit = detail.non_cr_state ?? "PLANNING";
-    if (detail) syncMetadataDrafts(detail);
+      detail = dResp.data ?? null;
+      isNonCr = detail ? detail.project_type === "NON_CR" : false;
+      drones = spResp.ok ? (spResp.data ?? []) : [];
+      files = flResp.ok ? (flResp.data ?? []) : [];
+      notes = ntResp.ok ? (ntResp.data ?? "") : "";
+      showNotesEditor = false;
 
-    if (!dResp.ok) {
-      errorCode = dResp.error.code;
-      errorMessage = dResp.error.message;
-      detailState = "error";
-    } else {
+      if (detail) {
+        crLinkEdit = detail.cr_link || "";
+        crLinkEditing = !detail.cr_link;
+        crLinkCopied = false;
+        crStateEdit = detail.cr_state || "";
+        nonCrStateEdit = detail.non_cr_state ?? "PLANNING";
+        syncMetadataDrafts(detail);
+      }
+
+      // Show core project data immediately. CR Docs load independently below.
       detailState = "loaded";
+
+      if (detail && !isNonCr) {
+        void loadCrDocs();
+      }
+    } catch (err) {
+      errorCode = "PROJECT_DETAIL_LOAD_FAILED";
+      errorMessage = err instanceof Error ? err.message : String(err);
+      detailState = "error";
     }
   }
 
@@ -590,7 +615,99 @@
     ]);
     if (dResp.ok && dResp.data) { detail = dResp.data; syncMetadataDrafts(dResp.data); }
     if (ntResp.ok) { notes = ntResp.data ?? ""; }
+    if (detail && !isNonCr) await loadCrDocs();
   }
+
+  // ── CR Docs helpers (Piece B) ──
+
+  /** Mirror backend _detect_rte_format so the dropdown label matches behavior. */
+  function rteFormatForName(name: string): RteFile["format"] {
+    const suffix = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+    if (suffix === "docx") return "docx";
+    if (suffix === "md") return "markdown";
+    if (suffix === "msg") return "msg";
+    if (suffix === "html" || suffix === "htm") return "html";
+    return "text";
+  }
+
+  /** Build the CR Docs file list for the current CR project and select notes.md. */
+  async function loadCrDocs() {
+    if (!detail) return;
+    crDocsLoading = true;
+    crDocsError = "";
+    try {
+      const projectPath = detail.project_path;
+      const isLocked = detail.project_state === "IMPLEMENTED";
+      const list: RteFile[] = [
+        { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, isOpenable: false },
+        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+      ];
+      // Append any .msg files already present in _cr-docs/ (created by Piece C).
+      const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
+      if (msgResp.ok && msgResp.data) {
+        for (const f of msgResp.data) {
+          if (f.name.toLowerCase().endsWith(".msg")) {
+            list.push({ name: f.name, path: f.path, format: "msg", editable: false, isOpenable: true });
+          }
+        }
+      }
+      crDocsFiles = list;
+      // Default to notes.md; keep current selection if still valid.
+      const stillValid = list.some((f) => f.path === selectedCrDocPath);
+      if (!stillValid) selectedCrDocPath = list[0]?.path ?? "";
+      await selectCrDoc(selectedCrDocPath);
+    } catch (err) {
+      crDocsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      crDocsLoading = false;
+    }
+  }
+
+  /** Load the selected CR doc content (or prepare the .msg open-external panel). */
+  async function selectCrDoc(path: string) {
+    selectedCrDocPath = path;
+    crDocContent = null;
+    crDocContentPath = "";
+    const file = crDocsFiles.find((f) => f.path === path);
+    if (!file) return;
+    if (file.format === "msg") return; // rendered as open-external panel
+    crDocsLoading = true; crDocsError = "";
+    try {
+      const resp = await getRteFile(path);
+      if (!resp.ok) { crDocsError = resp.error.message; return; }
+      // A3 fix: only mount the editor after content for the selected path is ready.
+      if (selectedCrDocPath !== path) return;
+      crDocContent = resp.data;
+      crDocContentPath = path;
+    } catch (err) {
+      crDocsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      crDocsLoading = false;
+    }
+  }
+
+  /** Open a .msg (or any external) file via the OS default app. */
+  async function openCrDocExternal(path: string) {
+    const resp = await callBridge("file_open", path);
+    if (!resp.ok) addToast(`Could not open file: ${resp.error.message}`, "error");
+  }
+
+  async function exportSelectedDocToWord() {
+    const selected = selectedCrDoc;
+    const name = selected?.name ?? "notes.md";
+    const suggested = `${name.replace(/\.(md|docx|html?)$/i, "")}.docx`;
+    const html = selected && selected.format !== "markdown"
+      ? (crDocContent?.content ?? "")
+      : renderMarkdown(notes);
+    const resp = await exportToDocx(html, suggested);
+    if (!resp.ok) { addToast(`Export failed: ${resp.error.message}`, "error"); return; }
+    if (resp.data?.written) addToast(`Exported Word file: ${resp.data.path}`, "success");
+  }
+
+  /** The currently selected CR Docs file (or null). */
+  const selectedCrDoc = $derived(crDocsFiles.find((f) => f.path === selectedCrDocPath) ?? null);
+  const crDocReady = $derived(crDocContent !== null && crDocContentPath === selectedCrDocPath);
 
   async function openProjectFolder() {
     if (!selectedPath || !isPywebviewReady()) {
@@ -947,20 +1064,85 @@
             </div>
 
             <div class="pd-section">
-              <div class="pd-section-headline">
-                <h4 class="pd-section-title">Notes</h4>
-                <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
-                  {showNotesEditor ? "Close Notes" : "Edit Notes"}
-                </button>
-              </div>
-              {#if showNotesEditor}
-                {#key detail.project_path}
-                  <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
-                {/key}
-              {:else}
-                <div class="pd-notes-preview">
-                  {notes.trim() || "No notes yet. Click Edit Notes to open the rich-text editor."}
+              {#if isNonCr}
+                <div class="pd-section-headline">
+                  <h4 class="pd-section-title">Notes</h4>
+                  <div class="pd-doc-actions">
+                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord}>Export to Word</button>
+                    <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
+                      {showNotesEditor ? "Close Notes" : "Edit Notes"}
+                    </button>
+                  </div>
                 </div>
+                {#if showNotesEditor}
+                  {#key detail.project_path}
+                    <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
+                  {/key}
+                {:else}
+                  <div class="pd-notes-preview">
+                    {notes.trim() || "No notes yet. Click Edit Notes to open the rich-text editor."}
+                  </div>
+                {/if}
+              {:else}
+                <div class="pd-section-headline">
+                  <h4 class="pd-section-title">Notes &amp; CR Docs</h4>
+                  <div class="pd-doc-actions">
+                    <select
+                      class="pd-doc-select"
+                      aria-label="Select document to edit"
+                      value={selectedCrDocPath}
+                      onchange={(e) => selectCrDoc(e.currentTarget.value)}
+                    >
+                      {#each crDocsFiles as f}
+                        <option value={f.path}>{f.name}</option>
+                      {/each}
+                    </select>
+                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord} disabled={selectedCrDoc?.format === "msg"}>
+                      Export to Word
+                    </button>
+                  </div>
+                </div>
+                {#if crDocsLoading}
+                  <p class="pd-muted">Loading…</p>
+                {:else if crDocsError}
+                  <p class="pd-muted pd-error-text">Could not load document: {crDocsError}</p>
+                {:else if selectedCrDoc && selectedCrDoc.format === "msg"}
+                  <div class="pd-msg-panel">
+                    <p class="pd-muted">This is an Outlook message and cannot be edited in-app.</p>
+                    <button class="pd-command-btn" type="button" onclick={() => selectedCrDoc && openCrDocExternal(selectedCrDoc.path)}>
+                      Open Externally
+                    </button>
+                  </div>
+                {:else if selectedCrDoc}
+                  {#if !selectedCrDoc.editable}
+                    <p class="pd-muted pd-locked-text">View only — project is in IMPLEMENTED state.</p>
+                  {/if}
+                  {#if !crDocReady}
+                    <p class="pd-muted">Loading…</p>
+                  {:else}
+                    {#key selectedCrDoc.path}
+                      {#if selectedCrDoc.format === "html" || selectedCrDoc.format === "docx"}
+                        <NotesEditor
+                          projectPath={detail.project_path}
+                          filePath={selectedCrDoc.path}
+                          fileFormat={selectedCrDoc.format}
+                          initialNotes={crDocContent?.content ?? ""}
+                          editable={selectedCrDoc.editable}
+                          onSaved={(n: string) => { if (crDocContent) crDocContent.content = n; }}
+                        />
+                      {:else}
+                        <NotesEditor
+                          projectPath={detail.project_path}
+                          initialNotes={crDocContent?.content ?? notes}
+                          editable={selectedCrDoc.editable}
+                          onSaved={(n: string) => { notes = n; if (crDocContent) crDocContent.content = n; }}
+                        />
+                      {/if}
+                    {/key}
+                  {/if}
+                {:else}
+                  <p class="pd-muted">No document selected.</p>
+                {/if}
               {/if}
             </div>
 
@@ -1017,6 +1199,12 @@
   .pd-section-headline { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
   .pd-section-headline .pd-section-title { margin:0; }
   .pd-notes-preview { white-space:pre-wrap; font-size:11px; line-height:1.5; color:var(--color-ink); background:var(--color-workspace); border:1px dashed var(--color-border); border-radius:6px; padding:10px; max-height:160px; overflow:auto; }
+  .pd-doc-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .pd-doc-select { height:28px; padding:0 8px; border:1px solid var(--color-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; cursor:pointer; max-width:200px; }
+  .pd-doc-select:focus { border-color:var(--color-dbs-red); outline:none; box-shadow:0 0 0 2px var(--color-dbs-red-active); }
+  .pd-msg-panel { display:flex; flex-direction:column; gap:8px; align-items:flex-start; padding:10px; border:1px dashed var(--color-border); border-radius:6px; background:var(--color-workspace); }
+  .pd-error-text { color:var(--color-dbs-red); }
+  .pd-locked-text { color:var(--tag-amber-ink); margin-bottom:6px; }
   .pd-section-title { margin:0 0 8px; font-family:var(--font-display); font-size:13px; font-weight:600; letter-spacing:-0.01em; color:var(--color-ink-strong); display:flex; align-items:center; gap:6px; }
   .pd-inline-create { display:flex; align-items:center; gap:6px; flex:0 1 360px; }
   .pd-inline-create .pd-control { flex:1; }

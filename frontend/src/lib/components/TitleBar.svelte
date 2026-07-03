@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import type { NotificationItem } from "../types";
   import { winMinimize, winToggleMaximize, winClose, getUserProfile, waitForPywebviewReady, onWinStateChange } from "../bridge";
+  import { logActivity } from "../activityLogger";
 
   let {
     currentPage,
@@ -86,8 +87,14 @@
   function handleClose() { winClose(); }
 
   function navigateTo(id: string) {
-    window.dispatchEvent(new CustomEvent("app:navigate-away"));
-    onNavigate(id);
+    logActivity({ source: "TitleBar.navigateTo", kind: "navigation", event: "start", from: currentPage, to: id });
+    try {
+      window.dispatchEvent(new CustomEvent("app:navigate-away"));
+    } finally {
+      // Navigation must not be blocked by a page cleanup listener (e.g. RTE reset).
+      onNavigate(id);
+      logActivity({ source: "TitleBar.navigateTo", kind: "navigation", event: "done", to: id });
+    }
   }
 
   function formatTime(iso: string): string {
@@ -140,8 +147,8 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
-        onclick={(e) => { e.stopPropagation(); navigateTo(item.id); }}
-        onpointerdown={(e) => e.stopPropagation()}
+        onclick={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "click", from: currentPage, to: item.id }); e.preventDefault(); e.stopPropagation(); }}
+        onpointerdown={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "pointerdown", from: currentPage, to: item.id, clientX: e.clientX, clientY: e.clientY, elementFromPoint: document.elementFromPoint(e.clientX, e.clientY)?.className || "" }); e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
       >
         <span class="nav-tab-icon">{@html navIcons[item.id]}</span>
         <span class="nav-tab-tooltip">{item.label}</span>
@@ -222,21 +229,24 @@
 
 <style>
   .titlebar {
+    position: relative;
+    z-index: 1000;
     display: flex;
     align-items: center;
     height: 48px;
     min-height: 48px;
+    flex: 0 0 48px;
     background: var(--black-chrome);
     border-bottom: 1px solid var(--dark-border);
     -webkit-app-region: drag;
     user-select: none;
     padding: 0 8px;
     gap: 8px;
-    z-index: 100;
   }
   .titlebar-left { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; }
+  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; pointer-events:auto; }
   .titlebar-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  .titlebar button, .titlebar input, .titlebar svg, .titlebar span { -webkit-app-region: no-drag; }
 
   .user-avatar {
     position: relative;
@@ -308,6 +318,7 @@
     background: transparent;
     color: var(--inactive-nav-text);
     -webkit-app-region: no-drag;
+    pointer-events: auto;
     cursor: pointer;
     transition: background .15s ease, color .15s ease;
   }

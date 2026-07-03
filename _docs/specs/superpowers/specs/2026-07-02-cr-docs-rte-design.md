@@ -166,3 +166,77 @@ When .msg file selected from dropdown:
 - `.msg` file auto-download (Piece C — approval automation)
 - Email polling (Piece C)
 - Approval buttons (Piece C)
+
+---
+
+## Amendments (2026-07-03)
+
+Reconciliation pass against the codebase, handoff hard rules, and PRD. These amendments override the conflicting sections above and are the source of truth for implementation. Full rationale + step-by-step tasks live in the implementation plan: `_docs/specs/superpowers/plans/2026-07-03-cr-docs-rte-plan.md`.
+
+### A1. No new Python test files (supersedes Section 5)
+
+Section 5 lists `tests/test_cr_docs_creation.py` and `tests/test_rte_file_bridge.py`. **These are NOT created.** The handoff hard rule "Do not create new Python test files" (also applied to Piece A, recorded in `_docs/session-notes.md`) governs. Verification is via `svelte-check`, existing frontend tests, and the manual checklist.
+
+### A2. Lazy scaffold on read — `create_project` is NOT modified (supersedes Section 3)
+
+Section 3 modifies `create_project` to touch the two files. **This is dropped.** Instead, `get_rte_file` creates a missing `uat-signoff`/`prod-lv` (0-byte) on first read, then loads it. This is the single creation mechanism, so it works uniformly for:
+- Existing Piece A CR projects (which already have an empty `_cr-docs/` folder).
+- New CR projects created after Piece B.
+
+`notes.md`, `*.msg`, and arbitrary files are never auto-created by `get_rte_file`.
+
+### A3. State lock = treat like notes
+
+`uat-signoff`/`prod-lv` are the CR's signoff evidence, so they follow the `notes_update` lock rule (`app_web.py:1362-1370`): editable in `UAT_PREPARE`/`PROD_READY`/`POSTPONED`/`CANCELED`; **view-only in `IMPLEMENTED`** (`get_rte_file` returns `editable=false`; `save_rte_file` rejects with code `LOCKED`). This is stricter-than-files in `PROD_READY` but matches the notes/evidence allowance in PRD §9.5.
+
+### A4. Scope = project-level only (narrows Section 2 drone level)
+
+The "Drone level" dropdown in Section 2 is **not implemented in Piece B**. Piece B adds the CR Docs editor at the **project level only** (matches handoff scope and manual checklist). Drone editing is left on its existing path.
+
+### A5. `.msg` files are Piece C's creation responsibility
+
+Piece B only **displays/opens** `.msg` files if they already exist in `_cr-docs/`. It never creates, downloads, or auto-fills them. Auto-download is Piece C.
+
+### A6. `.msg` detection in the dropdown
+
+`get_rte_file` reports `format="msg"`, `content=""` (binary never read into memory), `editable=false`. The frontend renders an "Open externally" panel (button calls existing `file_open` → `os.startfile`), never the Tiptap editor.
+
+---
+
+## Amendments (2026-07-03, revision 2) — .docx storage + Export Word + bug fixes
+
+Driven by user testing of the first implementation pass (CR Docs as extensionless HTML): double-clicking such files in Windows does not render them, and copy-paste to Outlook does not carry formatting. The user requires CR Docs to open in MS Word with tables + images intact, and to be exportable from `notes.md`. Two blocking UX bugs (Tiptap freeze; doc-switch not loading) were also found and are fixed here. Implementation plan revision: `_docs/specs/superpowers/plans/2026-07-03-cr-docs-rte-plan.md`.
+
+### B1. CR Docs stored natively as `.docx` (supersedes A2 partially + spec §1)
+
+The editable CR Docs are now **`_cr-docs/uat-signoff.docx`** and **`_cr-docs/prod-lv.docx`** (Word native). The earlier extensionless-HTML decision (spec §1) is reversed.
+
+- **Load**: backend reads the `.docx` bytes → `mammoth.convert_to_html()` → Tiptap `setContent(html)`.
+- **Save (autosave)**: Tiptap `getHTML()` → backend `htmldocx` + `python-docx` → `.docx` bytes → atomic binary write. The on-disk `.docx` is regenerated from current HTML on every save, so it always reflects the last edit.
+- **Lazy scaffold** (A2 still applies): a missing `uat-signoff.docx`/`prod-lv.docx` is created as a minimal empty valid `.docx` on first read.
+- **State lock** (A3 still applies): editable except `IMPLEMENTED`.
+- **Round-trip risk (acknowledged, acceptable)**: mammoth/htmldocx is high-fidelity for text + simple tables + images + links (the spec'd signoff content) but not pixel-perfect for exotic formatting. Manual edits made in Word are re-imported via mammoth on the next in-app load.
+
+### B2. `notes.md` gets "Export to Word" (new, additive)
+
+`notes.md` storage stays Markdown (D-0007 contract unchanged). A new **"Export to Word"** button renders `notes.md` → HTML (`renderMarkdown`) → `.docx` (backend htmldocx) and saves via a native save dialog (binary-capable). The button is also available on CR Docs (exports the current `.docx` content as a separate `.docx` to a user-chosen location).
+
+### B3. Format type expands
+
+`_detect_rte_format` now returns `"html" | "markdown" | "msg" | "text" | "docx"`. The frontend `RteFormat` mirrors this.
+
+### B4. Freeze/lag fix (Tiptap)
+
+Root cause: `onEditorUpdate` ran `htmlToMarkdown(editor.getHTML())` (full-doc serialize: `DOMParser` + recursive walk) on **every keystroke**. Fix: serialize only inside `flush()` (debounced 1s autosave) using a cheap `dirty` flag for change detection. WYSIWYG real-time formatting is untouched (toolbar buttons call `editor.chain()` directly and never touched the serialize path).
+
+### B5. A3 fix — doc switch now loads content
+
+Root cause: `{#key selectedCrDoc.path}` recreated the Tiptap instance **before** the async `getRteFile` resolved, so the new instance mounted with stale/empty content. Fix: render the editor only when content for the currently selected path has loaded; clear + reload on switch.
+
+### B6. New dependencies (rule relaxed)
+
+Per the user, the hard rule "no new dependency unless impossible without it" is **removed** (see `CLAUDE.md` "Smallest Diff"). Added Python deps: `mammoth` (docx→HTML), `htmldocx` + `python-docx` (HTML→docx). No frontend deps added. PyInstaller spec must collect these (packaging build itself is tracked separately in `_docs/PROGRESS.md` as not-started).
+
+### B7. Binary bridge transport
+
+`util_save_file` is UTF-8 text only, so a new `util_save_bytes(suggested_name, data_b64)` accepts base64-encoded bytes (pywebview serializes args as JSON), decodes, opens the native save dialog, and writes `wb`. Used by `export_to_docx`.

@@ -13,6 +13,7 @@
   import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
   import Toast from "./lib/components/Toast.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
+  import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
   import type { NotificationItem } from "./lib/types";
 
   type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "settings";
@@ -34,6 +35,7 @@
 
   // Event polling
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let stopActivityLogging: (() => void) | null = null;
   const POLL_INTERVAL_MS = 1500;
 
   // Years for the dashboard header dropdown (from year_list).
@@ -44,22 +46,26 @@
 
   function navigate(id: string) {
     const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan"];
+    logActivity({ source: "App.navigate", kind: "navigation", event: "start", from: currentPage, to: id, valid: validPages.includes(id) });
     if (validPages.includes(id)) {
       if (id !== "project-detail") {
         pendingProjectPath = null;
         startNewProject = false;
       }
       currentPage = id as PageId;
+      logActivity({ source: "App.navigate", kind: "navigation", event: "done", currentPage });
     }
   }
 
   function openProjectDetails(path: string) {
+    logActivity({ source: "App.openProjectDetails", kind: "navigation", path });
     pendingProjectPath = path;
     startNewProject = false;
     currentPage = "project-detail";
   }
 
   function openNewProjectPage() {
+    logActivity({ source: "App.openNewProjectPage", kind: "navigation" });
     startNewProject = true;
     pendingProjectPath = null;
     currentPage = "project-detail";
@@ -175,10 +181,12 @@
   }
 
   onMount(async () => {
+    stopActivityLogging = installGlobalActivityLogging(() => currentPage);
     // Wait for pywebview to fully register bridge methods before any call.
     // Without this, early isPywebviewReady() returns false (or true with an
     // empty api object) and all initial loads silently bail.
     await waitForPywebviewReady();
+    logActivity({ source: "App.onMount", kind: "lifecycle", event: "bridge-ready", currentPage });
     loadNotifications();
     loadYears();
     checkRoot();
@@ -187,6 +195,7 @@
 
   onDestroy(() => {
     stopPolling();
+    stopActivityLogging?.();
   });
 </script>
 
@@ -224,21 +233,23 @@
       {openAddYearToken}
     />
     <div class="app-content">
-      {#if currentPage === "dashboard"}
-        <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
-      {:else if currentPage === "report"}
-        <Report {selectedYear} {searchQuery} key={refreshKey} />
-      {:else if currentPage === "settings"}
-        <Settings />
-      {:else if currentPage === "second-brain"}
-        <SecondBrain />
-      {:else if currentPage === "project-detail"}
-        <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
-      {:else if currentPage === "automations"}
-        <Automations />
-      {:else if currentPage === "global-plan"}
-        <GlobalPlan />
-      {/if}
+      {#key currentPage}
+        {#if currentPage === "dashboard"}
+          <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
+        {:else if currentPage === "report"}
+          <Report {selectedYear} {searchQuery} key={refreshKey} />
+        {:else if currentPage === "settings"}
+          <Settings />
+        {:else if currentPage === "second-brain"}
+          <SecondBrain />
+        {:else if currentPage === "project-detail"}
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
+        {:else if currentPage === "automations"}
+          <Automations />
+        {:else if currentPage === "global-plan"}
+          <GlobalPlan />
+        {/if}
+      {/key}
     </div>
   </main>
   {#if rootUnset}
