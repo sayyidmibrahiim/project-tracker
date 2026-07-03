@@ -1,4 +1,4 @@
-import type { BridgeResponse, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
+import type { BridgeResponse, DocxExportResult, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
 import { BridgeErrorCode } from "./types";
 
 /** Maximum time to wait for a single bridge call before treating it as failed. */
@@ -242,4 +242,12 @@ export function saveRteFile(
   content: string,
 ): Promise<BridgeResponse<{ saved: boolean }>> {
   return callBridge("save_rte_file", filePath, content);
+}
+
+/** Export rendered HTML to a user-chosen Word .docx file. */
+export function exportToDocx(
+  html: string,
+  suggestedName: string,
+): Promise<BridgeResponse<DocxExportResult>> {
+  return callBridge("export_to_docx", html, "html", suggestedName);
 }

@@ -243,7 +243,7 @@ export interface SecondBrainItem {
 // ── CR Docs RTE (Piece B) — mirror get_rte_file / save_rte_file shapes ──
 
 /** RTE file format reported by the backend (see _detect_rte_format). */
-export type RteFormat = "html" | "markdown" | "msg" | "text";
+export type RteFormat = "html" | "markdown" | "msg" | "text" | "docx";
 
 /** A selectable entry in the CR Docs file dropdown. */
 export interface RteFile {
@@ -260,5 +260,11 @@ export interface RteFileContent {
   content: string;
   format: RteFormat;
   editable: boolean;
+}
+
+/** Result from the native "Export to Word" save dialog. */
+export interface DocxExportResult {
+  path: string | null;
+  written: boolean;
 }
 
