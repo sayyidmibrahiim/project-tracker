@@ -226,20 +226,22 @@
 
 <style>
   .titlebar {
+    position: relative;
+    z-index: 1000;
     display: flex;
     align-items: center;
     height: 48px;
     min-height: 48px;
+    flex: 0 0 48px;
     background: var(--black-chrome);
     border-bottom: 1px solid var(--dark-border);
     -webkit-app-region: drag;
     user-select: none;
     padding: 0 8px;
     gap: 8px;
-    z-index: 100;
   }
   .titlebar-left { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; }
+  .titlebar-nav { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; -webkit-app-region: no-drag; pointer-events:auto; }
   .titlebar-right { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 
   .user-avatar {
@@ -312,6 +314,7 @@
     background: transparent;
     color: var(--inactive-nav-text);
     -webkit-app-region: no-drag;
+    pointer-events: auto;
     cursor: pointer;
     transition: background .15s ease, color .15s ease;
   }

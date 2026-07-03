@@ -240,47 +240,54 @@
     newSubprojectName = ""; droneBusy = false; droneFeedback = ""; droneFeedbackKind = "idle";
     errorCode = ""; errorMessage = "";
 
-    if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
-      errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
-      errorMessage = "pywebview bridge unavailable.";
-      detailState = "error";
-      return;
-    }
+    try {
+      if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
+        errorCode = BridgeErrorCode.BRIDGE_UNAVAILABLE;
+        errorMessage = "pywebview bridge unavailable.";
+        detailState = "error";
+        return;
+      }
 
-    const [dResp, spResp, flResp, ntResp] = await Promise.all([
-      callBridge<ProjectDetail>("project_get", path),
-      callBridge<string[]>("drone_list", path),
-      callBridge<FileRow[]>("file_list", path),
-      callBridge<string>("notes_get", path),
-    ]);
+      const [dResp, spResp, flResp, ntResp] = await Promise.all([
+        callBridge<ProjectDetail>("project_get", path),
+        callBridge<string[]>("drone_list", path),
+        callBridge<FileRow[]>("file_list", path),
+        callBridge<string>("notes_get", path),
+      ]);
 
-    detail = dResp.ok ? (dResp.data ?? null) : null;
-    isNonCr = detail ? detail.project_type === "NON_CR" : false;
-    drones = spResp.ok ? (spResp.data ?? []) : [];
-    files = flResp.ok ? (flResp.data ?? []) : [];
-    notes = ntResp.ok ? (ntResp.data ?? "") : "";
-    showNotesEditor = false;
+      if (!dResp.ok) {
+        errorCode = dResp.error.code;
+        errorMessage = dResp.error.message;
+        detailState = "error";
+        return;
+      }
 
-    // Build the CR Docs dropdown for CR projects (Piece B). Non-CR has no _cr-docs.
-    if (detail && !isNonCr) {
-      await loadCrDocs();
-    }
+      detail = dResp.data ?? null;
+      isNonCr = detail ? detail.project_type === "NON_CR" : false;
+      drones = spResp.ok ? (spResp.data ?? []) : [];
+      files = flResp.ok ? (flResp.data ?? []) : [];
+      notes = ntResp.ok ? (ntResp.data ?? "") : "";
+      showNotesEditor = false;
 
-    if (detail) {
-      crLinkEdit = detail.cr_link || "";
-      crLinkEditing = !detail.cr_link;
-      crLinkCopied = false;
-    }
-    if (detail) crStateEdit = detail.cr_state || "";
-    if (detail) nonCrStateEdit = detail.non_cr_state ?? "PLANNING";
-    if (detail) syncMetadataDrafts(detail);
+      if (detail) {
+        crLinkEdit = detail.cr_link || "";
+        crLinkEditing = !detail.cr_link;
+        crLinkCopied = false;
+        crStateEdit = detail.cr_state || "";
+        nonCrStateEdit = detail.non_cr_state ?? "PLANNING";
+        syncMetadataDrafts(detail);
+      }
 
-    if (!dResp.ok) {
-      errorCode = dResp.error.code;
-      errorMessage = dResp.error.message;
-      detailState = "error";
-    } else {
+      // Show core project data immediately. CR Docs load independently below.
       detailState = "loaded";
+
+      if (detail && !isNonCr) {
+        void loadCrDocs();
+      }
+    } catch (err) {
+      errorCode = "PROJECT_DETAIL_LOAD_FAILED";
+      errorMessage = err instanceof Error ? err.message : String(err);
+      detailState = "error";
     }
   }
 
@@ -626,27 +633,35 @@
   /** Build the CR Docs file list for the current CR project and select notes.md. */
   async function loadCrDocs() {
     if (!detail) return;
-    const projectPath = detail.project_path;
-    const isLocked = detail.project_state === "IMPLEMENTED";
-    const list: RteFile[] = [
-      { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, isOpenable: false },
-      { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, isOpenable: false },
-      { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, isOpenable: false },
-    ];
-    // Append any .msg files already present in _cr-docs/ (created by Piece C).
-    const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
-    if (msgResp.ok && msgResp.data) {
-      for (const f of msgResp.data) {
-        if (f.name.toLowerCase().endsWith(".msg")) {
-          list.push({ name: f.name, path: f.path, format: "msg", editable: false, isOpenable: true });
+    crDocsLoading = true;
+    crDocsError = "";
+    try {
+      const projectPath = detail.project_path;
+      const isLocked = detail.project_state === "IMPLEMENTED";
+      const list: RteFile[] = [
+        { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, isOpenable: false },
+        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+      ];
+      // Append any .msg files already present in _cr-docs/ (created by Piece C).
+      const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
+      if (msgResp.ok && msgResp.data) {
+        for (const f of msgResp.data) {
+          if (f.name.toLowerCase().endsWith(".msg")) {
+            list.push({ name: f.name, path: f.path, format: "msg", editable: false, isOpenable: true });
+          }
         }
       }
+      crDocsFiles = list;
+      // Default to notes.md; keep current selection if still valid.
+      const stillValid = list.some((f) => f.path === selectedCrDocPath);
+      if (!stillValid) selectedCrDocPath = list[0]?.path ?? "";
+      await selectCrDoc(selectedCrDocPath);
+    } catch (err) {
+      crDocsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      crDocsLoading = false;
     }
-    crDocsFiles = list;
-    // Default to notes.md; keep current selection if still valid.
-    const stillValid = list.some((f) => f.path === selectedCrDocPath);
-    if (!stillValid) selectedCrDocPath = list[0]?.path ?? "";
-    await selectCrDoc(selectedCrDocPath);
   }
 
   /** Load the selected CR doc content (or prepare the .msg open-external panel). */
@@ -658,13 +673,18 @@
     if (!file) return;
     if (file.format === "msg") return; // rendered as open-external panel
     crDocsLoading = true; crDocsError = "";
-    const resp = await getRteFile(path);
-    crDocsLoading = false;
-    if (!resp.ok) { crDocsError = resp.error.message; return; }
-    // A3 fix: only mount the editor after content for the selected path is ready.
-    if (selectedCrDocPath !== path) return;
-    crDocContent = resp.data;
-    crDocContentPath = path;
+    try {
+      const resp = await getRteFile(path);
+      if (!resp.ok) { crDocsError = resp.error.message; return; }
+      // A3 fix: only mount the editor after content for the selected path is ready.
+      if (selectedCrDocPath !== path) return;
+      crDocContent = resp.data;
+      crDocContentPath = path;
+    } catch (err) {
+      crDocsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      crDocsLoading = false;
+    }
   }
 
   /** Open a .msg (or any external) file via the OS default app. */

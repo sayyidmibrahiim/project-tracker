@@ -550,7 +550,14 @@
       windowClickBound = true;
       window.addEventListener('click', onWindowClick);
     }
-    return () => { instance.destroy(); editor = null; };
+    return () => {
+      try {
+        instance.destroy();
+      } catch (err) {
+        console.warn("NotesEditor destroy failed", err);
+      }
+      editor = null;
+    };
   });
 
   // Reflect editor font family/size into the selects (after each transaction).
