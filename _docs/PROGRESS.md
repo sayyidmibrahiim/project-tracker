@@ -7,7 +7,7 @@
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
 Active branch: `main`.
-Active slice: Piece A UI/UX completed and merged — Dashboard 3 multi-select checklist filters (CR State / Appcode / Project Type) use fixed-position menus so header overflow cannot clip them; 2-line project metadata (`Type · Appcode · time · full date`); Add Project form (CR/Non-CR radio + appcode placeholder dropdown/+create + start/end only; no CR link/implementation plan; lazy drone); Project Details Non-CR identity (Non-CR state dropdown via `set_non_cr_state`, CR/Drone hidden, schedule editable), Drone copy rename (`Sub Project` → `Drone`). Backend `create_project` persists optional start/end + ignores `drone_name`; `appcode_add` creates current-year `CR/{states}` and `Non-CR`; appcode discovery includes manual appcode folders with year subfolders. Next planned slice: Piece B (`project-details/cr-docs-rte`).
+Active slice: **Piece B merged** — CR Docs `.docx` storage + multi-file RTE editor + Export to Word + professional AppData logging. Known remaining issues: Tiptap RTE still has interaction bugs on CR projects (to be addressed in a follow-up session). Branch `project-details/cr-docs-rte` kept.
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 
@@ -26,16 +26,16 @@ Previous completed area remains fixed: frameless titlebar, Dashboard, and Projec
 | Second Brain        | Done, pending user verify |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
-| Piece B CR docs RTE | Ready to plan |
+| Piece B CR docs RTE | Merged (known RTE interaction bugs remain) |
 | Windows verify      | Not started (needs real Windows) |
 | Packaging           | Not started |
 
 ## Last 4 Completed Slices
 
-1. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system (toastStore + Toast.svelte + App.svelte mount) wired into all save sites (Settings, Dashboard, ProjectDetails, EmailTemplateDialog). GlobalPlan, Report, SecondBrain inline feedback → toast store. Settings autosave (1500ms debounce + dirty flag). Undo toasts (CR link, CR state, Drone link/state) with 5s timeout. TitleBar `?` keyboard-shortcut popover. First-run WelcomeGuide overlay (localStorage once-and-never).
-2. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan productionized as official menu 7 with drag/drop; seeded full audit backlog. Scheduler trigger now targets real entry with real project provider; metrics derived from real entries. Rules Execute exposed separately from Evaluate. Report gains Month + Drone filters, CR/Drone/Monthly summaries, expanded columns, native save-dialog CSV with UTF-8 BOM + Blob fallback. Second Brain search/sort/type/date filters wired; Link Bank export/import/rename/restore added. Settings theme switch removed (PRD fixed theme), validation + restart notice added.
-3. **CLAUDE.md Cold Start + Verification Rule Update** (2026-06-30): Truth order now starts from cold-start docs; `_reference/` cannot override implemented titlebar/Dashboard/Project Details decisions; default verification is app-run unless full tests are requested.
-4. **Design All 6 Menus + Titlebar** (2026-06-29): Frameless `pywebview` titlebar with avatar/search/nav/notif/window-controls. Unified `.page-header` pattern across all 6 menus. 3-icon (Copy/Open/Edit) + two-state pattern on all CR Number & Drone Ticket inputs. Branch: `design/titlebar`.
+1. **Piece B CR Docs + .docx + Logging** (2026-07-03, branch `project-details/cr-docs-rte`): CR-only "Notes & CR Docs" section in Project Details with `<select>` dropdown (notes.md / uat-signoff.docx / prod-lv.docx / .msg). .docx storage via mammoth + htmldocx + python-docx. Export to Word button. Tiptap freeze fix (serialize at save-time, not per-keystroke). Professional AppData logging (backend + frontend activity). Multiple nav/lifecycle fixes. Known: RTE interaction bugs remain for follow-up.
+2. **Piece A Appcode + CR/Non-CR structure** (2026-07-02, branch `general/appcode-structure-audit`): Dashboard 3 multi-select checklist filters; Add Project CR/Non-CR; appcode_add; Non-CR identity; Drone rename; lazy drone creation.
+3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
+4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
 ## Verification (latest)
 
@@ -43,5 +43,5 @@ Previous completed area remains fixed: frameless titlebar, Dashboard, and Projec
 svelte-check: 0 errors, 0 warnings
 frontend tests: 149 pass / 0 fail
 frontend build: ok
-app startup: runs, no traceback (2026-07-03, branch `general/appcode-structure-audit`)
+app startup: runs, no traceback (2026-07-03, branch `project-details/cr-docs-rte` merged to `main`)
 ```
