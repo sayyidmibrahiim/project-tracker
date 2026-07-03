@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import sys
 import tempfile
 import uuid
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -1371,27 +1373,60 @@ def create_js_api(
 
         # ── _cr-docs RTE files (Piece B) ───────────────────────────────
         # Reuses the notes adapter: same IMPLEMENTED lock rule (signoff
-        # evidence is treated like notes per spec amendment A3) and the same
-        # atomic write helper. ``uat-signoff``/``prod-lv`` are HTML; missing
-        # ones are lazily scaffolded (0-byte) on first read (amendment A2) —
-        # the single creation mechanism, so ``create_project`` is unchanged.
-        _CR_DOC_HTML_NAMES = frozenset({"uat-signoff", "prod-lv"})
+        # evidence is treated like notes per spec amendment A3). Revision 2 stores
+        # the two editable CR docs as native Word files so Windows double-click and
+        # Outlook copy/paste preserve tables/images.
+        _CR_DOC_NAMES = frozenset({"uat-signoff.docx", "prod-lv.docx"})
 
         def _detect_rte_format(self, path: Path) -> str:
             """Return the RTE format for ``path``.
 
-            html → the two ``_cr-docs`` signoff names; markdown → ``*.md``;
-            msg → ``*.msg`` (binary, never read into memory); text → other.
+            docx → ``*.docx``; markdown → ``*.md``; msg → ``*.msg`` (binary,
+            never read into memory); html → ``*.html``/``*.htm``; text → other.
             """
-            name = Path(path).name
-            if name in self._CR_DOC_HTML_NAMES:
-                return "html"
             suffix = Path(path).suffix.casefold()
+            if suffix == ".docx":
+                return "docx"
             if suffix == ".md":
                 return "markdown"
             if suffix == ".msg":
                 return "msg"
+            if suffix in {".html", ".htm"}:
+                return "html"
             return "text"
+
+        def _html_to_docx_bytes(self, html: str) -> bytes:
+            from docx import Document
+            from htmldocx import HtmlToDocx
+
+            document = Document()
+            parser = HtmlToDocx()
+            parser.add_html_to_document(html or "", document)
+            buffer = BytesIO()
+            document.save(buffer)
+            return buffer.getvalue()
+
+        def _docx_to_html(self, path: Path) -> str:
+            import mammoth
+
+            # Read bytes into memory first so Windows releases the file before a
+            # later autosave tries to atomically replace the .docx.
+            with BytesIO(path.read_bytes()) as source:
+                result = mammoth.convert_to_html(source)
+            return str(result.value or "")
+
+        def _write_docx_bytes(self, path: Path, data: bytes) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = path.with_name(f".{path.name}.tmp")
+            try:
+                temp_path.write_bytes(data)
+                temp_path.replace(path)
+            except Exception:
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+                raise
 
         def get_rte_file(self, file_path: Path) -> object:
             path = Path(file_path)
@@ -1404,15 +1439,15 @@ def create_js_api(
                 # renders an "Open externally" panel instead of the editor.
                 return {"content": "", "format": fmt, "editable": False}
 
-            # Lazy scaffold: create missing CR-doc HTML files so existing Piece A
-            # projects (empty ``_cr-docs/``) and new projects behave uniformly.
-            if fmt == "html" and not path.exists():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
+            if fmt == "docx" and path.name in self._CR_DOC_NAMES and not path.exists():
+                self._write_docx_bytes(path, self._html_to_docx_bytes(""))
 
             if not path.is_file():
-                # Markdown/text targets are never auto-created; surface as empty.
+                # Markdown/text/html arbitrary targets are never auto-created.
                 return {"content": "", "format": fmt, "editable": editable}
+
+            if fmt == "docx":
+                return {"content": self._docx_to_html(path), "format": fmt, "editable": editable}
 
             content = path.read_text(encoding="utf-8")
             return {"content": content, "format": fmt, "editable": editable}
@@ -1427,8 +1462,14 @@ def create_js_api(
                 raise ValueError(
                     "CR docs are view-only while the project is in IMPLEMENTED"
                 )
-            _atomic_write_text(path, content)
+            if fmt == "docx":
+                self._write_docx_bytes(path, self._html_to_docx_bytes(content))
+            else:
+                _atomic_write_text(path, content)
             return {"saved": True}
+
+        def export_to_docx(self, content_html: str) -> str:
+            return base64.b64encode(self._html_to_docx_bytes(content_html)).decode("ascii")
 
     # ── outlook service adapter (EmailService + guarded outlook_client) ─
     class _OutlookServiceAdapter:
