@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from core.rules import validate_windows_folder_name
 from web.event_queue import drain_events
+from infrastructure.app_logger import log_backend_event, log_frontend_event
 from infrastructure.outlook_client import get_current_user_name
 
 
@@ -524,11 +525,20 @@ class JsApi:
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
 
+    def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
+        """Persist a frontend activity/debug event to the AppData frontend log."""
+        try:
+            log_frontend_event(dict(event or {}))
+            return ok({"logged": True})
+        except Exception as exc:
+            return fail(str(exc), code="FRONTEND_LOG_FAILED")
+
     def poll_events(self, limit: int | None = None) -> dict[str, object]:
         """Drain queued bridge events."""
         try:
             return ok(drain_events(limit))
         except Exception as exc:
+            log_backend_event("bridge.poll_events.failed", {"error": str(exc)})
             return fail(str(exc), code="EVENT_POLL_FAILED")
 
     def app_get_status(self) -> dict[str, object]:
@@ -1625,6 +1635,7 @@ class JsApi:
                 _to_frontend_safe(self._notes_service.get_rte_file(Path(file_path)))
             )
         except Exception as exc:
+            log_backend_event("bridge.get_rte_file.failed", {"file_path": file_path, "error": str(exc)})
             return fail(str(exc), code="RTE_GET_FAILED")
 
     def save_rte_file(self, file_path: str, content: str) -> dict[str, object]:
@@ -1638,6 +1649,7 @@ class JsApi:
                 )
             )
         except Exception as exc:
+            log_backend_event("bridge.save_rte_file.failed", {"file_path": file_path, "error": str(exc)})
             return fail(str(exc), code="RTE_SAVE_FAILED")
 
     def export_to_docx(self, content_html: str, source_format: str = "html", suggested_name: str = "export.docx") -> dict[str, object]:
@@ -1648,6 +1660,7 @@ class JsApi:
             data_b64 = self._notes_service.export_to_docx(content_html)
             return self.util_save_bytes(suggested_name, data_b64)
         except Exception as exc:
+            log_backend_event("bridge.export_to_docx.failed", {"suggested_name": suggested_name, "source_format": source_format, "error": str(exc)})
             return fail(str(exc), code="DOCX_EXPORT_FAILED")
 
     def global_plan_get(self) -> dict[str, object]:

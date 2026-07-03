@@ -20,7 +20,7 @@ from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectTyp
 from core.models import AppCodeConfig, AppSettings, DroneTicket, ProjectMetadata, local_now
 from core.rules import TransitionGuardResult, extract_cr_number, extract_drone_ticket
 from infrastructure.cache_db import CacheDb, rebuild_year_cache
-from infrastructure import filesystem, outlook_client
+from infrastructure import app_logger, filesystem, outlook_client
 from infrastructure.filesystem import (
     create_directory,
     create_file,
@@ -1858,6 +1858,19 @@ def resolve_frontend_url(*, dev: bool = False, project_root: Path = PROJECT_ROOT
 
 def run(*, dev: bool = False, start_webview: bool = True) -> None:
     """Create webview window and start pywebview on main thread."""
+    logger = app_logger.setup_backend_logging()
+    logger.info(
+        "backend.app.start",
+        extra={
+            "payload": {
+                "dev": dev,
+                "start_webview": start_webview,
+                "frozen": bool(getattr(sys, "frozen", False)),
+                "config_dir": str(app_config_dir()),
+                "static_dir": str(SVELTE_STATIC_DIR),
+            }
+        },
+    )
     window = webview.create_window(
         "Project Tracker DBS",
         url=resolve_frontend_url(dev=dev),

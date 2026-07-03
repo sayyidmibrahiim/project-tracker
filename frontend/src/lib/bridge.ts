@@ -1,8 +1,18 @@
+import { logBridgeCall } from "./activityLogger";
 import type { BridgeResponse, DocxExportResult, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
 import { BridgeErrorCode } from "./types";
 
 /** Maximum time to wait for a single bridge call before treating it as failed. */
 const BRIDGE_TIMEOUT_MS = 30_000;
+
+function summarizeArg(arg: unknown): unknown {
+  if (arg === null || arg === undefined) return arg;
+  if (typeof arg === "string") return { type: "string", len: arg.length, sample: arg.length > 80 ? `${arg.slice(0, 80)}…` : arg };
+  if (typeof arg === "number" || typeof arg === "boolean") return arg;
+  if (Array.isArray(arg)) return { type: "array", len: arg.length };
+  if (typeof arg === "object") return { type: "object", keys: Object.keys(arg as Record<string, unknown>).slice(0, 20) };
+  return { type: typeof arg };
+}
 
 /**
  * Track whether the `pywebviewready` DOM event has fired. pywebview injects
@@ -120,21 +130,27 @@ export async function callBridge<T = unknown>(
   methodName: string,
   ...args: unknown[]
 ): Promise<BridgeResponse<T>> {
+  const started = performance.now();
+  logBridgeCall({ event: "start", methodName, args: args.map(summarizeArg) });
   if (!isPywebviewReady()) {
-    return bridgeError(
+    const resp = bridgeError(
       BridgeErrorCode.BRIDGE_UNAVAILABLE,
       "pywebview bridge is not available. Running outside desktop shell or WebView2 not loaded.",
     );
+    logBridgeCall({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
+    return resp;
   }
 
   const api = window.pywebview!.api! as PywebviewApi;
   const fn = api[methodName];
 
   if (typeof fn !== "function") {
-    return bridgeError(
+    const resp = bridgeError(
       BridgeErrorCode.BRIDGE_METHOD_MISSING,
       `Bridge method "${methodName}" is not registered on window.pywebview.api.`,
     );
+    logBridgeCall({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
+    return resp;
   }
 
   // Resolve the actual call (with error + malformed handling) and race it against
@@ -174,7 +190,15 @@ export async function callBridge<T = unknown>(
   })();
 
   try {
-    return await Promise.race([callPromise, timeoutPromise]);
+    const result = await Promise.race([callPromise, timeoutPromise]);
+    logBridgeCall({
+      event: "finish",
+      methodName,
+      durationMs: Math.round(performance.now() - started),
+      ok: result.ok,
+      errorCode: result.ok ? null : result.error.code,
+    });
+    return result;
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);

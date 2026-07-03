@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import type { NotificationItem } from "../types";
   import { winMinimize, winToggleMaximize, winClose, getUserProfile, waitForPywebviewReady, onWinStateChange } from "../bridge";
+  import { logActivity } from "../activityLogger";
 
   let {
     currentPage,
@@ -86,11 +87,13 @@
   function handleClose() { winClose(); }
 
   function navigateTo(id: string) {
+    logActivity({ source: "TitleBar.navigateTo", kind: "navigation", event: "start", from: currentPage, to: id });
     try {
       window.dispatchEvent(new CustomEvent("app:navigate-away"));
     } finally {
       // Navigation must not be blocked by a page cleanup listener (e.g. RTE reset).
       onNavigate(id);
+      logActivity({ source: "TitleBar.navigateTo", kind: "navigation", event: "done", to: id });
     }
   }
 
@@ -144,8 +147,8 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
-        onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        onpointerdown={(e) => { e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
+        onclick={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "click", from: currentPage, to: item.id }); e.preventDefault(); e.stopPropagation(); }}
+        onpointerdown={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "pointerdown", from: currentPage, to: item.id, clientX: e.clientX, clientY: e.clientY, elementFromPoint: document.elementFromPoint(e.clientX, e.clientY)?.className || "" }); e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
       >
         <span class="nav-tab-icon">{@html navIcons[item.id]}</span>
         <span class="nav-tab-tooltip">{item.label}</span>
