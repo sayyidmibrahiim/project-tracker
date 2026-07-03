@@ -188,3 +188,34 @@
 
 ## Hard rules honored
 Repo-root only; no worktree; no subagent mutating work; no parallel sessions; keep merged branch; no new Python tests; smallest diff; no hard delete (`send2trash`); bridge via `bridge.ts` with `{ok,data,error}`; `core/` pure; no `.env`/secrets; `_reference/` untouched; PRD unchanged.
+
+---
+
+# Revision (2026-07-03) — .docx CR Docs + Export Word + Freeze/A3 fixes
+
+Triggered by user testing of the first pass (HTML CR Docs). See spec "Amendments (2026-07-03, revision 2)" for the authoritative change record. This revision supersedes Tasks 1–5 of the original plan above for the CR-Docs storage format and adds the bug fixes.
+
+## Goal (revised)
+1. CR Docs stored natively as `.docx` (`uat-signoff.docx`, `prod-lv.docx`) — double-click → MS Word with tables + images intact.
+2. `notes.md` (and CR docs) exportable to `.docx` via an "Export to Word" button.
+3. Fix Tiptap freeze/lag (serialize off the keystroke path).
+4. Fix A3 (doc switch must load content).
+
+## Rule change
+"No new dependency unless impossible without it" removed from `CLAUDE.md`. New Python deps: `mammoth`, `htmldocx`, `python-docx`. No frontend deps.
+
+## Tasks (revision)
+
+### Task 0: Rule change + spec/plan amendment — done in this revision.
+### Task 1: Backend — deps + docx conversion (`_html_to_docx_bytes`, `_docx_to_html`) + `_detect_rte_format` adds `docx` + lazy-scaffold empty `.docx` + `save_rte_file` binary write + `export_to_docx` + `util_save_bytes` (base64). Inline REPL smoke. PyInstaller spec check.
+### Task 2: Frontend — `RteFormat` adds `docx`; `exportToDocx` wrapper.
+### Task 3: NotesEditor freeze fix — `dirty` flag; serialize only in `flush()`.
+### Task 4: NotesEditor `docx` mode — treat like `html` for load/save.
+### Task 5: ProjectDetails — A3 fix (gate render on content-ready via `crDocContentPath`) + `.docx` filenames + "Export to Word" button.
+### Task 6: Verify — check + build + boot + manual smoke (Word open + Outlook paste).
+### Task 7: Docs + finish.
+
+## Risks
+- docx↔HTML round-trip fidelity (acceptable for spec'd content; mitigated by regenerating `.docx` on every save).
+- PyInstaller must collect new pure-Python deps.
+- `util_save_bytes` base64 transport (small overhead; docx is KB–low MB).

@@ -200,3 +200,43 @@ Piece B only **displays/opens** `.msg` files if they already exist in `_cr-docs/
 ### A6. `.msg` detection in the dropdown
 
 `get_rte_file` reports `format="msg"`, `content=""` (binary never read into memory), `editable=false`. The frontend renders an "Open externally" panel (button calls existing `file_open` → `os.startfile`), never the Tiptap editor.
+
+---
+
+## Amendments (2026-07-03, revision 2) — .docx storage + Export Word + bug fixes
+
+Driven by user testing of the first implementation pass (CR Docs as extensionless HTML): double-clicking such files in Windows does not render them, and copy-paste to Outlook does not carry formatting. The user requires CR Docs to open in MS Word with tables + images intact, and to be exportable from `notes.md`. Two blocking UX bugs (Tiptap freeze; doc-switch not loading) were also found and are fixed here. Implementation plan revision: `_docs/specs/superpowers/plans/2026-07-03-cr-docs-rte-plan.md`.
+
+### B1. CR Docs stored natively as `.docx` (supersedes A2 partially + spec §1)
+
+The editable CR Docs are now **`_cr-docs/uat-signoff.docx`** and **`_cr-docs/prod-lv.docx`** (Word native). The earlier extensionless-HTML decision (spec §1) is reversed.
+
+- **Load**: backend reads the `.docx` bytes → `mammoth.convert_to_html()` → Tiptap `setContent(html)`.
+- **Save (autosave)**: Tiptap `getHTML()` → backend `htmldocx` + `python-docx` → `.docx` bytes → atomic binary write. The on-disk `.docx` is regenerated from current HTML on every save, so it always reflects the last edit.
+- **Lazy scaffold** (A2 still applies): a missing `uat-signoff.docx`/`prod-lv.docx` is created as a minimal empty valid `.docx` on first read.
+- **State lock** (A3 still applies): editable except `IMPLEMENTED`.
+- **Round-trip risk (acknowledged, acceptable)**: mammoth/htmldocx is high-fidelity for text + simple tables + images + links (the spec'd signoff content) but not pixel-perfect for exotic formatting. Manual edits made in Word are re-imported via mammoth on the next in-app load.
+
+### B2. `notes.md` gets "Export to Word" (new, additive)
+
+`notes.md` storage stays Markdown (D-0007 contract unchanged). A new **"Export to Word"** button renders `notes.md` → HTML (`renderMarkdown`) → `.docx` (backend htmldocx) and saves via a native save dialog (binary-capable). The button is also available on CR Docs (exports the current `.docx` content as a separate `.docx` to a user-chosen location).
+
+### B3. Format type expands
+
+`_detect_rte_format` now returns `"html" | "markdown" | "msg" | "text" | "docx"`. The frontend `RteFormat` mirrors this.
+
+### B4. Freeze/lag fix (Tiptap)
+
+Root cause: `onEditorUpdate` ran `htmlToMarkdown(editor.getHTML())` (full-doc serialize: `DOMParser` + recursive walk) on **every keystroke**. Fix: serialize only inside `flush()` (debounced 1s autosave) using a cheap `dirty` flag for change detection. WYSIWYG real-time formatting is untouched (toolbar buttons call `editor.chain()` directly and never touched the serialize path).
+
+### B5. A3 fix — doc switch now loads content
+
+Root cause: `{#key selectedCrDoc.path}` recreated the Tiptap instance **before** the async `getRteFile` resolved, so the new instance mounted with stale/empty content. Fix: render the editor only when content for the currently selected path has loaded; clear + reload on switch.
+
+### B6. New dependencies (rule relaxed)
+
+Per the user, the hard rule "no new dependency unless impossible without it" is **removed** (see `CLAUDE.md` "Smallest Diff"). Added Python deps: `mammoth` (docx→HTML), `htmldocx` + `python-docx` (HTML→docx). No frontend deps added. PyInstaller spec must collect these (packaging build itself is tracked separately in `_docs/PROGRESS.md` as not-started).
+
+### B7. Binary bridge transport
+
+`util_save_file` is UTF-8 text only, so a new `util_save_bytes(suggested_name, data_b64)` accepts base64-encoded bytes (pywebview serializes args as JSON), decodes, opens the native save dialog, and writes `wb`. Used by `export_to_docx`.

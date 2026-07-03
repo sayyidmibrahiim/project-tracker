@@ -140,7 +140,8 @@ This branching rule is **binding for every AI agent regardless of provider/model
 
 ## Smallest Diff
 
-Delete > edit > add. No new file, abstraction, config, or dependency unless existing place cannot hold it.
+Delete > edit > add. No new file, abstraction, or config unless the existing place cannot hold it.
+Dependencies may be added when justified (rule relaxed 2026-07-03 — previously "no new dependency unless impossible without it").
 File ownership/routing → `_docs/FILE_ROUTING.md`; workflow detail → `_docs/WORKFLOW.md`.
 
 ## PRD Section Routing
