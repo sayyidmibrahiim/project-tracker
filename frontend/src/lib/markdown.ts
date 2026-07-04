@@ -100,7 +100,7 @@ const BLOCK_TAGS = new Set([
 /** Per-tag attribute allow-list. Unlisted tags get the default set. */
 const TAG_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "style", "data-asset-src", "data-asset-id"]),
+  img: new Set(["src", "alt", "style", "width", "data-asset-src", "data-asset-id"]),
   span: new Set(["style"]),
   div: new Set(["style", "align"]),
   p: new Set(["style", "align"]),
@@ -425,7 +425,15 @@ function domNodeToMarkdown(node: Node): string {
     case "br": return "\n";
     // Asset-backed images serialize their stable relative ref, never the
     // (large, display-only) data-URI src (D-0012).
-    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("data-asset-src") || el.getAttribute("src") || ""})`;
+    case "img": {
+      const src = el.getAttribute("data-asset-src") || el.getAttribute("src") || "";
+      const alt = el.getAttribute("alt") || "";
+      const width = el.getAttribute("width") || "";
+      // Markdown image syntax cannot hold a width, so resized images
+      // round-trip as whitelisted inline HTML instead.
+      if (/^\d+$/.test(width)) return `<img src="${src}" alt="${escapeMarkdownAttr(alt)}" width="${width}" />`;
+      return `![${alt}](${src})`;
+    }
     case "table": {
       const rows = Array.from(el.querySelectorAll("tr"));
       if (rows.length === 0) return children;
@@ -482,6 +490,8 @@ function fallbackHtmlToMarkdown(html: string): string {
       const assetSrc = attrs.match(/data-asset-src=["']([^"']*)["']/i)?.[1] || "";
       const src = assetSrc || attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
       const alt = attrs.match(/alt=["']([^"']*)["']/i)?.[1] || "";
+      const width = attrs.match(/width=["'](\d+)["']/i)?.[1] || "";
+      if (width) return `<img src="${src}" alt="${alt}" width="${width}" />`;
       return `![${alt}](${src})`;
     })
     .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `[${stripHtmlTags(text)}](${href})`)

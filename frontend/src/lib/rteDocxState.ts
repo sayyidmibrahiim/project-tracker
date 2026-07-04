@@ -39,6 +39,11 @@ export function docxStatusLabel(display: DocxExportDisplay, baseLabel: string): 
   }
 }
 
+/** Status-bar label while the idle-export countdown is ticking. */
+export function docxCountdownLabel(secondsLeft: number): string {
+  return `Saved — DOCX in ${Math.max(1, Math.round(secondsLeft))}s`;
+}
+
 /**
  * Idle-export scheduler (flow-tiptap §8): fires `onIdle` once after `idleMs`
  * of no `bump()` calls. Selection-only editor events must NOT bump it —
