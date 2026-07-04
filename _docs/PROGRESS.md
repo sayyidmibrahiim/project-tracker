@@ -6,8 +6,10 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `project-details/rte-interaction-bugs`.
-Active slice: **Piece B RTE format-aware follow-up** — Export-to-Word UI removed from Project Details; selected RTE file now saves by capability/format (`.md` Markdown, `.txt` plain text, `.docx` read-only until safe source-sync adapter exists); CR doc switches flush active editor first; titlebar/header interactions lock during RTE load/flush. Manual CR docs switching/reopen verification pending user check.
+Active branch: `general/header-redesign`.
+Active slice: **Header redesign (roadmap #1)** — remove red `.app-header` bar, per-page white `.page-header` becomes the single header, Dashboard controls relocate into its page-header, DateTime badge moves to TitleBar, red token unification + a11y quick wins.
+
+Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.md`/`.txt` editable, `.docx` read-only pending pipeline, interaction lock).
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 
@@ -17,8 +19,8 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 
 | # | Branch | Scope | Status |
 | - | ------ | ----- | ------ |
-| 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | Active — awaiting user manual check |
-| 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | Planned |
+| 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | ✅ Merged 2026-07-04 |
+| 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | Active |
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | Planned |
 | 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Planned |
 | 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Planned |
@@ -42,7 +44,7 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 | Second Brain        | Done, pending user verify |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
-| Piece B CR docs RTE | Format-aware follow-up implemented, pending user verify |
+| Piece B CR docs RTE | ✅ User-verified + merged 2026-07-04 |
 | Windows verify      | Not started (needs real Windows) |
 | Packaging           | Not started |
 
