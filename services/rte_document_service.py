@@ -341,11 +341,13 @@ class RteDocumentService:
 
             if source is not None and self._docx_is_stale(docx_path, source):
                 # User edited the .docx directly in Word: re-import it.
-                backup = self.source_path(docx_path).with_suffix(".json.bak")
+                source_path = self.source_path(docx_path)
+                backup = source_path.with_suffix(".json.bak")
                 try:
                     backup.write_text(
                         json.dumps(source, ensure_ascii=False), encoding="utf-8"
                     )
+                    source_path.unlink(missing_ok=True)
                 except OSError:
                     pass
                 source = None

@@ -47,6 +47,13 @@ test("NotesEditor throttles toolbar refresh outside editor-mount effect", () => 
   assert.match(NE, /instance\.off\("transaction", scheduleToolbarRefresh\)/);
 });
 
+test("NotesEditor defers DOCX migration save outside editor-mount effect", () => {
+  assert.match(NE, /const shouldMigrate = pipeline && migrate/);
+  assert.match(NE, /migrationPending = shouldMigrate/);
+  assert.match(NE, /queueMicrotask\([\s\S]*flush\("migration"\)/);
+  assert.doesNotMatch(NE, /if \(pipeline && migrationPending\) \{\s*dirty = true;\s*void flush\("migration"\);/);
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);

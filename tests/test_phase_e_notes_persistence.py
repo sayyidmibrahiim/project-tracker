@@ -320,6 +320,47 @@ def test_rte_pipeline_open_nonempty_docx_requests_migration(rte_docx):
     assert "legacy word content" in (opened["content_html"] or "")
 
 
+def test_rte_pipeline_stale_docx_migration_replaces_old_source(rte_docx):
+    import json as jsonlib
+
+    from docx import Document
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    d = Document()
+    d.add_paragraph("external word edit")
+    d.save(str(docx))
+
+    old_source = svc._new_source(docx)
+    old_source["revision"] = 27
+    old_source["content"] = _doc("old source")
+    old_source["content_hash"] = "old-hash"
+    old_source["export"].update(
+        {
+            "last_exported_revision": 27,
+            "last_exported_hash": "old-hash",
+            "docx_mtime_ns": 1,
+            "docx_size": 1,
+        }
+    )
+    svc._store_source(docx, old_source)
+
+    opened = svc.open_document(docx)
+    assert opened["needs_migration"] is True
+    assert opened["revision"] == 0
+    backup = svc.source_path(docx).with_suffix(".json.bak")
+    assert jsonlib.loads(backup.read_text(encoding="utf-8"))["revision"] == 27
+
+    saved = svc.save_document(
+        docx,
+        {"content": _doc("external word edit"), "base_revision": opened["revision"], "reason": "migration"},
+    )
+
+    assert saved["revision"] == 1
+    stored = jsonlib.loads(svc.source_path(docx).read_text(encoding="utf-8"))
+    assert stored["revision"] == 1
+    assert stored["content"]["content"][0]["content"][0]["text"] == "external word edit"
+
+
 def test_rte_pipeline_save_revisions_hash_skip_and_stale(rte_docx):
     from services.rte_document_service import StaleRevisionError
 

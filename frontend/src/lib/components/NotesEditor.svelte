@@ -707,6 +707,7 @@
     const startDoc = untrack(() => initialDoc);
     const startRevision = untrack(() => initialRevision ?? 0);
     const migrate = untrack(() => needsMigration);
+    const shouldMigrate = pipeline && migrate;
     text = startText;
     lastSaved = startText;
     lastPath = startPath;
@@ -715,7 +716,7 @@
     docRevision = startRevision;
     lastExportedRevision = startRevision;
     lastSavedDocJson = "";
-    migrationPending = pipeline && migrate;
+    migrationPending = shouldMigrate;
     exportDisplay = "idle";
 
     // Pipeline docs load their JSON source directly; migration passes
@@ -793,10 +794,13 @@
     instance.on("update", onEditorUpdate);
     editor = instance;
     rev++;
-    if (pipeline && migrationPending) {
+    if (shouldMigrate) {
       // Persist the migrated legacy .docx content as revision 1 + first export.
       dirty = true;
-      void flush("migration");
+      queueMicrotask(() => {
+        if (editor !== instance) return;
+        void flush("migration");
+      });
     } else if (!pipeline && !plainText) {
       void hydrateAssetImages(instance);
     }
@@ -837,6 +841,7 @@
     const nextDoc = untrack(() => initialDoc);
     const nextRevision = untrack(() => initialRevision ?? 0);
     const migrate = untrack(() => needsMigration);
+    const shouldMigrate = pipeline && migrate;
     lastPath = nextPath;
     text = nextText;
     lastSaved = nextText;
@@ -847,7 +852,7 @@
     docRevision = nextRevision;
     lastExportedRevision = nextRevision;
     lastSavedDocJson = "";
-    migrationPending = pipeline && migrate;
+    migrationPending = shouldMigrate;
     exportDisplay = "idle";
     if (pipeline && nextDoc) {
       editor.commands.setContent(nextDoc as object, { emitUpdate: false });
@@ -855,9 +860,12 @@
       editor.commands.setContent(toEditorHtml(nextText, direct, plainText), { emitUpdate: false });
       if (!pipeline && !plainText) void hydrateAssetImages(editor);
     }
-    if (pipeline && migrationPending) {
+    if (shouldMigrate) {
       dirty = true;
-      void flush("migration");
+      queueMicrotask(() => {
+        if (lastPath !== nextPath) return;
+        void flush("migration");
+      });
     }
   });
 </script>
