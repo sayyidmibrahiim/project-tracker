@@ -16,7 +16,11 @@
 
 **Update 2026-07-05:** User confirmed app normal again after rollback + rebuild + restart. Symptoms identified: RTE slow-load + titlebar nav frozen (the `app:interaction-lock` held the whole shell while RTE load hung) — consistent with the stale-`web/static`/lock-without-failsafe hypothesis. Fix round v2 is delegated to Codex desktop via the step-by-step prompt at `_docs/specs/superpowers/plans/2026-07-05-codex-fix-round-v2-prompt.md` (steps 0–7, ONE behavior per step, user verify between; step 0 = interaction-lock watchdog; new points: SVG toolbar icons, default TNR 18px↔13.5pt).
 
-**Next:** User runs the Codex prompt → per-step manual verify → after all steps pass, merge Branch 2 → Branch 3 `automations/approval-polling` (Piece C).
+**Update 2026-07-05 (Step 1 failed):** Step 0 passed manual verification and was committed as `c94e387`. Step 1 (`rev` changed to `$state(0)` for toolbar active states) failed manual verification: menu navigation became unusable, save/loading became very slow, and file switching became very slow. Step 1 was still uncommitted, was rolled back immediately, and the baseline bundle was rebuilt. Root cause: the editor-mount `$effect` contains synchronous `rev++` calls; once `rev` became `$state`, those read+write operations subscribed the effect to its own state and repeatedly invalidated/recreated the editor. Retry must keep `rev` non-reactive and use a separately throttled toolbar-only state update outside effect tracking.
+
+**Update 2026-07-05 (Step 1 retry ready):** Retry keeps `rev` non-reactive and adds `uiTick` as a toolbar-only state token. Tiptap `transaction` listener is registered from `queueMicrotask()` and throttled by `requestAnimationFrame`, so the editor-mount `$effect` does not subscribe to toolbar refresh state. Automated verification passed: focused Project Details frontend test, `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check`, `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend test`, and `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run build`. Awaiting user manual verification before commit.
+
+**Next:** User manually verifies Step 1 retry. If pass → commit Step 1 only. If fail → rollback uncommitted retry and rebuild baseline. After all RTE steps pass, merge Branch 2 → Branch 3 `automations/approval-polling` (Piece C).
 
 ---
 

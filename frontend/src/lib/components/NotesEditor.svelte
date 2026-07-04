@@ -99,6 +99,16 @@
   let fullscreen = $state(false);
   // Non-reactive: Tiptap transaction events fire during mount; Svelte state here can loop.
   let rev = 0;
+  let uiTick = $state(0);
+  let toolbarRefreshFrame: number | undefined;
+
+  function scheduleToolbarRefresh() {
+    if (toolbarRefreshFrame !== undefined) return;
+    toolbarRefreshFrame = requestAnimationFrame(() => {
+      toolbarRefreshFrame = undefined;
+      uiTick++;
+    });
+  }
 
   let colorOpen = $state(false);
   let colorMode: 'fore' | 'back' = $state('fore');
@@ -480,14 +490,16 @@
     }
   }
 
-  // ── Active-state helpers (reactive via the rev token) ──
+  // ── Active-state helpers (reactive via a toolbar-only token) ──
 
   function isActive(name: string, attrs?: Record<string, unknown>): boolean {
+    void uiTick;
     return editor?.isActive(name, attrs) ?? false;
   }
 
   /** TextAlign marks live as a node attribute; check it directly. */
   function alignIs(value: string): boolean {
+    void uiTick;
     if (!editor) return false;
     const cur = (editor.getAttributes("paragraph").textAlign as string) || (editor.getAttributes("heading").textAlign as string) || "";
     return cur === value;
@@ -773,8 +785,11 @@
         },
       },
     });
-    instance.on("transaction", () => { rev++; });
-    instance.on("selectionUpdate", () => { rev++; });
+    queueMicrotask(() => {
+      if (editor !== instance) return;
+      instance.on("transaction", scheduleToolbarRefresh);
+      scheduleToolbarRefresh();
+    });
     instance.on("update", onEditorUpdate);
     editor = instance;
     rev++;
@@ -791,6 +806,11 @@
     }
     return () => {
       savePendingBeforeDispose();
+      instance.off("transaction", scheduleToolbarRefresh);
+      if (toolbarRefreshFrame !== undefined) {
+        cancelAnimationFrame(toolbarRefreshFrame);
+        toolbarRefreshFrame = undefined;
+      }
       try {
         instance.destroy();
       } catch (err) {

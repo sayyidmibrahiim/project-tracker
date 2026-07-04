@@ -36,6 +36,17 @@ test("NotesEditor saves pending dirty content before dispose clears debounce", (
   assert.match(NE, /onDestroy\(\(\) => \{[\s\S]*savePendingBeforeDispose\(\)[\s\S]*clearTimeout\(timer\)/);
 });
 
+test("NotesEditor throttles toolbar refresh outside editor-mount effect", () => {
+  assert.match(NE, /let rev = 0/);
+  assert.doesNotMatch(NE, /let rev = \$state/);
+  assert.match(NE, /let uiTick = \$state\(0\)/);
+  assert.match(NE, /function scheduleToolbarRefresh\(\)[\s\S]*requestAnimationFrame[\s\S]*uiTick\+\+/);
+  assert.match(NE, /queueMicrotask\([\s\S]*instance\.on\("transaction", scheduleToolbarRefresh\)/);
+  assert.match(NE, /function isActive\([^)]*\)[^{]*\{\s*void uiTick;/);
+  assert.match(NE, /function alignIs\([^)]*\)[^{]*\{\s*void uiTick;/);
+  assert.match(NE, /instance\.off\("transaction", scheduleToolbarRefresh\)/);
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);
