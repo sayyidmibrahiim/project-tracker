@@ -57,7 +57,7 @@ Setelah baca, report:
 1. Branch: {menu}/{desc} — dari main, merge ke main
 2. Search/read existing code before changing files
 3. Satu menu per session
-4. UI: mockup dulu → user approve → code
+4. UI: langsung code dengan standar desain tinggi (tanpa mockup) → user test live → iterasi
 5. Python logic di services/core, bukan Svelte
 6. Jangan tambah dependency tanpa konfirmasi
 7. Jangan hard delete — send2trash
@@ -131,7 +131,7 @@ Skills:
 
 Rules:
 - Buat branch: design/[menu]-[desc]
-- Tunjukkan mockup/preview dulu sebelum ubah code
+- Langsung code (tanpa mockup) — keputusan desain dipikirkan matang dulu, user test live
 - Kalau element ini shared → update di semua menu yang pakai
 - List semua menu yang terdampak
 - Generate checklist untuk semua menu terdampak
@@ -199,7 +199,7 @@ Rules:
 - Buat branch: feat/[menu]-[desc]
 - Check PRD.md — fitur ini sudah ada di PRD atau baru?
 - Kalau baru dan mengubah product behavior → update PRD.md juga
-- Design mockup dulu kalau ada UI → gw approve → baru code
+- UI langsung di-code dengan desain terbaik (tanpa mockup) → gw test live → iterasi
 - Search existing code first — cari existing code yang bisa di-reuse
 - Generate checklist setelah code
 ```

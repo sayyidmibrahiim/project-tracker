@@ -8,6 +8,38 @@
 
 ---
 
+## 2026-07-04
+
+Branch aktif: `project-details/rte-interaction-bugs` (unchanged — Branch 0 of master plan).
+
+**Now:** Master completion plan approved: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md` (7 branches: verify+merge current → header-redesign → tiptap-docx-pipeline → approval-polling → cicd-bitbucket → professional-polish → packaging). Locked: per-format RTE strategy (md/txt direct save; docx = source.json + python-docx export), red header removed (page-header single header), exporter must be free/offline (office network blocks GitHub/PyPI/paid registries).
+
+**Next:** User manual verify Piece B RTE follow-up (checklist delivered), then commit 18 dirty files + flow-tiptap.md + master plan, merge to main, start `general/header-redesign` (direct code, no mockup — user rule 2026-07-04).
+
+**Blocked:** Branch 0 merge awaits user manual verification. Stray empty `notes.md` at repo root awaits delete approval.
+
+**active_menu:** project-details
+
+---
+
+## 2026-07-03
+
+Branch aktif: `project-details/rte-interaction-bugs`.
+
+**Now:** Piece B RTE format-aware follow-up implemented in code. Project Details no longer shows `Export to Word` for active RTE files. Backend now returns RTE capability metadata; `.md` saves Markdown, `.txt` saves UTF-8 plain text, `.docx` is read-only until safe source-sync adapter exists, `.msg` is unsupported/open externally. CR doc dropdown flushes active editor via `flushNow()` before file switch. App-level `app:interaction-lock` disables TitleBar/Header during RTE load/flush.
+
+**Next:** User manual verify CR project flow: select `notes.md`/`uat-signoff.docx`/`prod-lv.docx`, confirm DOCX read-only, edit/save `.md`, test titlebar/header lock during load, reopen project.
+
+**Blocked:** Full DOCX editable source-sync engine intentionally deferred.
+
+**Changed files:** `app_web.py`, `web/js_api.py`, `frontend/src/App.svelte`, `frontend/src/lib/activityLogger.ts`, `frontend/src/lib/bridge.ts`, `frontend/src/lib/types.ts`, `frontend/src/lib/markdown.ts`, `frontend/src/lib/components/Header.svelte`, `frontend/src/lib/components/NotesEditor.svelte`, `frontend/src/lib/components/ProjectDetails.svelte`, `frontend/src/lib/components/TitleBar.svelte`, `frontend/tests/components.test.mjs`, `frontend/tests/markdown.test.ts`, `frontend/tests/project-details-fase3-fase4.test.mjs`, `tests/test_phase_e_notes_persistence.py`, `_docs/PROGRESS.md`, `_docs/DECISIONS.md`, `_docs/session-notes.md`.
+
+**Verification:** `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run test` = 155 pass / 0 fail. `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check` = 0 errors / 0 warnings. `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/test_phase_e_notes_persistence.py -v` = 13 pass / 0 fail. `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m pytest tests/test_bridge_contract_guard.py -v` = 3 pass / 0 fail when `TEMP/TMP` point at job tmp to avoid stale Windows pytest-current cleanup lock. `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main` smoke = no stdout/stderr traceback captured before 12s stop.
+
+**active_menu:** project-details
+
+---
+
 ## 2026-07-02
 
 Tooling update: Code graph integration retired by user request. Active docs/settings use native search/read tools for code lookup. Headroom installed in repo venv and setup reference added with proxy URL `http://localhost:8787` and install command `pip install "headroom-ai[proxy]"`. Global `ANTHROPIC_BASE_URL` remains routed to `http://127.0.0.1:20128/v1`; Headroom proxy uses `8787`.
