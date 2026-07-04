@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { callBridge, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow, RteFile, RteFileContent } from "../types";
+  import { callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, waitForPywebviewReady } from "../bridge";
+  import type { ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
@@ -38,6 +38,8 @@
   let selectedCrDocPath: string = $state("");
   let crDocContent: RteFileContent | null = $state(null);
   let crDocContentPath: string = $state("");
+  /** DOCX pipeline payload (D-0012) for the selected .docx CR doc. */
+  let crDocDocPayload: RteDocumentPayload | null = $state(null);
   let crDocsLoading: boolean = $state(false);
   let crDocsError: string = $state("");
   let crDocsFlushing: boolean = $state(false);
@@ -229,7 +231,7 @@
     selectedPath = path;
     detailState = "loading";
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
-    crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocsLoading = false; crDocsError = "";
+    crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocDocPayload = null; crDocsLoading = false; crDocsError = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
     crLinkEdit = ""; crLinkSaveState = "idle"; crLinkSaveError = "";
     crStateEdit = ""; crStateSaveState = "idle"; crStateSaveError = "";
@@ -643,10 +645,12 @@
     try {
       const projectPath = detail.project_path;
       const isLocked = detail.project_state === "IMPLEMENTED";
+      // DOCX docs are editable through the pipeline (D-0012); only the
+      // IMPLEMENTED folder state locks them (like every other doc).
       const list: RteFile[] = [
         { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, capability: isLocked ? "read_only" : "editable", saveStrategy: isLocked ? "none" : "markdown", isOpenable: false },
-        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: false, capability: "read_only", saveStrategy: "none", isOpenable: false },
-        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: false, capability: "read_only", saveStrategy: "none", isOpenable: false },
+        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, capability: isLocked ? "read_only" : "editable", saveStrategy: isLocked ? "none" : "docx_pipeline", isOpenable: false },
+        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, capability: isLocked ? "read_only" : "editable", saveStrategy: isLocked ? "none" : "docx_pipeline", isOpenable: false },
       ];
       // Append any .msg files already present in _cr-docs/ (created by Piece C).
       const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
@@ -684,10 +688,29 @@
       selectedCrDocPath = path;
       crDocContent = null;
       crDocContentPath = "";
+      crDocDocPayload = null;
       const file = crDocsFiles.find((f) => f.path === path);
       if (!file) return;
       if (file.format === "msg") return; // rendered as open-external panel
       crDocsLoading = true; crDocsError = "";
+      if (file.format === "docx") {
+        // DOCX pipeline (D-0012): open the JSON source (or migration HTML).
+        const resp = await rteDocumentOpen(path);
+        if (!resp.ok || !resp.data) { crDocsError = resp.ok ? "Empty document payload" : resp.error.message; return; }
+        if (selectedCrDocPath !== path) return;
+        crDocDocPayload = resp.data;
+        crDocContent = {
+          content: resp.data.content_html ?? "",
+          format: "docx",
+          editable: resp.data.editable,
+          capability: resp.data.capability,
+          message: resp.data.message,
+          saveStrategy: resp.data.saveStrategy,
+          supportedEditorFeatures: resp.data.supportedEditorFeatures,
+        };
+        crDocContentPath = path;
+        return;
+      }
       const resp = await getRteFile(path);
       if (!resp.ok) { crDocsError = resp.error.message; return; }
       // A3 fix: only mount the editor after content for the selected path is ready.
@@ -1131,7 +1154,7 @@
                   </div>
                 {:else if selectedCrDoc}
                   {#if crDocContent?.capability === "read_only"}
-                    <p class="pd-muted pd-locked-text">Read-only: format ini dapat ditampilkan tetapi belum dapat diedit dengan aman.</p>
+                    <p class="pd-muted pd-locked-text">Read-only: {crDocContent.message || "dokumen ini terkunci dan tidak dapat diedit."}</p>
                   {:else if crDocContent?.capability === "unsupported"}
                     <div class="pd-msg-panel">
                       <p class="pd-muted pd-error-text">Unsupported format: {crDocContent.message || "Format ini belum dapat dibuka di editor ini."}</p>
@@ -1155,6 +1178,9 @@
                         saveStrategy={crDocContent?.saveStrategy ?? selectedCrDoc?.saveStrategy ?? "none"}
                         supportedEditorFeatures={crDocContent?.supportedEditorFeatures ?? selectedCrDoc?.supportedEditorFeatures}
                         message={crDocContent?.message ?? selectedCrDoc?.message}
+                        initialDoc={crDocDocPayload?.content ?? null}
+                        initialRevision={crDocDocPayload?.revision ?? 0}
+                        needsMigration={crDocDocPayload?.needs_migration ?? false}
                         onSaved={(n: string) => { notes = selectedCrDoc?.format === "markdown" ? n : notes; if (crDocContent) crDocContent.content = n; }}
                       />
                     {/key}

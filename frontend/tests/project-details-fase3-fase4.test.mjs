@@ -68,6 +68,20 @@ test("ProjectDetails renders capability-aware read-only and unsupported states",
   assert.match(PD, /Save failed/);
 });
 
+test("ProjectDetails routes docx CR docs through the pipeline (D-0012)", () => {
+  // docx entries are editable via docx_pipeline unless the project is locked.
+  assert.match(PD, /saveStrategy: isLocked \? "none" : "docx_pipeline"/);
+  assert.match(PD, /rteDocumentOpen/);
+  assert.match(PD, /initialDoc=\{crDocDocPayload\?\.content \?\? null\}/);
+  assert.match(PD, /needsMigration=\{crDocDocPayload\?\.needs_migration \?\? false\}/);
+  // The editor component owns the pipeline save path.
+  const NE_SRC = readFileSync(resolve(__dirname, "../src/lib/components/NotesEditor.svelte"), "utf8");
+  assert.match(NE_SRC, /docx_pipeline/);
+  assert.match(NE_SRC, /rteDocumentSave/);
+  assert.match(NE_SRC, /handlePaste/);
+  assert.match(NE_SRC, /IdleExportScheduler/);
+});
+
 test("RTE interaction lock does not disable top menu navigation", () => {
   assert.match(APP, /interactionLocks/);
   assert.match(APP, /app:interaction-lock/);
