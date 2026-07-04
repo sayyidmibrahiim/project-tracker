@@ -244,6 +244,20 @@ export interface SecondBrainItem {
 
 /** RTE file format reported by the backend (see _detect_rte_format). */
 export type RteFormat = "html" | "markdown" | "msg" | "text" | "docx";
+export type RteCapabilityLevel = "editable" | "read_only" | "unsupported";
+export type RteSaveStrategy = "markdown" | "plain_text" | "html" | "docx_legacy" | "none";
+export type RteEditorFeature =
+  | "plain_text"
+  | "bold"
+  | "italic"
+  | "strike"
+  | "heading"
+  | "list"
+  | "task_list"
+  | "link"
+  | "code"
+  | "image"
+  | "table";
 
 /** A selectable entry in the CR Docs file dropdown. */
 export interface RteFile {
@@ -251,6 +265,10 @@ export interface RteFile {
   path: string;
   format: RteFormat;
   editable: boolean;
+  capability?: RteCapabilityLevel;
+  message?: string;
+  saveStrategy?: RteSaveStrategy;
+  supportedEditorFeatures?: RteEditorFeature[];
   /** True for files the editor cannot render (e.g. .msg → open externally). */
   isOpenable: boolean;
 }
@@ -260,9 +278,13 @@ export interface RteFileContent {
   content: string;
   format: RteFormat;
   editable: boolean;
+  capability?: RteCapabilityLevel;
+  message?: string;
+  saveStrategy?: RteSaveStrategy;
+  supportedEditorFeatures?: RteEditorFeature[];
 }
 
-/** Result from the native "Export to Word" save dialog. */
+/** Result from the native legacy .docx export save dialog. */
 export interface DocxExportResult {
   path: string | null;
   written: boolean;

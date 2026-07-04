@@ -13,6 +13,7 @@
     onDismissAll,
     searchQuery,
     onSearchChange,
+    interactionLocked = false,
   }: {
     currentPage: string;
     onNavigate: (id: string) => void;
@@ -22,6 +23,7 @@
     onDismissAll: () => void;
     searchQuery: string;
     onSearchChange: (q: string) => void;
+    interactionLocked?: boolean;
   } = $props();
 
   const navItems = [
@@ -77,6 +79,7 @@
   });
 
   function handleSearchInput(e: Event) {
+    if (interactionLocked) return;
     const value = (e.target as HTMLInputElement).value;
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(() => onSearchChange(value), 200);
@@ -138,6 +141,8 @@
         oninput={handleSearchInput}
         onfocus={() => (searchFocused = true)}
         onblur={() => setTimeout(() => (searchFocused = false), 150)}
+        disabled={interactionLocked}
+        aria-disabled={interactionLocked}
       />
     </div>
   </div>
@@ -147,7 +152,7 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
-        onclick={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "click", from: currentPage, to: item.id }); e.preventDefault(); e.stopPropagation(); }}
+        onclick={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "click", from: currentPage, to: item.id }); e.preventDefault(); e.stopPropagation(); if (currentPage !== item.id) navigateTo(item.id); }}
         onpointerdown={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "pointerdown", from: currentPage, to: item.id, clientX: e.clientX, clientY: e.clientY, elementFromPoint: document.elementFromPoint(e.clientX, e.clientY)?.className || "" }); e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
       >
         <span class="nav-tab-icon">{@html navIcons[item.id]}</span>
@@ -161,8 +166,10 @@
       <button
         class="notif-btn"
         class:open={notifOpen}
-        onclick={() => (notifOpen = !notifOpen)}
+        onclick={() => { if (!interactionLocked) notifOpen = !notifOpen; }}
         title="Notifications"
+        disabled={interactionLocked}
+        aria-disabled={interactionLocked}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         {#if unreadCount > 0}<span class="notif-badge">{unreadCount}</span>{/if}
@@ -199,7 +206,7 @@
       {/if}
     </div>
     <div class="help-container" bind:this={helpContainerEl}>
-      <button class="help-btn" class:open={helpOpen} onclick={() => (helpOpen = !helpOpen)} title="Keyboard shortcuts">?</button>
+      <button class="help-btn" class:open={helpOpen} onclick={() => { if (!interactionLocked) helpOpen = !helpOpen; }} title="Keyboard shortcuts" disabled={interactionLocked} aria-disabled={interactionLocked}>?</button>
       {#if helpOpen}
         <div class="help-popover" role="region" aria-label="Keyboard shortcuts">
           <div class="help-popover-head">
@@ -322,7 +329,8 @@
     cursor: pointer;
     transition: background .15s ease, color .15s ease;
   }
-  .nav-tab:hover { background: var(--active-nav-bg); color: #fff; }
+  .nav-tab:hover:not(:disabled) { background: var(--active-nav-bg); color: #fff; }
+  .nav-tab:disabled { opacity:0.45; cursor:not-allowed; }
   .nav-tab.active { color: var(--active-red); background: var(--active-nav-bg); }
   .nav-tab-icon { display: flex; }
   .nav-tab-tooltip {

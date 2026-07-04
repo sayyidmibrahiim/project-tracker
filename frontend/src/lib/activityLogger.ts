@@ -1,4 +1,4 @@
-import type { BridgeResponse } from "./types";
+import { callBridgeSilent } from "./bridge";
 
 type ActivityEvent = Record<string, unknown>;
 
@@ -78,10 +78,7 @@ function safeEventPayload(event: Event): ActivityEvent {
 
 async function sendRaw(event: ActivityEvent): Promise<void> {
   try {
-    const api = window.pywebview?.api as Record<string, unknown> | undefined;
-    const fn = api?.frontend_log;
-    if (typeof fn !== "function") return;
-    await (fn as (event: ActivityEvent) => Promise<BridgeResponse<{ logged: boolean }>>)(event);
+    await callBridgeSilent("frontend_log", event);
   } catch {
     // Logging must never break app behavior.
   }

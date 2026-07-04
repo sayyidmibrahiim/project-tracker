@@ -1,4 +1,3 @@
-import { logBridgeCall } from "./activityLogger";
 import type { BridgeResponse, DocxExportResult, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
 import { BridgeErrorCode } from "./types";
 
@@ -12,6 +11,12 @@ function summarizeArg(arg: unknown): unknown {
   if (Array.isArray(arg)) return { type: "array", len: arg.length };
   if (typeof arg === "object") return { type: "object", keys: Object.keys(arg as Record<string, unknown>).slice(0, 20) };
   return { type: typeof arg };
+}
+
+function logBridgeEvent(event: Record<string, unknown>): void {
+  void import("./activityLogger")
+    .then(({ logBridgeCall }) => logBridgeCall(event))
+    .catch(() => {});
 }
 
 /**
@@ -126,18 +131,19 @@ function isWellFormedBridgeResponse(raw: unknown): boolean {
  *
  * All `window.pywebview` access is contained within this function.
  */
-export async function callBridge<T = unknown>(
+async function callBridgeCore<T = unknown>(
   methodName: string,
-  ...args: unknown[]
+  args: unknown[],
+  log: boolean,
 ): Promise<BridgeResponse<T>> {
   const started = performance.now();
-  logBridgeCall({ event: "start", methodName, args: args.map(summarizeArg) });
+  if (log) logBridgeEvent({ event: "start", methodName, args: args.map(summarizeArg) });
   if (!isPywebviewReady()) {
     const resp = bridgeError(
       BridgeErrorCode.BRIDGE_UNAVAILABLE,
       "pywebview bridge is not available. Running outside desktop shell or WebView2 not loaded.",
     );
-    logBridgeCall({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
+    if (log) logBridgeEvent({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
     return resp;
   }
 
@@ -149,7 +155,7 @@ export async function callBridge<T = unknown>(
       BridgeErrorCode.BRIDGE_METHOD_MISSING,
       `Bridge method "${methodName}" is not registered on window.pywebview.api.`,
     );
-    logBridgeCall({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
+    if (log) logBridgeEvent({ event: "finish", methodName, durationMs: Math.round(performance.now() - started), ok: false, errorCode: resp.error?.code });
     return resp;
   }
 
@@ -191,19 +197,35 @@ export async function callBridge<T = unknown>(
 
   try {
     const result = await Promise.race([callPromise, timeoutPromise]);
-    logBridgeCall({
-      event: "finish",
-      methodName,
-      durationMs: Math.round(performance.now() - started),
-      ok: result.ok,
-      errorCode: result.ok ? null : result.error.code,
-    });
+    if (log) {
+      logBridgeEvent({
+        event: "finish",
+        methodName,
+        durationMs: Math.round(performance.now() - started),
+        ok: result.ok,
+        errorCode: result.ok ? null : result.error.code,
+      });
+    }
     return result;
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }
   }
+}
+
+export async function callBridge<T = unknown>(
+  methodName: string,
+  ...args: unknown[]
+): Promise<BridgeResponse<T>> {
+  return callBridgeCore<T>(methodName, args, true);
+}
+
+export async function callBridgeSilent<T = unknown>(
+  methodName: string,
+  ...args: unknown[]
+): Promise<BridgeResponse<T>> {
+  return callBridgeCore<T>(methodName, args, false);
 }
 
 // ── Window controls ──

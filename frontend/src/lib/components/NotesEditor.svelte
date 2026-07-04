@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { callBridge, isPywebviewReady, saveRteFile } from "../bridge";
-  import { renderMarkdown } from "../markdown";
+  import { escapeHtml, htmlToMarkdown, renderMarkdown } from "../markdown";
+  import type { RteCapabilityLevel, RteFormat, RteSaveStrategy } from "../types";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   // NOTE: Underline + Link are bundled INSIDE StarterKit v3 — re-registering them
@@ -29,12 +30,15 @@
     /** Optional explicit file path (Piece B CR Docs). When set, the editor saves
      *  via saveRteFile instead of notes_update. Defaults to ``${projectPath}/notes.md``. */
     filePath?: string;
-    /** How to interpret {@link initialNotes} / serialize editor output.
-     *  ``markdown`` (default) round-trips through markdown.ts; ``html``/``docx``
-     *  load Tiptap-native HTML directly with no markdown conversion. */
-    fileFormat?: "markdown" | "html" | "docx";
+    /** How to interpret {@link initialNotes} / serialize editor output. */
+    fileFormat?: RteFormat;
     /** When false the editor is read-only (e.g. IMPLEMENTED project state). */
     editable?: boolean;
+    capability?: RteCapabilityLevel;
+    saveStrategy?: RteSaveStrategy;
+    supportedEditorFeatures?: string[];
+    message?: string;
+    onReady?: (api: { flushNow: () => Promise<boolean> } | undefined) => void;
   }
   let {
     projectPath,
@@ -43,11 +47,20 @@
     filePath,
     fileFormat = "markdown",
     editable = true,
+    capability = editable ? "editable" : "read_only",
+    saveStrategy,
+    supportedEditorFeatures = [],
+    message = "",
+    onReady,
   }: Props = $props();
 
   /** Resolved target file: explicit path, else the project's notes.md. */
   const targetFile = $derived(filePath ?? `${projectPath.replace(/\/$/, "")}/notes.md`);
-  const directHtmlMode = $derived(fileFormat === "html" || fileFormat === "docx");
+  const effectiveSaveStrategy = $derived(saveStrategy ?? (fileFormat === "text" ? "plain_text" : fileFormat === "html" ? "html" : "markdown"));
+  const canEdit = $derived(editable && capability === "editable" && effectiveSaveStrategy !== "none");
+  const isPlainTextMode = $derived(effectiveSaveStrategy === "plain_text");
+  const directHtmlMode = $derived(effectiveSaveStrategy === "html" || effectiveSaveStrategy === "docx_legacy");
+  const richToolbarEnabled = $derived(canEdit && !isPlainTextMode && (supportedEditorFeatures.length === 0 || supportedEditorFeatures.some((feature) => feature !== "plain_text")));
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
@@ -62,9 +75,8 @@
   // walk) runs only in flush(), not on every keystroke.
   let dirty = $state(false);
   let fullscreen = $state(false);
-  // Reactive refresh token: bumped on every editor transaction so isActive() /
-  // getAttributes() in the markup re-evaluate (Editor is not a rune proxy).
-  let rev = $state(0);
+  // Non-reactive: Tiptap transaction events fire during mount; Svelte state here can loop.
+  let rev = 0;
 
   let colorOpen = $state(false);
   let colorMode: 'fore' | 'back' = $state('fore');
@@ -125,39 +137,88 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const statusLabel = $derived(
-    status === "saving" ? "Saving…"
+    capability === "unsupported" ? "Unsupported format"
+    : !canEdit ? "Read-only"
+    : status === "saving" ? "Saving…"
     : status === "saved" ? "Saved"
-    : status === "pending" ? "Editing…"
+    : status === "pending" ? "Unsaved changes"
     : status === "offline" ? "Offline — notes not saved in browser preview"
     : status === "error" ? `Save failed: ${errorText}`
-    : "Autosave on",
+    : "Saved",
   );
 
+  function serializeEditor(): string {
+    if (!editor) return text;
+    if (isPlainTextMode) return editor.getText({ blockSeparator: "\n" });
+    if (directHtmlMode) return editor.getHTML();
+    return htmlToMarkdown(editor.getHTML());
+  }
+
   function scheduleSave() {
+    if (!canEdit) return;
     status = "pending";
+    disposeSaveStarted = false;
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, AUTOSAVE_MS);
   }
 
-  async function flush() {
+  async function flush(): Promise<boolean> {
     if (timer) { clearTimeout(timer); timer = undefined; }
-    if (!dirty) { status = "saved"; return; }
-    if (!editor) { status = "idle"; return; }
-    if (!isPywebviewReady()) { status = "offline"; return; }
+    if (!canEdit) { status = "idle"; return true; }
+    if (!dirty) { status = "saved"; return true; }
+    if (!editor) { status = "idle"; return true; }
+    if (!isPywebviewReady()) { status = "offline"; return false; }
     status = "saving";
     errorText = "";
     // Serialize ONCE at debounced save time. Never on every keystroke.
-    const nextText = directHtmlMode ? editor.getHTML() : htmlToMarkdown(editor.getHTML());
-    if (nextText === lastSaved) { dirty = false; status = "saved"; return; }
-    const resp = directHtmlMode
+    const nextText = serializeEditor();
+    if (nextText === lastSaved) { dirty = false; status = "saved"; return true; }
+    const resp = filePath
       ? await saveRteFile(targetFile, nextText)
       : await callBridge("notes_update", projectPath, nextText);
-    if (!resp.ok) { status = "error"; errorText = resp.error.message; return; }
+    if (!resp.ok) { status = "error"; errorText = resp.error.message; return false; }
     text = nextText;
     lastSaved = nextText;
     dirty = false;
     status = "saved";
     onSaved?.(nextText);
+    return true;
+  }
+
+  export async function flushNow(): Promise<boolean> {
+    return flush();
+  }
+
+  async function saveSnapshot(
+    filePath: string,
+    project: string,
+    isDirectHtml: boolean,
+    html: string,
+    savedText: string,
+  ) {
+    if (!isPywebviewReady()) return;
+    if (!canEdit) return;
+    const nextText = isPlainTextMode ? new DOMParser().parseFromString(html, "text/html").body.textContent || "" : isDirectHtml ? html : htmlToMarkdown(html);
+    if (nextText === savedText) return;
+    const resp = filePath
+      ? await saveRteFile(filePath, nextText)
+      : await callBridge("notes_update", project, nextText);
+    if (!resp.ok) {
+      console.warn("NotesEditor final autosave failed", resp.error.message);
+    }
+  }
+
+  let disposeSaveStarted = false;
+
+  function savePendingBeforeDispose() {
+    if (disposeSaveStarted || !dirty || !editor) return;
+    disposeSaveStarted = true;
+    const pendingHtml = editor.getHTML();
+    const filePath = targetFile;
+    const project = projectPath;
+    const isDirectHtml = directHtmlMode;
+    const savedText = lastSaved;
+    void saveSnapshot(filePath, project, isDirectHtml, pendingHtml, savedText);
   }
 
   function toggleFullscreen() {
@@ -198,123 +259,17 @@
     closeAllPopovers();
   }
 
-  // ── HTML-to-Markdown ──
-
-  /** Escape characters that would break a markdown/HTML attribute value. */
-  function escapeAttr(v: string): string {
-    return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  }
-
-  /** Pull text-align out of an element's inline style or align attribute. */
-  function extractAlign(el: HTMLElement): string {
-    const attr = el.getAttribute("align");
-    if (attr) return attr.toLowerCase();
-    const m = (el.getAttribute("style") || "").match(/text-align:\s*([^;]+)/i);
-    return m ? m[1].trim().toLowerCase() : "";
-  }
-
-  function domToMarkdown(node: Node): string {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
-    if (node.nodeType !== Node.ELEMENT_NODE) return "";
-    const el = node as HTMLElement;
-    const tag = el.tagName.toLowerCase();
-    // Tiptap task item: <li data-type="taskItem" data-checked="false">…<div>text</div></li>
-    if (el.dataset.type === "taskItem") {
-      const checked = el.dataset.checked === "true";
-      const ch = checked ? "x" : " ";
-      const contentEl = el.querySelector("div") || el;
-      const tc = Array.from(contentEl.childNodes).map(domToMarkdown).join("");
-      return `- [${ch}] ${tc.trim()}\n`;
-    }
-    const children = Array.from(el.childNodes).map(domToMarkdown).join("");
-    switch (tag) {
-      case "h1": return `# ${children.trim()}\n\n`;
-      case "h2": return `## ${children.trim()}\n\n`;
-      case "h3": return `### ${children.trim()}\n\n`;
-      case "blockquote": return `> ${children.trim()}\n\n`;
-      case "li": {
-        // Task items are handled above; normal list items take their marker
-        // from the parent list type.
-        return `${el.parentElement?.tagName === 'OL' ? '1.' : '-'} ${children.trim()}\n`;
-      }
-      case "ol": return `${children}\n`;
-      case "ul": return `${children}\n`;
-      case "strong": case "b": return `**${children}**`;
-      case "em": case "i": return `*${children}*`;
-      case "u": return `<u>${children}</u>`;
-      case "s": case "strike": return `~~${children}~~`;
-      case "sub": return `<sub>${children}</sub>`;
-      case "sup": return `<sup>${children}</sup>`;
-      case "pre":
-        // Code block: emit as a fenced block so renderMarkdown lifts it back.
-        return '```\n' + (el.textContent || '') + '\n```\n\n';
-      case "code": return `\`${children}\``;
-      case "a": return `[${children}](${el.getAttribute("href") || ""})`;
-      case "p": {
-        const align = extractAlign(el);
-        const trimmed = children.trim();
-        if (align) return `<p style="text-align:${align}">${trimmed}</p>\n\n`;
-        return `${trimmed}\n\n`;
-      }
-      case "div": {
-        const dAlign = extractAlign(el);
-        if (dAlign) return `<div style="text-align:${dAlign}">${children}</div>\n`;
-        return `${children}\n`;
-      }
-      case "hr": return "---\n\n";
-      case "br": return "\n";
-      case "img": {
-        const src = el.getAttribute('src') || '';
-        const alt = el.getAttribute('alt') || '';
-        return `![${alt}](${src})`;
-      }
-      case "table": {
-        // Render a GFM pipe table with a separator row after the header.
-        const allRows = Array.from(el.querySelectorAll('tr'));
-        if (allRows.length === 0) return children;
-        const cellText = (c: Element) => (c.textContent || '').replace(/\|/g, '\\|').trim();
-        const rowText = (tr: Element) => `| ${Array.from(tr.querySelectorAll('td,th')).map(cellText).join(' | ')} |`;
-        const header = allRows[0];
-        const cols = header.querySelectorAll('td,th').length;
-        const sep = `| ${Array.from({ length: cols || 1 }, () => '---').join(' | ')} |`;
-        const body = allRows.slice(1).map(rowText).join('\n');
-        return `${rowText(header)}\n${sep}${body ? '\n' + body : ''}\n\n`;
-      }
-      case "tr": case "td": case "th": case "tbody": case "thead": case "caption": return children;
-      case "font": {
-        const attrs: string[] = [];
-        const fc = el.getAttribute('color'); if (fc) attrs.push(`color="${escapeAttr(fc)}"`);
-        const ff = el.getAttribute('face'); if (ff) attrs.push(`face="${escapeAttr(ff)}"`);
-        if (attrs.length) return `<font ${attrs.join(' ')}>${children}</font>`;
-        return children;
-      }
-      case "span": {
-        const style = el.getAttribute('style') || '';
-        if (style.trim()) return `<span style="${escapeAttr(style)}">${children}</span>`;
-        return children;
-      }
-      case "mark": {
-        // Tiptap highlight renders as <mark>; carry it as an inline-styled span.
-        const c = el.getAttribute('data-color') || el.style.backgroundColor;
-        if (c) return `<span style="background-color:${escapeAttr(c)}">${children}</span>`;
-        return children;
-      }
-      default: return children;
-    }
-  }
-
-  function htmlToMarkdown(html: string): string {
-    if (!html) return "";
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    let md = Array.from(doc.body.childNodes).map(domToMarkdown).join("");
-    md = md.replace(/\n{3,}/g, "\n\n");
-    return md.trim();
-  }
-
   function onEditorUpdate() {
-    if (!editor) return;
+    if (!editor || !canEdit) return;
     dirty = true;
     scheduleSave();
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      void flushNow();
+    }
   }
 
   // ── Active-state helpers (reactive via the rev token) ──
@@ -461,15 +416,20 @@
   }
 
   onMount(() => {
+    onReady?.({ flushNow });
     window.addEventListener("app:navigate-away", resetEditorChrome);
+    window.addEventListener("keydown", onKeydown);
   });
 
   onDestroy(() => {
+    onReady?.(undefined);
+    savePendingBeforeDispose();
     if (timer) clearTimeout(timer);
     if (typeof window !== "undefined") window.removeEventListener('resize', recalcHeight);
     if (typeof document !== "undefined") document.body.style.overflow = '';
     if (typeof window !== "undefined") window.removeEventListener('click', onWindowClick);
     if (typeof window !== "undefined") window.removeEventListener("app:navigate-away", resetEditorChrome);
+    if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
   });
 
   let lastPath = "";
@@ -480,30 +440,30 @@
   // DOM exists, so the toolbar still renders under SSR.
   const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
 
+  function toEditorHtml(value: string, direct: boolean, plainText: boolean): string {
+    if (direct) return value;
+    if (plainText) return `<pre>${escapeHtml(value)}</pre>`;
+    return renderMarkdown(value);
+  }
+
   $effect(() => {
-    if (!isBrowser || !hostEl) return;
-    if (editor) {
-      // Project/file switch: reload content without rebuilding the editor.
-      // Re-key on the resolved target file so switching CR Docs within one
-      // project (same projectPath, different file) reloads content.
-      if (targetFile !== lastPath) {
-        lastPath = targetFile;
-        const html = directHtmlMode ? text : renderMarkdown(text);
-        editor.commands.setContent(html, { emitUpdate: false });
-        lastSaved = text;
-        dirty = false;
-      }
-      // Reflect the editable flag (e.g. IMPLEMENTED state flips it read-only).
-      editor.setEditable(editable);
-      return;
-    }
-    lastPath = targetFile;
+    if (!isBrowser || !hostEl || editor) return;
+    const startText = untrack(() => initialNotes ?? "");
+    const startPath = untrack(() => targetFile);
+    const editableNow = untrack(() => canEdit);
+    const direct = untrack(() => directHtmlMode);
+    const plainText = untrack(() => isPlainTextMode);
+    const format = untrack(() => fileFormat);
+    text = startText;
+    lastSaved = startText;
+    lastPath = startPath;
+    dirty = false;
+    disposeSaveStarted = false;
+
     const instance = new Editor({
       element: hostEl,
-      editable,
-      content: directHtmlMode
-        ? untrack(() => text)
-        : renderMarkdown(untrack(() => text)),
+      editable: editableNow,
+      content: toEditorHtml(startText, direct, plainText),
       extensions: [
         StarterKit.configure({
           // StarterKit v3 bundles bold/italic/strike/code, heading, blockquote,
@@ -523,9 +483,9 @@
         TaskItem.configure({ nested: false }),
         TextAlign.configure({ types: ["heading", "paragraph"] }),
         Placeholder.configure({
-          placeholder: fileFormat === "docx"
+          placeholder: format === "docx"
             ? "Write here (autosaves to Word)…"
-            : fileFormat === "html"
+            : format === "html"
               ? "Write here (autosaves)…"
               : "Write project notes (autosaves to notes.md)…",
         }),
@@ -552,6 +512,7 @@
       window.addEventListener('click', onWindowClick);
     }
     return () => {
+      savePendingBeforeDispose();
       try {
         instance.destroy();
       } catch (err) {
@@ -562,27 +523,34 @@
     };
   });
 
-  // Reflect editor font family/size into the selects (after each transaction).
   $effect(() => {
-    rev;
+    const editableNow = canEdit;
     if (!editor) return;
-    fontSelVal = (editor.getAttributes("textStyle").fontFamily as string) || "";
+    untrack(() => editor?.setEditable(editableNow, false));
   });
+
   $effect(() => {
-    rev;
-    if (!editor) return;
-    const fs = (editor.getAttributes("fontSize").fontSize as string) || "";
-    sizeSelVal = fs ? String(parseInt(fs)) : "";
+    const nextPath = targetFile;
+    if (!editor || nextPath === lastPath) return;
+    const nextText = untrack(() => initialNotes ?? "");
+    const direct = untrack(() => directHtmlMode);
+    const plainText = untrack(() => isPlainTextMode);
+    lastPath = nextPath;
+    text = nextText;
+    lastSaved = nextText;
+    dirty = false;
+    disposeSaveStarted = false;
+    editor.commands.setContent(toEditorHtml(nextText, direct, plainText), { emitUpdate: false });
   });
 </script>
 
 <div class="ne-root" class:fullscreen>
   <div class="ne-toolbar" bind:this={toolbarEl}>
-    <div class="ne-tools" aria-label="Visual formatting">
+    <div class="ne-tools" aria-label="Visual formatting" class:ne-tools-disabled={!richToolbarEnabled}>
 
       <!-- Row: Undo/Redo | Font | Size -->
-      <button type="button" class="ne-tbtn" title="Undo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().undo().run(); rev++; }}>↩</button>
-      <button type="button" class="ne-tbtn" title="Redo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().redo().run(); rev++; }}>↪</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Undo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().undo().run(); rev++; }}>↩</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Redo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().redo().run(); rev++; }}>↪</button>
       <span class="ne-sep"></span>
       <select id="ne-font-select" class="ne-tbtn ne-tselect" bind:value={fontSelVal} onchange={applyFont} onclick={(e) => e.stopPropagation()}>
         {#each FONTS as f}
@@ -598,21 +566,21 @@
       <span class="ne-sep"></span>
 
       <!-- Row: B I U S | Sup Sub -->
-      <button type="button" class="ne-tbtn" class:active={isActive('bold')} title="Bold" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBold().run(); rev++; }}><strong>B</strong></button>
-      <button type="button" class="ne-tbtn" class:active={isActive('italic')} title="Italic" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleItalic().run(); rev++; }}><em>I</em></button>
-      <button type="button" class="ne-tbtn" class:active={isActive('underline')} title="Underline" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleUnderline().run(); rev++; }}><u>U</u></button>
-      <button type="button" class="ne-tbtn" class:active={isActive('strike')} title="Strikethrough" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleStrike().run(); rev++; }}><s>S</s></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('bold')} title="Bold" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBold().run(); rev++; }}><strong>B</strong></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('italic')} title="Italic" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleItalic().run(); rev++; }}><em>I</em></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('underline')} title="Underline" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleUnderline().run(); rev++; }}><u>U</u></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('strike')} title="Strikethrough" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleStrike().run(); rev++; }}><s>S</s></button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" class:active={isActive('superscript')} title="Superscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSuperscript().run(); rev++; }}>x<sup>2</sup></button>
-      <button type="button" class="ne-tbtn" class:active={isActive('subscript')} title="Subscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSubscript().run(); rev++; }}>x<sub>2</sub></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('superscript')} title="Superscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSuperscript().run(); rev++; }}>x<sup>2</sup></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('subscript')} title="Subscript" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleSubscript().run(); rev++; }}>x<sub>2</sub></button>
       <span class="ne-sep"></span>
 
       <!-- Row: Forecolor | Backcolor -->
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" title="Text color" onmousedown={(e) => { e.preventDefault(); colorMode='fore'; colorOpen=!colorOpen; tableOpen=false; emojiOpen=false; }}>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Text color" onmousedown={(e) => { e.preventDefault(); colorMode='fore'; colorOpen=!colorOpen; tableOpen=false; emojiOpen=false; }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4L4 20h3l1-3h8l1 3h3L13 4h-2z"/><line x1="7.5" y1="14" x2="16.5" y2="14"/></svg>
         </button>
-        <button type="button" class="ne-tbtn" title="Background color" onmousedown={(e) => { e.preventDefault(); colorMode='back'; colorOpen=!colorOpen; tableOpen=false; emojiOpen=false; }}>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Background color" onmousedown={(e) => { e.preventDefault(); colorMode='back'; colorOpen=!colorOpen; tableOpen=false; emojiOpen=false; }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
         </button>
         {#if colorOpen}
@@ -628,34 +596,34 @@
       <span class="ne-sep"></span>
 
       <!-- Row: H1 H2 H3 P | Quote Code -->
-      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:1})} title="Heading 1" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 1 }).run(); rev++; }}>H1</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:2})} title="Heading 2" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 2 }).run(); rev++; }}>H2</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('heading',{level:3})} title="Heading 3" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 3 }).run(); rev++; }}>H3</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('paragraph')} title="Paragraph" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setParagraph().run(); rev++; }}>¶</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('heading',{level:1})} title="Heading 1" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 1 }).run(); rev++; }}>H1</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('heading',{level:2})} title="Heading 2" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 2 }).run(); rev++; }}>H2</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('heading',{level:3})} title="Heading 3" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 3 }).run(); rev++; }}>H3</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('paragraph')} title="Paragraph" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setParagraph().run(); rev++; }}>¶</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" class:active={isActive('blockquote')} title="Blockquote" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBlockquote().run(); rev++; }}>❝</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('code')} title="Inline code" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCode().run(); rev++; }}>{@html '&lt;/&gt;'}</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('codeBlock')} title="Code block" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCodeBlock().run(); rev++; }}>{"</>"}</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('blockquote')} title="Blockquote" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBlockquote().run(); rev++; }}>❝</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('code')} title="Inline code" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCode().run(); rev++; }}>{@html '&lt;/&gt;'}</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('codeBlock')} title="Code block" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCodeBlock().run(); rev++; }}>{"</>"}</button>
       <span class="ne-sep"></span>
 
       <!-- Row: OL UL | Indent Outdent -->
-      <button type="button" class="ne-tbtn" class:active={isActive('orderedList')} title="Numbered list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleOrderedList().run(); rev++; }}>1.</button>
-      <button type="button" class="ne-tbtn" class:active={isActive('bulletList')} title="Bulleted list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBulletList().run(); rev++; }}>•</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('orderedList')} title="Numbered list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleOrderedList().run(); rev++; }}>1.</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('bulletList')} title="Bulleted list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBulletList().run(); rev++; }}>•</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" title="Indent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem('listItem').run(); rev++; }}>→</button>
-      <button type="button" class="ne-tbtn" title="Outdent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem('listItem').run(); rev++; }}>←</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Indent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem('listItem').run(); rev++; }}>→</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Outdent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem('listItem').run(); rev++; }}>←</button>
       <span class="ne-sep"></span>
 
       <!-- Row: Align L C R J -->
-      <button type="button" class="ne-tbtn" class:active={alignIs('left')} title="Align left" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('left').run(); rev++; }}>≡L</button>
-      <button type="button" class="ne-tbtn" class:active={alignIs('center')} title="Align center" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('center').run(); rev++; }}>≡C</button>
-      <button type="button" class="ne-tbtn" class:active={alignIs('right')} title="Align right" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('right').run(); rev++; }}>≡R</button>
-      <button type="button" class="ne-tbtn" class:active={alignIs('justify')} title="Justify" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('justify').run(); rev++; }}>≡J</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('left')} title="Align left" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('left').run(); rev++; }}>≡L</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('center')} title="Align center" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('center').run(); rev++; }}>≡C</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('right')} title="Align right" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('right').run(); rev++; }}>≡R</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('justify')} title="Justify" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('justify').run(); rev++; }}>≡J</button>
       <span class="ne-sep"></span>
 
       <!-- Row: Link HR Table Image Emoji -->
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" class:active={isActive('link')} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('link')} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
         {#if linkOpen}
           <div class="ne-popover ne-link-pop">
             <label class="ne-field-label" for="ne-link-input">{linkEditing ? 'Edit URL' : 'Link URL'}</label>
@@ -664,15 +632,15 @@
               {#if linkEditing}
                 <button type="button" class="ne-tbtn ne-act-btn" title="Remove link" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().extendMarkRange('link').unsetLink().run(); linkOpen=false; rev++; }}>Remove</button>
               {/if}
-              <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeLinkDialog(); }}>Cancel</button>
+              <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Cancel" onmousedown={(e) => { e.preventDefault(); closeLinkDialog(); }}>Cancel</button>
               <button type="button" class="ne-tbtn ne-act-btn" title="Apply" onmousedown={(e) => { e.preventDefault(); confirmLink(); }}>OK</button>
             </div>
           </div>
         {/if}
       </div>
-      <button type="button" class="ne-tbtn" title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); rev++; }}>HR</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); rev++; }}>HR</button>
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}>⊞</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}>⊞</button>
         {#if tableOpen}
           <div class="ne-popover ne-table-pop">
               {#each Array(10) as _, r}
@@ -687,7 +655,7 @@
         {/if}
       </div>
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
         {#if imgOpen}
           <div class="ne-popover ne-link-pop">
             {#if imgUrl.startsWith('data:image/')}
@@ -699,7 +667,7 @@
             <label class="ne-field-label ne-alt-label" for="ne-img-alt">Description (alt)</label>
             <input id="ne-img-alt" class="ne-input" type="text" bind:value={imgAlt} placeholder="Optional alt text" onkeydown={onImageKeydown} onclick={(e) => e.stopPropagation()} onmousedown={(e) => e.stopPropagation()} />
             <div class="ne-dialog-actions">
-              <button type="button" class="ne-tbtn" title="Cancel" onmousedown={(e) => { e.preventDefault(); closeImageDialog(); }}>Cancel</button>
+              <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Cancel" onmousedown={(e) => { e.preventDefault(); closeImageDialog(); }}>Cancel</button>
               <button type="button" class="ne-tbtn ne-act-btn" title="Insert" onmousedown={(e) => { e.preventDefault(); confirmImage(); }}>Insert</button>
             </div>
           </div>
@@ -718,8 +686,8 @@
       <span class="ne-sep"></span>
 
       <!-- Row: Todo ClearFormat -->
-      <button type="button" class="ne-tbtn" class:active={isActive('taskList')} title="Checklist" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleTaskList().run(); rev++; }}>☑</button>
-      <button type="button" class="ne-tbtn" title="Clear formatting" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().clearNodes().run(); rev++; }}>↺</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('taskList')} title="Checklist" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleTaskList().run(); rev++; }}>☑</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Clear formatting" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().clearNodes().run(); rev++; }}>↺</button>
     </div>
 
     <div class="ne-actions">
@@ -730,7 +698,7 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
         {/if}
       </button>
-      <div class="ne-status" class:err={status === "error"} class:off={status === "offline"} role="status" title={status === "error" ? errorText : statusLabel}>
+      <div class="ne-status" class:err={status === "error" || capability === "unsupported"} class:off={status === "offline" || !canEdit} role="status" title={status === "error" ? errorText : (message || statusLabel)}>
         {#if status === "saving"}<span class="ne-dot">◌</span>{:else if status === "saved"}<span class="ne-dot ne-ok">✓</span>{/if}
         <span>{statusLabel}</span>
       </div>
@@ -748,9 +716,11 @@
   .ne-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
   .ne-sep { display:inline-block; width:1px; height:16px; background:var(--soft-white-border); margin:0 2px; flex:0 0 auto; }
   .ne-tbtn { min-width:26px; height:24px; padding:0 6px; border:1px solid var(--soft-white-border); border-radius:5px; background:var(--card-white); color:var(--color-ink); font-size:10px; font-weight:850; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:2px; white-space:nowrap; }
-  .ne-tbtn:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .ne-tbtn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-tbtn.active { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
-  .ne-tbtn:active { transform:scale(0.94); background:var(--soft-pink-surface); border-color:var(--color-dbs-red); }
+  .ne-tbtn:active:not(:disabled) { transform:scale(0.94); background:var(--soft-pink-surface); border-color:var(--color-dbs-red); }
+  .ne-tbtn:disabled { opacity:0.45; cursor:not-allowed; }
+  .ne-tools-disabled { opacity:0.78; }
   .ne-tselect:active { transform:none; }
   .ne-tbtn s { color:inherit; text-decoration:line-through; }
   .ne-tselect { min-width:68px; width:auto; padding:0 16px 0 6px; appearance:none; font-size:9px; background-image:linear-gradient(45deg,transparent 50%,var(--text-strong) 50%),linear-gradient(135deg,var(--text-strong) 50%,transparent 50%); background-position:calc(100% - 6px) 10px,calc(100% - 2px) 10px; background-size:4px 4px,4px 4px; background-repeat:no-repeat; background-color:var(--card-white); }

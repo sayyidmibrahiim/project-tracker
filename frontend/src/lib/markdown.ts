@@ -355,3 +355,140 @@ export function renderMarkdown(src: string): string {
   });
   return result;
 }
+
+/** Escape characters that would break a markdown/HTML attribute value. */
+function escapeMarkdownAttr(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+function stripHtmlTags(value: string): string {
+  return decodeHtmlEntities(value.replace(/<[^>]+>/g, "")).trim();
+}
+
+function domNodeToMarkdown(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const el = node as HTMLElement;
+  const tag = el.tagName.toLowerCase();
+  if (el.dataset.type === "taskItem") {
+    const checked = el.dataset.checked === "true";
+    const ch = checked ? "x" : " ";
+    const contentEl = el.querySelector("div") || el;
+    const text = Array.from(contentEl.childNodes).map(domNodeToMarkdown).join("").trim();
+    return `- [${ch}] ${text}\n`;
+  }
+  const children = Array.from(el.childNodes).map(domNodeToMarkdown).join("");
+  switch (tag) {
+    case "h1": return `# ${children.trim()}\n\n`;
+    case "h2": return `## ${children.trim()}\n\n`;
+    case "h3": return `### ${children.trim()}\n\n`;
+    case "blockquote": return `> ${children.trim()}\n\n`;
+    case "li": return `${el.parentElement?.tagName === "OL" ? "1." : "-"} ${children.trim()}\n`;
+    case "ol":
+    case "ul": return `${children}\n`;
+    case "strong":
+    case "b": return `**${children}**`;
+    case "em":
+    case "i": return `*${children}*`;
+    case "u": return `<u>${children}</u>`;
+    case "s":
+    case "strike": return `~~${children}~~`;
+    case "sub": return `<sub>${children}</sub>`;
+    case "sup": return `<sup>${children}</sup>`;
+    case "pre": return "```\n" + (el.textContent || "") + "\n```\n\n";
+    case "code": return `\`${children}\``;
+    case "a": return `[${children}](${el.getAttribute("href") || ""})`;
+    case "p": return `${children.trim()}\n\n`;
+    case "div": return `${children}\n`;
+    case "hr": return "---\n\n";
+    case "br": return "\n";
+    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("src") || ""})`;
+    case "table": {
+      const rows = Array.from(el.querySelectorAll("tr"));
+      if (rows.length === 0) return children;
+      const cellText = (cell: Element) => (cell.textContent || "").replace(/\|/g, "\\|").trim();
+      const rowText = (row: Element) => `| ${Array.from(row.querySelectorAll("td,th")).map(cellText).join(" | ")} |`;
+      const header = rows[0];
+      const cols = header.querySelectorAll("td,th").length || 1;
+      const sep = `| ${Array.from({ length: cols }, () => "---").join(" | ")} |`;
+      const body = rows.slice(1).map(rowText).join("\n");
+      return `${rowText(header)}\n${sep}${body ? "\n" + body : ""}\n\n`;
+    }
+    case "tr":
+    case "td":
+    case "th":
+    case "tbody":
+    case "thead": return children;
+    case "font": {
+      const attrs: string[] = [];
+      const color = el.getAttribute("color");
+      const face = el.getAttribute("face");
+      if (color) attrs.push(`color="${escapeMarkdownAttr(color)}"`);
+      if (face) attrs.push(`face="${escapeMarkdownAttr(face)}"`);
+      return attrs.length ? `<font ${attrs.join(" ")}>${children}</font>` : children;
+    }
+    case "span": {
+      const style = el.getAttribute("style") || "";
+      return style.trim() ? `<span style="${escapeMarkdownAttr(style)}">${children}</span>` : children;
+    }
+    case "mark": {
+      const color = el.getAttribute("data-color") || el.style.backgroundColor;
+      return color ? `<span style="background-color:${escapeMarkdownAttr(color)}">${children}</span>` : children;
+    }
+    default: return children;
+  }
+}
+
+function fallbackHtmlToMarkdown(html: string): string {
+  return html
+    .replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_m, code) => `\n\n\`\`\`\n${stripHtmlTags(code)}\n\`\`\`\n\n`)
+    .replace(/<li[^>]*data-type=["']taskItem["'][^>]*data-checked=["'](true|false)["'][^>]*>([\s\S]*?)<\/li>/gi, (_m, checked, body) => `\n- [${checked === "true" ? "x" : " "}] ${stripHtmlTags(body)}\n`)
+    .replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_m, table) => {
+      const tableHtml = String(table);
+      const rows = Array.from(tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)).map((row) =>
+        Array.from(String(row[1]).matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)).map((cell) => stripHtmlTags(String(cell[1]))),
+      );
+      if (rows.length === 0) return "";
+      const rowText = (row: string[]) => `| ${row.join(" | ")} |`;
+      return `\n${rowText(rows[0])}\n| ${rows[0].map(() => "---").join(" | ")} |${rows.slice(1).map((row) => `\n${rowText(row)}`).join("")}\n\n`;
+    })
+    .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_m, text) => `\n# ${stripHtmlTags(text)}\n\n`)
+    .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_m, text) => `\n## ${stripHtmlTags(text)}\n\n`)
+    .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_m, text) => `\n### ${stripHtmlTags(text)}\n\n`)
+    .replace(/<img\b([^>]*)>/gi, (_m, attrs) => {
+      const src = attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
+      const alt = attrs.match(/alt=["']([^"']*)["']/i)?.[1] || "";
+      return `![${alt}](${src})`;
+    })
+    .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `[${stripHtmlTags(text)}](${href})`)
+    .replace(/<ul(?![^>]*data-type=["']taskList["'])[^>]*>([\s\S]*?)<\/ul>/gi, (_m, list) =>
+      Array.from(String(list).matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)).map((item) => `- ${stripHtmlTags(String(item[1]))}`).join("\n") + "\n",
+    )
+    .replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_m, list) =>
+      Array.from(String(list).matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)).map((item) => `1. ${stripHtmlTags(String(item[1]))}`).join("\n") + "\n",
+    )
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>|<\/div>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Serialize Tiptap/editor HTML back to the supported notes.md Markdown subset. */
+export function htmlToMarkdown(html: string): string {
+  if (!html) return "";
+  if (typeof DOMParser === "undefined") return fallbackHtmlToMarkdown(html);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  let markdown = Array.from(doc.body.childNodes).map(domNodeToMarkdown).join("");
+  markdown = markdown.replace(/\n{3,}/g, "\n\n");
+  return markdown.trim();
+}

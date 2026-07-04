@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { renderMarkdown, escapeHtml } from "../src/lib/markdown.ts";
+import { renderMarkdown, escapeHtml, htmlToMarkdown } from "../src/lib/markdown.ts";
 
 test("renders headings h1/h2/h3", () => {
   assert.match(renderMarkdown("# Title"), /<h1>Title<\/h1>/);
@@ -119,5 +119,25 @@ test("escapes <script> but passes <u> (selective, not permissive)", () => {
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /<u>safe<\/u>/);
+});
+
+test("serializes Tiptap HTML headings, lists, links, code, images, tables, and tasks to markdown", () => {
+  const markdown = htmlToMarkdown(`
+    <h1>Title</h1>
+    <ul><li>one</li></ul>
+    <a href="https://example.com">site</a>
+    <pre><code>let x = 1</code></pre>
+    <img src="https://example.com/a.png" alt="pic">
+    <table><tr><th>A</th></tr><tr><td>B</td></tr></table>
+    <ul data-type="taskList"><li data-type="taskItem" data-checked="true"><div>done</div></li></ul>
+  `);
+
+  assert.match(markdown, /# Title/);
+  assert.match(markdown, /- one/);
+  assert.match(markdown, /\[site\]\(https:\/\/example\.com\)/);
+  assert.match(markdown, /```\nlet x = 1\n```/);
+  assert.match(markdown, /!\[pic\]\(https:\/\/example\.com\/a\.png\)/);
+  assert.match(markdown, /\| A \|\n\| --- \|\n\| B \|/);
+  assert.match(markdown, /- \[x\] done/);
 });
 
