@@ -31,12 +31,17 @@ export function docxStatusLabel(display: DocxExportDisplay, baseLabel: string): 
     case "done":
       return "DOCX saved";
     case "locked":
-      return "DOCX locked — will retry";
+      return "DOCX locked — close Word, then Ctrl+S";
     case "failed":
       return "Export failed — source safe";
     default:
       return baseLabel;
   }
+}
+
+/** Status label while the source is saved and the derived DOCX export is idle-waiting. */
+export function docxCountdownLabel(secondsLeft: number): string {
+  return `Saved — DOCX in ${Math.max(1, Math.round(secondsLeft))}s`;
 }
 
 /**

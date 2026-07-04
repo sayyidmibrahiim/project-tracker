@@ -54,6 +54,22 @@ test("NotesEditor defers DOCX migration save outside editor-mount effect", () =>
   assert.doesNotMatch(NE, /if \(pipeline && migrationPending\) \{\s*dirty = true;\s*void flush\("migration"\);/);
 });
 
+test("NotesEditor shows a five-second DOCX idle-export countdown", () => {
+  assert.match(NE, /docxCountdownLabel/);
+  assert.match(NE, /const IDLE_EXPORT_MS = 5_000/);
+  assert.match(NE, /let exportCountdown = \$state\(0\)/);
+  assert.match(NE, /function startExportCountdown\(\)[\s\S]*exportCountdown = 5[\s\S]*setInterval/);
+  assert.match(NE, /function stopExportCountdown\(\)[\s\S]*clearInterval[\s\S]*exportCountdown = 0/);
+  assert.match(NE, /docxCountdownLabel\(exportCountdown\)/);
+  assert.match(NE, /stopExportCountdown\(\);\s*void requestDocxExport\(\)/);
+});
+
+test("NotesEditor Ctrl+S skips pending DOCX countdown and retries locked export", () => {
+  assert.match(NE, /export async function flushNow\(\): Promise<boolean> \{[\s\S]*idleExport\.pending/);
+  assert.match(NE, /export async function flushNow\(\): Promise<boolean> \{[\s\S]*exportDisplay === "locked"/);
+  assert.match(NE, /export async function flushNow\(\): Promise<boolean> \{[\s\S]*idleExport\.cancel\(\);[\s\S]*stopExportCountdown\(\);[\s\S]*await requestDocxExport\(\)/);
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);

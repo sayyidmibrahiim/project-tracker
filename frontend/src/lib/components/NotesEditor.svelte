@@ -12,7 +12,7 @@
   } from "../bridge";
   import { escapeHtml, htmlToMarkdown, renderMarkdown } from "../markdown";
   import type { RteCapabilityLevel, RteFormat, RteSaveReason, RteSaveStrategy } from "../types";
-  import { IdleExportScheduler, docxStatusLabel, mapExportState } from "../rteDocxState";
+  import { IdleExportScheduler, docxCountdownLabel, docxStatusLabel, mapExportState } from "../rteDocxState";
   import type { DocxExportDisplay } from "../rteDocxState";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
@@ -166,7 +166,7 @@
   ];
 
   const AUTOSAVE_MS = 1000;
-  const IDLE_EXPORT_MS = 20_000;
+  const IDLE_EXPORT_MS = 5_000;
   const EXPORT_POLL_MS = 1000;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -178,8 +178,11 @@
   /** Guards the asset-hydration transactions from marking the doc dirty. */
   let hydrating = false;
   let exportDisplay = $state<DocxExportDisplay>("idle");
+  let exportCountdown = $state(0);
+  let exportCountdownTimer: ReturnType<typeof setInterval> | undefined;
   let exportPollTimer: ReturnType<typeof setInterval> | undefined;
   const idleExport = new IdleExportScheduler(IDLE_EXPORT_MS, () => {
+    stopExportCountdown();
     void requestDocxExport();
   });
 
@@ -195,9 +198,26 @@
   );
   const statusLabel = $derived(
     docxPipelineMode && canEdit && (status === "saved" || status === "idle")
-      ? docxStatusLabel(exportDisplay, baseStatusLabel)
+      ? (exportCountdown > 0 && exportDisplay !== "exporting" ? docxCountdownLabel(exportCountdown) : docxStatusLabel(exportDisplay, baseStatusLabel))
       : baseStatusLabel,
   );
+
+  function startExportCountdown(): void {
+    stopExportCountdown();
+    exportCountdown = 5;
+    exportCountdownTimer = setInterval(() => {
+      exportCountdown = Math.max(0, exportCountdown - 1);
+      if (exportCountdown <= 0) stopExportCountdown();
+    }, 1000);
+  }
+
+  function stopExportCountdown(): void {
+    if (exportCountdownTimer !== undefined) {
+      clearInterval(exportCountdownTimer);
+      exportCountdownTimer = undefined;
+    }
+    exportCountdown = 0;
+  }
 
   async function requestDocxExport(): Promise<void> {
     if (!docxPipelineMode || !canEdit || !isPywebviewReady()) return;
@@ -279,9 +299,11 @@
     if (saved.export_scheduled) {
       exportDisplay = "exporting";
       idleExport.cancel();
+      stopExportCountdown();
       startExportPoll();
     } else if (!saved.skipped) {
       idleExport.bump();
+      startExportCountdown();
     }
     return true;
   }
@@ -312,7 +334,13 @@
 
   export async function flushNow(): Promise<boolean> {
     // Manual/switch flushes schedule the DOCX export immediately (flow-tiptap §8).
-    return flush("manual");
+    const saved = await flush("manual");
+    if (saved && docxPipelineMode && exportDisplay !== "exporting" && (idleExport.pending || exportDisplay === "locked")) {
+      idleExport.cancel();
+      stopExportCountdown();
+      await requestDocxExport();
+    }
+    return saved;
   }
 
   async function saveSnapshot(
@@ -672,6 +700,7 @@
     onReady?.(undefined);
     savePendingBeforeDispose();
     idleExport.cancel();
+    stopExportCountdown();
     stopExportPoll();
     if (timer) clearTimeout(timer);
     if (typeof window !== "undefined") window.removeEventListener('resize', recalcHeight);
@@ -848,6 +877,7 @@
     dirty = false;
     disposeSaveStarted = false;
     idleExport.cancel();
+    stopExportCountdown();
     stopExportPoll();
     docRevision = nextRevision;
     lastExportedRevision = nextRevision;
