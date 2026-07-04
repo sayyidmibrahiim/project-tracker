@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import TitleBar from "./lib/components/TitleBar.svelte";
-  import Header from "./lib/components/Header.svelte";
   import Dashboard from "./lib/components/Dashboard.svelte";
   import Report from "./lib/components/Report.svelte";
   import Settings from "./lib/components/Settings.svelte";
@@ -170,12 +169,6 @@
     return null;
   }
 
-  // Bumped by the Dashboard empty-state "Add Year" button; opens Header's dialog.
-  let openAddYearToken = $state(0);
-  function openAddYear() {
-    openAddYearToken++;
-  }
-
   async function checkRoot() {
     if (!isPywebviewReady()) return;
     const r = await callBridge<Record<string, unknown>>("settings_get");
@@ -235,22 +228,10 @@
     interactionLocked={interactionLocked}
   />
   <main class="main">
-    <Header
-      {currentPage}
-      {selectedYear}
-      {years}
-      showDashboardControls={currentPage === "dashboard"}
-      onYearChange={handleYearChange}
-      onRefresh={handleRefresh}
-      onAddProject={openNewProjectPage}
-      onAddYear={addYear}
-      {openAddYearToken}
-      interactionLocked={interactionLocked}
-    />
     <div class="app-content">
       {#key currentPage}
         {#if currentPage === "dashboard"}
-          <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onAddYear={openAddYear} />
+          <Dashboard {selectedYear} {searchQuery} refreshToken={refreshKey} {years} onOpenProjectDetails={openProjectDetails} onAddProject={openNewProjectPage} onYearChange={handleYearChange} onAddYearSubmit={addYear} onRefresh={handleRefresh} {interactionLocked} />
         {:else if currentPage === "report"}
           <Report {selectedYear} {searchQuery} key={refreshKey} />
         {:else if currentPage === "settings"}

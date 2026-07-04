@@ -8,7 +8,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = (path) => readFileSync(resolve(__dirname, path), "utf8");
 
 const APP = src("../src/App.svelte");
-const HEADER = src("../src/lib/components/Header.svelte");
 const DASHBOARD = src("../src/lib/components/Dashboard.svelte");
 const PROJECT_DETAILS = src("../src/lib/components/ProjectDetails.svelte");
 const SECOND_BRAIN = src("../src/lib/components/SecondBrain.svelte");
@@ -20,16 +19,25 @@ const STYLES = src("../src/styles.css");
 test("AS_IS shell tokens and classes are present", () => {
   assert.match(STYLES, /--black-chrome:\s*#0A0A0B/);
   assert.match(STYLES, /--primary-red:\s*#B91C1C/);
-  assert.match(STYLES, /--header-h:\s*58px/);
   assert.match(STYLES, /--sidebar-expanded:\s*160px/);
   assert.match(APP, /class="app-shell"/);
   assert.match(APP, /<main class="main">/);
   assert.match(APP, /class="app-content"/);
+  // D-0011: the red app-header is gone; page headers own the titles.
+  assert.doesNotMatch(STYLES, /\.app-header/);
 });
 
-test("AS_IS header labels are present", () => {
-  for (const title of ["Dashboard", "Project Details", "Second Brain", "Report", "Automations", "Settings"]) {
-    assert.match(HEADER, new RegExp(title));
+test("Page header titles are present per page (red app-header removed, D-0011)", () => {
+  const pages = [
+    [DASHBOARD, "Dashboard"],
+    [PROJECT_DETAILS, "Project Details"],
+    [SECOND_BRAIN, "Second Brain"],
+    [REPORT, "Report"],
+    [AUTOMATIONS, "Automations"],
+    [SETTINGS, "Settings"],
+  ];
+  for (const [source, title] of pages) {
+    assert.match(source, new RegExp(title));
   }
 });
 

@@ -431,19 +431,19 @@
     flex: 0 0 auto;
   }
   .fa-btn:hover:not(:disabled) {
-    border-color: var(--color-dbs-red, #DA1E28);
-    color: var(--color-dbs-red, #DA1E28);
+    border-color: var(--color-dbs-red);
+    color: var(--color-dbs-red);
   }
   .fa-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
   .fa-btn-danger {
-    border-color: var(--color-dbs-red, #DA1E28);
-    color: var(--color-dbs-red, #DA1E28);
+    border-color: var(--color-dbs-red);
+    color: var(--color-dbs-red);
   }
   .fa-btn-danger:hover:not(:disabled) {
-    background: var(--color-dbs-red, #DA1E28);
+    background: var(--color-dbs-red);
     color: #fff;
   }
   .fa-btn-sm {
@@ -497,7 +497,7 @@
     line-height: 1.3;
   }
   .fa-err {
-    color: var(--color-dbs-red, #DA1E28);
+    color: var(--color-dbs-red);
   }
   .fa-ok {
     color: #166534;

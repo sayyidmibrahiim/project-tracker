@@ -9,7 +9,7 @@ const PD = readFileSync(resolve(__dirname, "../src/lib/components/ProjectDetails
 const NE = readFileSync(resolve(__dirname, "../src/lib/components/NotesEditor.svelte"), "utf8");
 const APP = readFileSync(resolve(__dirname, "../src/App.svelte"), "utf8");
 const TB = readFileSync(resolve(__dirname, "../src/lib/components/TitleBar.svelte"), "utf8");
-const HEADER = readFileSync(resolve(__dirname, "../src/lib/components/Header.svelte"), "utf8");
+const DASHBOARD = readFileSync(resolve(__dirname, "../src/lib/components/Dashboard.svelte"), "utf8");
 
 test("NotesEditor uses a Tiptap contenteditable editor (not a textarea) for WYSIWYG", () => {
   // D-0007: the editing core is Tiptap (ProseMirror). The contenteditable is
@@ -72,7 +72,7 @@ test("RTE interaction lock does not disable top menu navigation", () => {
   assert.match(APP, /interactionLocks/);
   assert.match(APP, /app:interaction-lock/);
   assert.match(APP, /interactionLocked=\{interactionLocked\}/);
-  assert.match(HEADER, /interactionLocked/);
+  assert.match(DASHBOARD, /interactionLocked/);
 
   const navigateToBody = TB.match(/function navigateTo\(id: string\) \{([\s\S]*?)\n  \}/)?.[1] ?? "";
   assert.doesNotMatch(navigateToBody, /interactionLocked/);

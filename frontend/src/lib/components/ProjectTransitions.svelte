@@ -224,7 +224,7 @@
   }
   .pt-menu-item:hover:not(:disabled) {
     background: var(--color-soft-pink-surface, #FDECEC);
-    color: var(--color-dbs-red, #DA1E28);
+    color: var(--color-dbs-red);
   }
   .pt-menu-item:disabled {
     opacity: 0.5;
@@ -247,8 +247,8 @@
     white-space: nowrap;
   }
   .pt-action-btn:hover:not(:disabled) {
-    border-color: var(--color-dbs-red, #DA1E28);
-    color: var(--color-dbs-red, #DA1E28);
+    border-color: var(--color-dbs-red);
+    color: var(--color-dbs-red);
   }
   .pt-action-btn:disabled {
     opacity: 0.5;
@@ -260,7 +260,7 @@
     line-height: 1.3;
   }
   .pt-err {
-    color: var(--color-dbs-red, #DA1E28);
+    color: var(--color-dbs-red);
   }
   .pt-ok {
     color: #166534;

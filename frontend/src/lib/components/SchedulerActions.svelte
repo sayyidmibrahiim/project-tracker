@@ -333,13 +333,13 @@
   .sc-status-pill { font-size:9px; font-weight:800; padding:2px 8px; border-radius:999px; background:var(--color-workspace-panel); color:var(--color-muted-light); border:1px solid #D7DCE2; }
   .sc-status-pill.running { background:#dcfce7; color:#166534; border-color:#86efac; }
   .sc-btn { padding:5px 11px; font-size:10px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink,#111827); cursor:pointer; white-space:nowrap; }
-  .sc-btn:hover:not(:disabled) { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
+  .sc-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .sc-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .sc-btn-primary { border-color:var(--color-dbs-red,#DA1E28); color:#fff; background:var(--color-dbs-red,#DA1E28); }
+  .sc-btn-primary { border-color:var(--color-dbs-red); color:#fff; background:var(--color-dbs-red); }
   .sc-btn-primary:hover:not(:disabled) { background:var(--color-dbs-red-hover,#B71820); }
-  .sc-btn-danger { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
-  .sc-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red,#DA1E28); color:#fff; }
-  .sc-error { font-size:10px; font-weight:800; color:var(--color-dbs-red,#DA1E28); padding:6px 10px; background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:5px; }
+  .sc-btn-danger { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .sc-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red); color:#fff; }
+  .sc-error { font-size:10px; font-weight:800; color:var(--color-dbs-red); padding:6px 10px; background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); border-radius:5px; }
   .sc-info { font-size:10px; font-weight:800; color:#166534; padding:6px 10px; background:#dcfce7; border:1px solid #86efac; border-radius:5px; }
   .sc-empty { font-size:11px; font-weight:700; color:var(--color-muted); padding:14px; text-align:center; background:#fff; border:1px dashed #D7DCE2; border-radius:6px; }
   .sc-list { display:flex; flex-direction:column; gap:8px; }

@@ -36,7 +36,7 @@ function importantContainer(el: Element | null): string {
   if (!el) return "";
   const selectors = [
     ".nav-tab", ".titlebar", ".titlebar-nav", ".pd-section", ".ne-root",
-    ".ne-toolbar", ".app-header", ".notif-popover", ".help-popover", ".toast",
+    ".ne-toolbar", ".page-header", ".notif-popover", ".help-popover", ".toast",
   ];
   for (const s of selectors) if (el.closest(s)) return s;
   return "";

@@ -13,21 +13,77 @@
     selectedYear,
     searchQuery,
     refreshToken = 0,
+    years = [],
     onOpenProjectDetails,
     onAddProject,
-    onAddYear,
+    onYearChange,
+    onAddYearSubmit,
+    onRefresh,
+    interactionLocked = false,
   }: {
     selectedYear: string;
     searchQuery: string;
     refreshToken?: number;
+    years?: string[];
     onOpenProjectDetails?: (path: string) => void;
     onAddProject?: () => void;
-    // Optional. Parent must adapt its Add-Year flow to a bare () => void here
-    // (the parent's addYear is (year) => Promise<string|null>, so wire a
-    // wrapper that prompts for the year — do not bind addYear directly).
-    onAddYear?: () => void;
+    onYearChange?: (year: string) => void;
+    onAddYearSubmit?: (year: string) => Promise<string | null>;
+    onRefresh?: () => void;
+    interactionLocked?: boolean;
     [key: string]: unknown;
   } = $props();
+
+  // ── Page-header controls (moved here from the removed red app-header) ──
+  const currentCalendarYear = new Date().getFullYear();
+  let addYearOpen = $state(false);
+  let addYearValue = $state(String(currentCalendarYear + 1));
+  let addYearError = $state("");
+  let addYearBusy = $state(false);
+  let addYearX = $state(0);
+  let addYearY = $state(0);
+  let addYearWarn = $derived(Number(addYearValue) > currentCalendarYear + 2);
+  let refreshSpinning = $state(false);
+
+  function openAddYearDialog(triggerEl?: HTMLElement | null) {
+    if (interactionLocked) return;
+    addYearError = "";
+    addYearValue = String(currentCalendarYear + 1);
+    if (triggerEl) {
+      const r = triggerEl.getBoundingClientRect();
+      addYearX = Math.max(8, r.right - 218);
+      addYearY = r.bottom + 4;
+    } else {
+      addYearX = Math.round(window.innerWidth / 2 - 109);
+      addYearY = 120;
+    }
+    addYearOpen = true;
+  }
+
+  async function submitAddYear() {
+    if (interactionLocked || !onAddYearSubmit) return;
+    addYearError = "";
+    addYearBusy = true;
+    const err = await onAddYearSubmit(addYearValue.trim());
+    addYearBusy = false;
+    if (err) {
+      addYearError = err;
+      return;
+    }
+    addYearOpen = false;
+  }
+
+  function handleYearSelect(e: Event) {
+    if (interactionLocked) return;
+    onYearChange?.((e.target as HTMLSelectElement).value);
+  }
+
+  function triggerRefresh() {
+    if (interactionLocked) return;
+    onRefresh?.();
+    refreshSpinning = true;
+    setTimeout(() => (refreshSpinning = false), 650);
+  }
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let loadState: LoadState = $state("idle");
@@ -63,7 +119,10 @@
   }
 
   function onFilterKey(event: KeyboardEvent) {
-    if (event.key === "Escape") openFilter = null;
+    if (event.key === "Escape") {
+      openFilter = null;
+      addYearOpen = false;
+    }
   }
   let isBridgeUnavailable = $derived(errorCode === BridgeErrorCode.BRIDGE_UNAVAILABLE);
   let dashboardErrorTitle = $derived(isBridgeUnavailable ? "Open in Project Tracker desktop app" : "Dashboard could not load");
@@ -507,9 +566,37 @@
           <button class="dash-reset-filter" type="button" disabled={selectedCrStates.includes("all") && selectedAppcodes.includes("all") && selectedProjectTypes.includes("all")} onclick={() => { selectedCrStates = ["all"]; selectedAppcodes = ["all"]; selectedProjectTypes = ["all"]; }} title="Clear filters">Clear</button>
           <span class="project-count">{filteredProjects.length} project(s)</span>
         </div>
+        <span class="dash-header-divider" aria-hidden="true"></span>
       {/if}
+      <select class="combo" aria-label="Year" value={selectedYear} onchange={handleYearSelect} disabled={interactionLocked} aria-disabled={interactionLocked}>
+        <option value="all">All years</option>
+        {#each years as y}
+          <option value={y}>{y}</option>
+        {/each}
+      </select>
+      <button class="btn-tiny" type="button" aria-label="Add year" title="Add year folder" onclick={(e) => (addYearOpen ? (addYearOpen = false) : openAddYearDialog(e.currentTarget))} disabled={interactionLocked} aria-disabled={interactionLocked}>＋</button>
+      <button class="btn-black" onclick={() => { if (!interactionLocked) onAddProject?.(); }} disabled={interactionLocked} aria-disabled={interactionLocked}>
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Add Project
+      </button>
+      <button class="dash-refresh" type="button" aria-label="Refresh data" title="Refresh Data" onclick={triggerRefresh} disabled={interactionLocked} aria-disabled={interactionLocked}><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class:spinning={refreshSpinning}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
     </div>
   </div>
+
+  {#if addYearOpen}
+    <button class="dash-filter-scrim" type="button" aria-label="Close add year" onclick={() => (addYearOpen = false)}></button>
+    <div class="dash-year-pop" role="dialog" aria-label="Add year" style="left:{addYearX}px; top:{addYearY}px;">
+      <label class="field-label">New year
+        <input class="input" type="number" bind:value={addYearValue} min="2000" max="2100" />
+      </label>
+      {#if addYearWarn}<p class="hy-warn">⚠ Far in the future — confirm this is intended.</p>{/if}
+      {#if addYearError}<p class="hy-err">✗ {addYearError}</p>{/if}
+      <div class="toolbar" style="justify-content:flex-end;">
+        <button class="btn-secondary" type="button" onclick={() => (addYearOpen = false)} disabled={addYearBusy || interactionLocked}>Cancel</button>
+        <button class="btn-primary" type="button" onclick={submitAddYear} disabled={addYearBusy || interactionLocked || !addYearValue.trim()}>{addYearBusy ? "Creating…" : "Create"}</button>
+      </div>
+    </div>
+  {/if}
 
   {#if openFilter}
     <button class="dash-filter-scrim" type="button" aria-label="Close filters" onclick={closeFilter}></button>
@@ -562,7 +649,7 @@
   <p class="empty-title">No projects found</p>
   <p class="empty-sub">Create a year folder first, then add a project. Existing filters may also be hiding rows.</p>
   <div class="dash-empty-actions">
-  {#if onAddYear}<button class="dash-empty-cta secondary" type="button" onclick={() => onAddYear?.()}>Add Year</button>{/if}
+  <button class="dash-empty-cta secondary" type="button" onclick={() => openAddYearDialog(null)}>Add Year</button>
   <button class="dash-empty-cta" type="button" onclick={() => onAddProject?.()}>Add Project</button>
   </div>
   </div>
@@ -781,6 +868,18 @@
   .dash-filter-trigger { height:26px; border:1px solid var(--light-border); border-radius:5px; background:#fff; color:var(--text-strong); font-size:10px; font-weight:900; padding:0 9px; cursor:pointer; white-space:nowrap; }
   .dash-filter-trigger:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .dash-filter-menu { position:fixed; z-index:61; min-width:180px; max-height:280px; overflow-y:auto; background:#fff; border:1px solid var(--light-border); border-radius:6px; box-shadow:var(--shadow-subtle); padding:6px; display:flex; flex-direction:column; gap:2px; }
+  .dash-header-divider { width:1px; height:18px; background:var(--light-border); margin:0 2px; flex:0 0 auto; }
+  .dash-refresh { display:flex; align-items:center; justify-content:center; width:var(--control-h); height:var(--control-h); border:1px solid var(--input-border); border-radius:7px; background:#fff; color:var(--text-strong); transition:border-color .16s ease, background .16s ease; flex:0 0 auto; }
+  .dash-refresh:hover:not(:disabled) { border-color:var(--text-muted); background:var(--row-alt); }
+  .dash-refresh:disabled { opacity:.5; cursor:not-allowed; }
+  .dash-year-pop { position:fixed; z-index:61; min-width:218px; background:#fff; border:1px solid var(--light-border); border-radius:10px; box-shadow:var(--shadow-panel); padding:10px; display:flex; flex-direction:column; gap:8px; animation:dash-pop-in .16s cubic-bezier(.22,1,.36,1); }
+  .hy-warn, .hy-err { margin:0; font-size:10px; font-weight:800; }
+  .hy-warn { color:var(--tag-amber-ink); }
+  .hy-err { color:var(--primary-red); }
+  .spinning { display:inline-block; animation:spin .65s linear; }
+  @keyframes dash-pop-in { from { opacity:0; transform:translateY(-3px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .dash-year-pop, .spinning { animation:none; } }
   .dash-check-row { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:800; color:var(--text-strong); padding:3px 4px; border-radius:4px; cursor:pointer; }
   .dash-check-row:hover { background:var(--row-alt); }
   .dash-check-row input { accent-color:var(--color-dbs-red); }

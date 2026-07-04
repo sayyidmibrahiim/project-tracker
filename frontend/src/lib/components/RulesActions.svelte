@@ -366,12 +366,12 @@
   .ru-root { display:flex; flex-direction:column; gap:10px; }
   .ru-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 10px; background:var(--color-workspace-panel); border:1px solid #D7DCE2; border-radius:6px; }
   .ru-btn { padding:5px 11px; font-size:10px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink,#111827); cursor:pointer; white-space:nowrap; }
-  .ru-btn:hover:not(:disabled) { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
+  .ru-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ru-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .ru-btn-primary { border-color:var(--color-dbs-red,#DA1E28); color:#fff; background:var(--color-dbs-red,#DA1E28); }
+  .ru-btn-primary { border-color:var(--color-dbs-red); color:#fff; background:var(--color-dbs-red); }
   .ru-btn-primary:hover:not(:disabled) { background:var(--color-dbs-red-hover,#B71820); }
-  .ru-btn-danger { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
-  .ru-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red,#DA1E28); color:#fff; }
+  .ru-btn-danger { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .ru-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red); color:#fff; }
   .ru-hint { font-size:10px; color:var(--color-muted); font-weight:700; }
   .ru-empty { font-size:11px; font-weight:700; color:var(--color-muted); padding:14px; text-align:center; background:#fff; border:1px dashed #D7DCE2; border-radius:6px; }
   .ru-list { display:flex; flex-direction:column; gap:8px; }
