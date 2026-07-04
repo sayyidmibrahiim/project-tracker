@@ -793,39 +793,38 @@ Notifications are **not** a separate page — they are opened from the bottom do
 
 ### 10.2 App Shell Layout
 
+> Updated 2026-07-04 (D-0011). Supersedes the red header and (per D-0005) the bottom dock.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  MAIN WRAPPER                                           │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ HEADER (red): Title . DateTime . Actions          │  │
-│  └───────────────────────────────────────────────────┘  │
-│  PAGE CONTENT (white body)                              │
-│                                                         │
-│              [bottom dock nav + notif popover]          │
+│ TITLEBAR (dark chrome): avatar · search · nav icons ·   │
+│           live clock · notifications · help · win ctrls │
+├─────────────────────────────────────────────────────────┤
+│ PAGE CONTENT (white body)                                │
+│  ┌───────────────────────────────────────────────────┐   │
+│  │ PAGE HEADER (white): icon + title | page actions  │   │
+│  └───────────────────────────────────────────────────┘   │
+│  page panels / tables / editors                           │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 10.3 Dock Navigation Rules
+### 10.3 TitleBar Navigation Rules (D-0005)
 
-- Navigation is a centered bottom dock, macOS-style, not a persistent left sidebar.
-- Dock is visible at rest, hides below the viewport during cursor movement or keyboard typing outside the dock, then reappears after the user is idle; focus/hover inside the dock and an open notification popover keep it visible.
-- Background: translucent `#0A0A0B` black chrome with subtle blur/depth.
-- 6 nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Settings.
-- Active nav item: `#231112` background + `#DC2626` border/accent.
-- Labels are tooltip-style on hover/focus; default dock is icon-first/minimal.
-- Notification is a dock button with unread badge. Click/hover opens a compact popover above the dock.
-- Notification popover shows newest first, supports per-item dismiss and dismiss all, and closes when cursor leaves the popover.
-- Motion: smooth 150–220ms reveal/hide; respect keyboard focus via `:focus-within`.
+- Navigation lives in the frameless custom TitleBar (dark chrome `#0A0A0B`), not a sidebar or dock.
+- 7 icon nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Global Plan, Settings. Each has an `aria-label` and a tooltip on hover.
+- Active nav item: `#231112` background + `#DC2626` icon color + small red indicator bar under the icon (non-color cue).
+- Live clock in the right cluster: `ddd, dd MMM yyyy HH:mm:ss` (en-GB, ticking; hidden below 1100px width).
+- Notification bell with unread badge opens a compact popover (newest first, per-item dismiss + dismiss all).
+- Window controls (minimize / maximize-restore / close) via Python bridge.
 
-### 10.4 Header Rules
+### 10.4 Page Header Rules
 
-Every page has a consistent red header:
+The red full-width header was removed 2026-07-04 (D-0011). Red is an accent color only — never a page wash.
 
-- Background: `#B91C1C`.
-- Left: vertical black divider + Page Title (white, bold, large).
-- Center: DateTime badge (white bg, black border, live `ddd, dd MMM yyyy HH:mm:ss`).
-- Right: Page-specific controls + Refresh button.
-- Refresh button: white bg, spinning animation on click.
+- Each page renders one white `.page-header` strip under the TitleBar: left = red-tinted page icon + bold title; right = `.page-header-actions` with page-specific controls.
+- Dashboard actions: filter dropdowns (CR State / Appcode / Project Type + Clear + project count) · divider · Year select + Add Year (＋, popover) · Add Project · Refresh (spinning icon on click).
+- Other pages keep their own contextual actions (e.g. Report filters, Project Details Back/selectors).
+- Refresh lives on the pages that need it (Dashboard); there is no global refresh bar.
 
 ---
 
