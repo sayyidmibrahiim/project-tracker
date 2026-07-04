@@ -7,7 +7,7 @@
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
 Active branch: `general/header-redesign`.
-Active slice: **Header redesign (roadmap #1)** — remove red `.app-header` bar, per-page white `.page-header` becomes the single header, Dashboard controls relocate into its page-header, DateTime badge moves to TitleBar, red token unification + a11y quick wins.
+Active slice: **Header redesign (roadmap #1)** — implemented, pending user manual verify: red `.app-header` removed (Header.svelte deleted), Dashboard controls in Dashboard `.page-header-actions`, live clock in TitleBar, red token unification, nav a11y (aria-labels + active indicator bar), PRD §10.2–10.4 rewritten, D-0011.
 
 Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.md`/`.txt` editable, `.docx` read-only pending pipeline, interaction lock).
 

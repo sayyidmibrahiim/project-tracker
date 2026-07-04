@@ -264,7 +264,7 @@
   .np-label { font-size:9px; font-weight:850; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
   .np-input { height:30px; border:1px solid var(--color-input-border); border-radius:5px; background:#fff; color:var(--color-ink); font-weight:750; font-size:12px; outline:none; padding:0 9px; width:100%; font-family:inherit; }
   .np-input:focus { border:2px solid var(--color-dbs-red); }
-  .np-input.invalid { border-color:#DC2626; }
+  .np-input.invalid { border-color:var(--active-red); }
   .np-input:disabled { background:var(--color-workspace-panel); color:var(--color-muted); }
   .np-year { max-width:160px; cursor:pointer; }
   .np-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -276,7 +276,7 @@
   .np-add-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .np-add-btn:disabled { opacity:0.5; cursor:not-allowed; }
   .np-msg { font-size:10px; font-weight:800; }
-  .np-err { color:#DC2626; }
+  .np-err { color:var(--active-red); }
   .np-ok { color:#15803D; }
   .np-muted { color:var(--color-muted); font-weight:700; }
   .np-create-err { background:var(--color-soft-pink-surface); border:1px solid var(--color-soft-pink-border); color:var(--color-dbs-red); border-radius:6px; padding:7px 10px; font-size:11px; font-weight:800; }

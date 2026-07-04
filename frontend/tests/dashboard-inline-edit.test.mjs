@@ -128,10 +128,14 @@ test("Dashboard project title cell is centered", () => {
   assert.match(DASHBOARD, /\.dash-name-btn\s*\{[^}]*text-align:\s*center/s);
 });
 
-test("Header no longer renders unused All CR filter dropdown", () => {
-  const HEADER = readFileSync(resolve(__dirname, "../src/lib/components/Header.svelte"), "utf8");
-  assert.doesNotMatch(HEADER, /All CR/);
-  assert.doesNotMatch(HEADER, /aria-label="Filter"/);
+test("Red app-header removed; Dashboard page-header hosts the controls (D-0011)", () => {
+  const APP = readFileSync(resolve(__dirname, "../src/App.svelte"), "utf8");
+  assert.doesNotMatch(APP, /app-header/);
+  assert.doesNotMatch(APP, /<Header\b/);
+  assert.match(DASHBOARD, /aria-label="Year"/);
+  assert.match(DASHBOARD, /Add Project/);
+  assert.match(DASHBOARD, /aria-label="Add year"/);
+  assert.match(DASHBOARD, /aria-label="Refresh data"/);
 });
 
 test("TitleBar renders notification state in the chrome", () => {

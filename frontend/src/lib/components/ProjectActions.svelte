@@ -327,19 +327,19 @@
     flex: 0 0 auto;
   }
   .pa-btn:hover:not(:disabled) {
-    border-color: var(--color-dbs-red, #DA1E28);
-    color: var(--color-dbs-red, #DA1E28);
+    border-color: var(--color-dbs-red);
+    color: var(--color-dbs-red);
   }
   .pa-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
   .pa-btn-danger {
-    border-color: var(--color-dbs-red, #DA1E28);
-    color: var(--color-dbs-red, #DA1E28);
+    border-color: var(--color-dbs-red);
+    color: var(--color-dbs-red);
   }
   .pa-btn-danger:hover:not(:disabled) {
-    background: var(--color-dbs-red, #DA1E28);
+    background: var(--color-dbs-red);
     color: #fff;
   }
   .pa-btn-sm {
@@ -383,7 +383,7 @@
     line-height: 1.3;
   }
   .pa-err {
-    color: var(--color-dbs-red, #DA1E28);
+    color: var(--color-dbs-red);
   }
   .pa-ok {
     color: #166534;

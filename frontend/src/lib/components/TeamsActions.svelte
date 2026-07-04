@@ -180,13 +180,13 @@
   .ta-textarea:disabled, .ta-input:disabled { background:#f3f4f6; color:var(--color-muted); }
   .ta-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .ta-btn { padding:5px 11px; font-size:10px; font-weight:800; border:1px solid #D7DCE2; border-radius:5px; background:#fff; color:var(--color-ink,#111827); cursor:pointer; white-space:nowrap; }
-  .ta-btn:hover:not(:disabled) { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
+  .ta-btn:hover:not(:disabled) { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ta-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .ta-btn-danger { border-color:var(--color-dbs-red,#DA1E28); color:var(--color-dbs-red,#DA1E28); }
-  .ta-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red,#DA1E28); color:#fff; }
+  .ta-btn-danger { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .ta-btn-danger:hover:not(:disabled) { background:var(--color-dbs-red); color:#fff; }
   .ta-hint { margin:0; font-size:9px; font-weight:700; color:var(--color-muted); line-height:1.4; }
   .ta-feedback { font-size:10px; font-weight:800; line-height:1.3; }
-  .ta-err { color:var(--color-dbs-red,#DA1E28); }
+  .ta-err { color:var(--color-dbs-red); }
   .ta-ok { color:#166534; }
   .ta-notice { color:var(--color-muted,#6B7280); }
 </style>

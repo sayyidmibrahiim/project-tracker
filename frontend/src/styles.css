@@ -31,12 +31,10 @@
   --notification-border: #F3F4F6;
   --soft-white-border: #D7DCE2;
   --subtle-white-border: #E5E7EB;
-  --header-h: 58px;
   --control-h: 26px;
   --sidebar-expanded: 160px;
   --sidebar-collapsed: 52px;
   --font: Inter, "Segoe UI", Arial, sans-serif;
-  --shadow-header: 0 5px 20px rgba(0,0,0,.50);
   --shadow-notif: 0 10px 35px rgba(0,0,0,.95);
   --shadow-date: 0 1px 10px rgba(0,0,0,.28);
   --shadow-panel: 0 3px 14px rgba(0,0,0,.24);
@@ -121,22 +119,8 @@ button { cursor: pointer; }
 .main, .main-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--workspace-bg); }
 .app-content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-.app-header {
-  min-height: var(--header-h);
-  flex: 0 0 var(--header-h);
-  background: linear-gradient(180deg, var(--primary-red), var(--red-hover));
-  border-bottom: 2px solid #7f1717;
-  box-shadow: var(--shadow-header);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  z-index: 20;
-}
-.header-title-box { display: flex; align-items: center; min-width: 0; gap: 8px; }
-.header-right { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.header-year { position: relative; display: flex; align-items: center; gap: 6px; }
-.page-title { color: #fff; font-size: 22px; font-weight: 900; letter-spacing: 1px; margin: 0; white-space: nowrap; line-height: 1; }
+/* The red app header bar was removed 2026-07-04 (D-0011): each page's white
+   .page-header is the single header under the dark TitleBar; red is accent only. */
 
 .screen { display: none; flex-direction: column; flex: 1; min-height: 0; padding: 14px; gap: 12px; overflow: hidden; background: var(--workspace-bg); }
 .screen.active { display: flex; }
@@ -188,8 +172,8 @@ button { cursor: pointer; }
 .btn-secondary:hover { background: var(--soft-pink-surface); border-color: var(--soft-pink-border); }
 .btn-tiny { width: 30px; min-width: 30px; height: 30px; background: #fff; color: var(--primary-red); border-color: rgba(10,10,11,.55); padding: 0; border-radius: 7px; box-shadow: 0 2px 10px rgba(0,0,0,.18); font-size: 15px; }
 .btn-tiny:hover { background: var(--soft-pink-surface); border-color: var(--primary-red); transform: translateY(-1px); }
-.btn-danger { background: #B5382F; color: #fff; border: 0; padding: 0 12px; height: 30px; }
-.btn-danger:hover { background: #942D26; }
+.btn-danger { background: var(--primary-red); color: #fff; border: 0; padding: 0 12px; height: 30px; }
+.btn-danger:hover { background: var(--red-hover); }
 .refresh-button, .btn-refresh { width: 30px; min-width: 30px; height: 28px; background: #fff; color: var(--text-strong); border: 1px solid var(--soft-white-border); box-shadow: none; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .refresh-button:hover, .btn-refresh:hover { border-color: var(--primary-red); color: var(--primary-red); }
 .refresh-button svg, .btn-refresh svg { display: inline-block; }
@@ -296,8 +280,6 @@ button { cursor: pointer; }
 .empty-sub { color:var(--text-secondary); font-size:11px; margin:4px auto 0; max-width:72ch; line-height:1.4; }
 
 @media (max-width: 1360px) {
-  .app-header { grid-template-columns: minmax(180px, .8fr) minmax(230px, .8fr) minmax(300px, 1.4fr); padding: 10px 12px; }
-  .page-title { font-size: 19px; }
   .metric-row { grid-template-columns: repeat(3, minmax(135px, 1fr)); }
   .splitter, .category-grid { grid-template-columns: 1fr; gap: 12px; overflow: auto; }
   .splitter .handle, .category-grid .handle, .handle { display: none; }

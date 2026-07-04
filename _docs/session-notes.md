@@ -10,15 +10,19 @@
 
 ## 2026-07-04
 
-Branch aktif: `project-details/rte-interaction-bugs` (unchanged — Branch 0 of master plan).
+Branch aktif: `general/header-redesign` (Branch 1 of master plan; Branch 0 merged to main same day).
 
-**Now:** Master completion plan approved: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md` (7 branches: verify+merge current → header-redesign → tiptap-docx-pipeline → approval-polling → cicd-bitbucket → professional-polish → packaging). Locked: per-format RTE strategy (md/txt direct save; docx = source.json + python-docx export), red header removed (page-header single header), exporter must be free/offline (office network blocks GitHub/PyPI/paid registries).
+**Now:** Header redesign implemented: red `.app-header` deleted (Header.svelte removed), Dashboard controls (Year/Add Year/Add Project/Refresh) moved into Dashboard `.page-header-actions` with portal-style Add-Year popover; live clock (`ddd, dd MMM yyyy HH:mm:ss`) added to TitleBar right cluster; nav icons got aria-labels + red active-indicator bar; avatar debug tooltip removed; red tokens unified (`#DA1E28` fallbacks, `.btn-danger` `#B5382F/#942D26`, `#DC2626` hardcodes → tokens). PRD §10.2–10.4 rewritten (also aligned stale dock text to D-0005 TitleBar). D-0011 recorded. Fixed stale WSL `core.hooksPath` in .git/config; pre-commit gains one svelte-check retry vs transient esbuild OOM; retired graphify post-commit/post-checkout hooks deleted (D-0009).
 
-**Next:** User manual verify Piece B RTE follow-up (checklist delivered), then commit 18 dirty files + flow-tiptap.md + master plan, merge to main, start `general/header-redesign` (direct code, no mockup — user rule 2026-07-04).
+**Next:** User manual verify header redesign (checklist delivered) → merge to main → Branch 2 `project-details/tiptap-docx-pipeline`.
 
-**Blocked:** Branch 0 merge awaits user manual verification. Stray empty `notes.md` at repo root awaits delete approval.
+**Blocked:** Branch 1 merge awaits user manual verification.
 
-**active_menu:** project-details
+**Verification:** svelte-check 152 files 0/0; frontend tests 156 pass / 0 fail; app smoke 14s clean (no stderr); `npm run build` ok (pre-existing chunk-size warning).
+
+**Master plan (earlier today):** `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md` approved (7 branches). Locked: per-format RTE strategy (md/txt direct; docx = source.json + python-docx export), free/offline exporter (office network blocks GitHub/PyPI/paid registries), no-mockup design rule.
+
+**active_menu:** general (header shell)
 
 ---
 

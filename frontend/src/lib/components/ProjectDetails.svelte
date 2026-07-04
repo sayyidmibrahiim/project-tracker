@@ -1253,7 +1253,7 @@
   .cr-link-save-btn:disabled { opacity:0.45; cursor:not-allowed; }
   .cr-link-feedback { display:inline-block; margin-top:5px; font-size:10.5px; font-weight:600; }
   .cr-link-ok { color:var(--tag-green-ink); }
-  .cr-link-err { color:#DC2626; }
+  .cr-link-err { color:var(--active-red); }
   .cr-state-select { padding:5px 9px; font-size:11.5px; font-weight:800; border:1px solid var(--primary-red); border-radius:6px; background:var(--primary-red); color:#fff; outline:none; cursor:pointer; }
   .cr-state-select:focus { box-shadow:0 0 0 2px var(--color-dbs-red-active); }
   .cr-state-select:disabled { opacity:0.55; cursor:not-allowed; }

@@ -38,7 +38,6 @@
 
   let userName = $state("");
   let userInitials = $state("U");
-  let debugInfo = $state("");
   let notifOpen = $state(false);
   let helpOpen = $state(false);
   let unreadCount = $derived(notifications.filter((n) => !n.dismissed).length);
@@ -48,6 +47,13 @@
   let searchFocused = $state(false);
   let notifContainerEl = $state<HTMLDivElement | undefined>(undefined);
   let helpContainerEl = $state<HTMLDivElement | undefined>(undefined);
+
+  // Live clock (PRD §10.4: ddd, dd MMM yyyy HH:mm:ss — global, lives in the chrome).
+  let now = $state(new Date());
+  let clockTimer: ReturnType<typeof setInterval> | undefined;
+  let clockText = $derived(
+    `${now.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })} ${now.toLocaleTimeString("en-GB", { hour12: false })}`
+  );
 
   function handleWindowClick(e: MouseEvent) {
     if (notifOpen && notifContainerEl && !notifContainerEl.contains(e.target as Node)) {
@@ -64,18 +70,18 @@
     if (resp.ok && resp.data) {
       userName = resp.data.name;
       userInitials = resp.data.initials || "U";
-      if (resp.data._debug) debugInfo = resp.data._debug;
     } else {
       userName = resp.error?.message || "bridge_failed";
-      debugInfo = resp.error?.code || "";
     }
     window.addEventListener("click", handleWindowClick);
     unsubWinState = onWinStateChange((s) => (winState = s));
+    clockTimer = setInterval(() => (now = new Date()), 1000);
   });
 
   onDestroy(() => {
     window.removeEventListener("click", handleWindowClick);
     unsubWinState?.();
+    if (clockTimer) clearInterval(clockTimer);
   });
 
   function handleSearchInput(e: Event) {
@@ -127,7 +133,7 @@
 
 <div class="titlebar" ondblclick={handleToggleMaximize} role="region" aria-label="Window titlebar">
   <div class="titlebar-left">
-    <div class="user-avatar" title="{userName} [{debugInfo}]">
+    <div class="user-avatar" title={userName}>
       <span class="avatar-initials">{userInitials}</span>
       <span class="online-dot"></span>
     </div>
@@ -152,6 +158,8 @@
       <button
         class="nav-tab"
         class:active={currentPage === item.id}
+        aria-label={item.label}
+        aria-current={currentPage === item.id ? "page" : undefined}
         onclick={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "click", from: currentPage, to: item.id }); e.preventDefault(); e.stopPropagation(); if (currentPage !== item.id) navigateTo(item.id); }}
         onpointerdown={(e) => { logActivity({ source: "TitleBar.nav", kind: "ui", event: "pointerdown", from: currentPage, to: item.id, clientX: e.clientX, clientY: e.clientY, elementFromPoint: document.elementFromPoint(e.clientX, e.clientY)?.className || "" }); e.preventDefault(); e.stopPropagation(); navigateTo(item.id); }}
       >
@@ -162,6 +170,7 @@
   </nav>
 
   <div class="titlebar-right">
+    <span class="titlebar-clock" aria-live="off">{clockText}</span>
     <div class="notif-container" bind:this={notifContainerEl}>
       <button
         class="notif-btn"
@@ -332,6 +341,18 @@
   .nav-tab:hover:not(:disabled) { background: var(--active-nav-bg); color: #fff; }
   .nav-tab:disabled { opacity:0.45; cursor:not-allowed; }
   .nav-tab.active { color: var(--active-red); background: var(--active-nav-bg); }
+  /* Non-color active cue (a11y): small indicator bar under the active tab. */
+  .nav-tab.active::after {
+    content: "";
+    position: absolute;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--active-red);
+  }
   .nav-tab-icon { display: flex; }
   .nav-tab-tooltip {
     display: none;
@@ -352,6 +373,16 @@
     pointer-events: none;
   }
   .nav-tab:hover .nav-tab-tooltip { display: block; }
+
+  .titlebar-clock {
+    color: var(--inactive-nav-text);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    padding: 0 6px;
+    font-variant-numeric: tabular-nums;
+  }
 
   .notif-container { position: relative; -webkit-app-region: no-drag; }
   .notif-btn {
@@ -501,6 +532,9 @@
   .win-btn:hover { background: var(--surface-dark); color: #fff; }
   .win-close:hover { background: var(--primary-red); color: #fff; }
 
+  @media (max-width: 1100px) {
+    .titlebar-clock { display: none; }
+  }
   @media (max-width: 900px) {
     .search-box { width: 140px; }
     .search-box.focused { width: 180px; }
