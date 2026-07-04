@@ -272,7 +272,9 @@ def discover_subproject_paths(project_path: Path) -> list[Path]:
     return sorted(
         child
         for child in project_path.iterdir()
-        if child.is_dir() and not is_organizational_folder(child)
+        if child.is_dir()
+        and not is_organizational_folder(child)
+        and not child.name.startswith(".")
     )
 
 
@@ -283,6 +285,7 @@ def discover_drone_paths(project_path: Path) -> list[Path]:
         for child in project_path.iterdir()
         if child.is_dir()
         and not is_organizational_folder(child)
+        and not child.name.startswith(".")
         and child.name != "_cr-docs"
     )
 
@@ -294,6 +297,8 @@ def _scaffold_drone(project_path: Path, drone_name: str) -> Path:
     validate_windows_folder_name(drone_name)
     if drone_name == "_cr-docs":
         raise ValueError("Drone name cannot be '_cr-docs' (reserved folder)")
+    if drone_name.startswith("."):
+        raise ValueError("Drone name cannot start with '.' (reserved for sidecar folders)")
     drone_path = project_path / drone_name
     if drone_path.exists():
         raise ValueError(f"Drone folder already exists: {drone_path}")
