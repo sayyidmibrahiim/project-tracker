@@ -25,6 +25,7 @@ import copy
 import hashlib
 import json
 import re
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -113,6 +114,17 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _hide_dir_windows(path: Path) -> None:
+    if sys.platform != "win32" or not path.is_dir():
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x02)
+    except Exception:
+        pass
 
 
 def _docx_to_html(path: Path) -> str:
@@ -235,10 +247,12 @@ class RteDocumentService:
         return data
 
     def _store_source(self, docx_path: Path, source: dict) -> None:
+        source_path = self.source_path(docx_path)
         _atomic_write_text(
-            self.source_path(docx_path),
+            source_path,
             json.dumps(source, ensure_ascii=False, indent=1),
         )
+        _hide_dir_windows(source_path.parent)
 
     def _new_source(self, docx_path: Path) -> dict:
         return {
@@ -461,6 +475,7 @@ class RteDocumentService:
         target = self.assets_dir(document_path) / file_name
         if not target.is_file():
             _atomic_write_bytes(target, data)
+        _hide_dir_windows(self.sidecar_dir(document_path))
         return {
             "asset_id": asset_id,
             "file_name": file_name,

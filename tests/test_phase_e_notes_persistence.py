@@ -378,6 +378,22 @@ def test_rte_pipeline_save_revisions_hash_skip_and_stale(rte_docx):
         svc.save_document(docx, {"content": _doc("b"), "base_revision": 0})
 
 
+def test_rte_pipeline_hides_sidecar_dir_on_windows(rte_docx):
+    import ctypes
+    import sys
+
+    if sys.platform != "win32":
+        pytest.skip("Windows hidden attribute only")
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    svc.save_document(docx, {"content": _doc("hidden"), "base_revision": 0})
+    sidecar = svc.sidecar_dir(docx)
+
+    attrs = ctypes.windll.kernel32.GetFileAttributesW(str(sidecar))
+    assert attrs != -1
+    assert attrs & 0x02
+
+
 def test_rte_pipeline_save_rejected_for_implemented_project(tmp_path):
     from services.rte_document_service import RteDocumentService
 
