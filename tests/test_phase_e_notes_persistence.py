@@ -256,3 +256,215 @@ def test_rte_msg_is_unsupported_and_never_saved(js_api, temp_project):
     saved = js_api.save_rte_file(str(msg_path), "nope")
     assert saved["ok"] is False
     assert saved["error"]["code"] == "RTE_SAVE_FAILED"
+
+
+# ── RTE docx pipeline (D-0012: source.json + background export) ─────────────
+
+PNG_1PX = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDAT\x08\xd7c\xf8\xcf"
+    b"\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def _doc(text: str = "hello") -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": text}]}
+        ],
+    }
+
+
+@pytest.fixture
+def rte_docx(temp_project):
+    """A pipeline service with a recording fake exporter + a docx target path."""
+    from services.rte_document_service import RteDocumentService
+
+    calls: list[int] = []
+
+    def fake_exporter(source, assets_dir, target):
+        calls.append(int(source.get("revision", 0)))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"fake docx " + str(source.get("revision")).encode())
+
+    service = RteDocumentService(exporter=fake_exporter)
+    docx_path = temp_project["project_path"] / "_cr-docs" / "uat-signoff.docx"
+    docx_path.parent.mkdir(parents=True, exist_ok=True)
+    yield {"service": service, "docx": docx_path, "calls": calls}
+    service.coordinator.shutdown(timeout_s=5.0)
+
+
+def test_rte_pipeline_open_empty_docx_gives_empty_doc(rte_docx):
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    docx.write_bytes(b"")
+    opened = svc.open_document(docx)
+    assert opened["needs_migration"] is False
+    assert opened["revision"] == 0
+    assert opened["content"] == {"type": "doc", "content": []}
+    assert opened["saveStrategy"] == "docx_pipeline"
+    assert opened["editable"] is True
+
+
+def test_rte_pipeline_open_nonempty_docx_requests_migration(rte_docx):
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    from docx import Document
+
+    d = Document()
+    d.add_paragraph("legacy word content")
+    d.save(str(docx))
+
+    opened = svc.open_document(docx)
+    assert opened["needs_migration"] is True
+    assert opened["content"] is None
+    assert "legacy word content" in (opened["content_html"] or "")
+
+
+def test_rte_pipeline_save_revisions_hash_skip_and_stale(rte_docx):
+    from services.rte_document_service import StaleRevisionError
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    first = svc.save_document(docx, {"content": _doc("a"), "base_revision": 0})
+    assert first["revision"] == 1 and first["skipped"] is False
+    assert svc.source_path(docx).is_file()
+
+    same = svc.save_document(
+        docx, {"content": _doc("a"), "base_revision": 1, "reason": "autosave"}
+    )
+    assert same["skipped"] is True and same["revision"] == 1
+
+    with pytest.raises(StaleRevisionError):
+        svc.save_document(docx, {"content": _doc("b"), "base_revision": 0})
+
+
+def test_rte_pipeline_save_rejected_for_implemented_project(tmp_path):
+    from services.rte_document_service import RteDocumentService
+
+    svc = RteDocumentService(exporter=lambda *a: None)
+    docx = tmp_path / "2024" / "IMPLEMENTED" / "proj" / "_cr-docs" / "uat-signoff.docx"
+    docx.parent.mkdir(parents=True)
+    opened = svc.open_document(docx)
+    assert opened["capability"] == "read_only"
+    assert opened["saveStrategy"] == "none"
+    with pytest.raises(ValueError):
+        svc.save_document(docx, {"content": _doc(), "base_revision": 0})
+    svc.coordinator.shutdown(timeout_s=2.0)
+
+
+def test_rte_pipeline_image_validation_and_traversal_guard(rte_docx):
+    import base64 as b64
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    saved = svc.save_image(docx, b64.b64encode(PNG_1PX).decode())
+    assert saved["src"].startswith("asset://")
+    assert (svc.assets_dir(docx) / saved["file_name"]).is_file()
+
+    # duplicate paste dedupes to the same content-addressed file
+    again = svc.save_image(docx, b64.b64encode(PNG_1PX).decode())
+    assert again["asset_id"] == saved["asset_id"]
+
+    with pytest.raises(ValueError):
+        svc.save_image(docx, b64.b64encode(b"plain text bytes").decode())
+    with pytest.raises(ValueError):
+        svc.read_asset(docx, "asset://../../secret.png")
+    with pytest.raises(ValueError):
+        svc.read_asset(docx, "..\\..\\secret.png")
+
+    read = svc.read_asset(docx, saved["src"])
+    assert read["data_uri"].startswith("data:image/png;base64,")
+
+
+def test_rte_pipeline_dehydration_sweeps_loose_base64_images(rte_docx):
+    import base64 as b64
+    import json as jsonlib
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    data_uri = "data:image/png;base64," + b64.b64encode(PNG_1PX).decode()
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "image", "attrs": {"src": data_uri}}],
+            }
+        ],
+    }
+    svc.save_document(docx, {"content": content, "base_revision": 0})
+    stored = jsonlib.loads(svc.source_path(docx).read_text(encoding="utf-8"))
+    img = stored["content"]["content"][0]["content"][0]
+    assert img["attrs"]["src"].startswith("asset://")
+    assert img["attrs"]["assetId"]
+    assert list(svc.assets_dir(docx).glob("*.png"))
+
+
+def test_rte_pipeline_coordinator_latest_revision_wins(temp_project):
+    import threading as th
+
+    from services.rte_document_service import RteDocumentService
+
+    started = th.Event()
+    release = th.Event()
+    calls: list[int] = []
+
+    def slow_exporter(source, assets_dir, target):
+        calls.append(int(source.get("revision", 0)))
+        started.set()
+        release.wait(timeout=10)
+
+    svc = RteDocumentService(exporter=slow_exporter)
+    docx = temp_project["project_path"] / "_cr-docs" / "prod-lv.docx"
+    docx.parent.mkdir(parents=True, exist_ok=True)
+
+    svc.save_document(docx, {"content": _doc("r1"), "base_revision": 0, "reason": "manual"})
+    assert started.wait(timeout=5)
+    # While rev-1 export runs, revisions 2..4 arrive: only 4 must export.
+    svc.save_document(docx, {"content": _doc("r2"), "base_revision": 1, "reason": "manual"})
+    svc.save_document(docx, {"content": _doc("r3"), "base_revision": 2, "reason": "manual"})
+    svc.save_document(docx, {"content": _doc("r4"), "base_revision": 3, "reason": "manual"})
+    release.set()
+    assert svc.coordinator.wait_idle(timeout_s=10)
+    svc.coordinator.shutdown(timeout_s=5.0)
+    assert calls[0] == 1
+    assert calls[-1] == 4
+    assert len(calls) == 2, f"intermediate revisions must be dropped, got {calls}"
+
+
+def test_rte_pipeline_locked_target_marks_pending_and_keeps_old_docx(temp_project):
+    from infrastructure.docx_writer import DocxTargetLockedError
+    from services.rte_document_service import RteDocumentService
+
+    def locked_exporter(source, assets_dir, target):
+        raise DocxTargetLockedError(str(target))
+
+    svc = RteDocumentService(exporter=locked_exporter)
+    docx = temp_project["project_path"] / "_cr-docs" / "uat-signoff.docx"
+    docx.parent.mkdir(parents=True, exist_ok=True)
+    docx.write_bytes(b"previous word file")
+
+    svc.save_document(docx, {"content": _doc("x"), "base_revision": 0, "reason": "manual"})
+    assert svc.coordinator.wait_idle(timeout_s=10)
+    status = svc.export_status(docx)
+    assert status["state"] == "pending_retry"
+    assert status["export_pending"] is True
+    assert docx.read_bytes() == b"previous word file"
+    svc.coordinator.shutdown(timeout_s=5.0)
+
+
+def test_rte_pipeline_real_export_roundtrip(temp_project):
+    """End-to-end with the real python-docx exporter."""
+    from docx import Document
+
+    from services.rte_document_service import RteDocumentService
+
+    svc = RteDocumentService()
+    docx = temp_project["project_path"] / "_cr-docs" / "uat-signoff.docx"
+    docx.parent.mkdir(parents=True, exist_ok=True)
+
+    svc.save_document(
+        docx, {"content": _doc("exported body"), "base_revision": 0, "reason": "manual"}
+    )
+    assert svc.coordinator.wait_idle(timeout_s=15)
+    svc.coordinator.shutdown(timeout_s=5.0)
+    assert docx.is_file() and docx.stat().st_size > 0
+    texts = [p.text for p in Document(str(docx)).paragraphs]
+    assert any("exported body" in t for t in texts)
