@@ -43,6 +43,17 @@
 
   // First-Run Setup (PRD §11.3): shown when root_folder is unset.
   let rootUnset: boolean = $state(false);
+  let interactionLocks: Set<string> = $state(new Set());
+  let interactionLocked = $derived(interactionLocks.size > 0);
+
+  function onInteractionLock(event: Event) {
+    const detail = (event as CustomEvent<{ source?: string; locked?: boolean }>).detail ?? {};
+    const source = detail.source || "unknown";
+    const next = new Set(interactionLocks);
+    if (detail.locked) next.add(source);
+    else next.delete(source);
+    interactionLocks = next;
+  }
 
   function navigate(id: string) {
     const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan"];
@@ -187,6 +198,7 @@
     // empty api object) and all initial loads silently bail.
     await waitForPywebviewReady();
     logActivity({ source: "App.onMount", kind: "lifecycle", event: "bridge-ready", currentPage });
+    window.addEventListener("app:interaction-lock", onInteractionLock);
     loadNotifications();
     loadYears();
     checkRoot();
@@ -195,6 +207,7 @@
 
   onDestroy(() => {
     stopPolling();
+    window.removeEventListener("app:interaction-lock", onInteractionLock);
     stopActivityLogging?.();
   });
 </script>
@@ -219,6 +232,7 @@
     onDismiss={handleDismiss}
     onDismissAll={handleDismissAll}
     onSearchChange={handleSearchChange}
+    interactionLocked={interactionLocked}
   />
   <main class="main">
     <Header
@@ -231,6 +245,7 @@
       onAddProject={openNewProjectPage}
       onAddYear={addYear}
       {openAddYearToken}
+      interactionLocked={interactionLocked}
     />
     <div class="app-content">
       {#key currentPage}

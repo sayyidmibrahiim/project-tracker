@@ -211,7 +211,7 @@ test("NotesEditor renders the markdown toolbar and autosave status", async () =>
   assert.match(body, /title="Link"/);
   // Default edit mode shows the visual area; autosave (not an explicit Save button).
   assert.match(body, /ne-editor-host/);
-  assert.match(body, /Autosave on/);
+  assert.match(body, /Saved/);
   assert.doesNotMatch(body, /Save Notes/);
 });
 

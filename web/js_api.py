@@ -282,24 +282,21 @@ class NotesServiceProtocol(Protocol):
         """Update project notes."""
 
     def get_rte_file(self, file_path: Path) -> object:
-        """Read a file for RTE editing. Returns {content, format, editable}.
+        """Read a file for RTE use with capability metadata.
 
-        For ``_cr-docs/uat-signoff`` and ``_cr-docs/prod-lv`` the file is lazily
-        scaffolded (0-byte) on first read. ``format`` is one of
-        ``html`` (the two CR-doc names), ``markdown`` (``*.md``), ``msg``
-        (``*.msg``, binary never read) or ``text``. ``editable`` is False when
-        the containing project is in IMPLEMENTED or for ``msg`` files.
+        Returns ``{content, format, editable, capability, message, saveStrategy,
+        supportedEditorFeatures}``. Binary/unsupported formats are never read into
+        Tiptap. DOCX is read-only until a source-sync adapter exists.
         """
 
     def save_rte_file(self, file_path: Path, content: str) -> object:
-        """Save RTE content back to ``file_path`` (atomic write).
+        """Save editable RTE content back to ``file_path`` (atomic write).
 
-        Rejected when the containing project is IMPLEMENTED (``LOCKED``) or
-        when the target is a ``msg`` file (``NOT_EDITABLE``).
+        Rejected for read-only/unsupported targets, including DOCX in this slice.
         """
 
     def export_to_docx(self, content_html: str) -> str:
-        """Return a base64-encoded .docx byte stream for rendered HTML."""
+        """Return a base64-encoded .docx byte stream for legacy/internal export."""
 
 
 class SettingsDependencyProtocol(Protocol):

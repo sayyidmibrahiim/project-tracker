@@ -6,10 +6,26 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `main`.
-Active slice: **Piece B merged** — CR Docs `.docx` storage + multi-file RTE editor + Export to Word + professional AppData logging. Known remaining issues: Tiptap RTE still has interaction bugs on CR projects (to be addressed in a follow-up session). Branch `project-details/cr-docs-rte` kept.
+Active branch: `project-details/rte-interaction-bugs`.
+Active slice: **Piece B RTE format-aware follow-up** — Export-to-Word UI removed from Project Details; selected RTE file now saves by capability/format (`.md` Markdown, `.txt` plain text, `.docx` read-only until safe source-sync adapter exists); CR doc switches flush active editor first; titlebar/header interactions lock during RTE load/flush. Manual CR docs switching/reopen verification pending user check.
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
+
+## Roadmap to 100% (approved 2026-07-04)
+
+Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md`.
+
+| # | Branch | Scope | Status |
+| - | ------ | ----- | ------ |
+| 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | Active — awaiting user manual check |
+| 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | Planned |
+| 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | Planned |
+| 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Planned |
+| 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Planned |
+| 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
+| 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
+
+Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeline), python-docx exporter (free/offline — office network blocks paid/online deps), red header removed (page-header is the only header), sequence pipeline → C → D.
 
 ## Active Blockers
 
@@ -26,7 +42,7 @@ Previous completed area remains fixed: frameless titlebar, Dashboard, and Projec
 | Second Brain        | Done, pending user verify |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
-| Piece B CR docs RTE | Merged (known RTE interaction bugs remain) |
+| Piece B CR docs RTE | Format-aware follow-up implemented, pending user verify |
 | Windows verify      | Not started (needs real Windows) |
 | Packaging           | Not started |
 
@@ -41,7 +57,8 @@ Previous completed area remains fixed: frameless titlebar, Dashboard, and Projec
 
 ```
 svelte-check: 0 errors, 0 warnings
-frontend tests: 149 pass / 0 fail
-frontend build: ok
-app startup: runs, no traceback (2026-07-03, branch `project-details/cr-docs-rte` merged to `main`)
+frontend tests: 155 pass / 0 fail
+RTE backend capability tests: 13 pass / 0 fail
+bridge contract guard: 3 pass / 0 fail
+app startup: no stdout/stderr traceback captured before 12s smoke was stopped
 ```

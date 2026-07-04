@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { callBridge, exportToDocx, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow, DroneTicket, RteFile, RteFileContent } from "../types";
+  import { callBridge, getRteFile, isPywebviewReady, waitForPywebviewReady } from "../bridge";
+  import type { ProjectRow, ProjectDetail, FileRow, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
@@ -10,7 +10,6 @@
   import ConfirmModal from "./ConfirmModal.svelte";
   import { addToast } from "../stores/toastStore";
   import type { ToastAction } from "../stores/toastStore";
-  import { renderMarkdown } from "../markdown";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
   let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
@@ -41,6 +40,11 @@
   let crDocContentPath: string = $state("");
   let crDocsLoading: boolean = $state(false);
   let crDocsError: string = $state("");
+  let crDocsFlushing: boolean = $state(false);
+  let rteEditorFlush: (() => Promise<boolean>) | undefined;
+  function setRteEditorApi(api: { flushNow: () => Promise<boolean> } | undefined) {
+    rteEditorFlush = api?.flushNow;
+  }
   type TopActionState = "idle" | "saving" | "success" | "error";
   let topActionState: TopActionState = $state("idle");
   let topActionError: string = $state("");
@@ -221,6 +225,7 @@
   }
 
   async function selectProject(path: string) {
+    await rteEditorFlush?.();
     selectedPath = path;
     detailState = "loading";
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
@@ -639,16 +644,16 @@
       const projectPath = detail.project_path;
       const isLocked = detail.project_state === "IMPLEMENTED";
       const list: RteFile[] = [
-        { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, isOpenable: false },
-        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: !isLocked, isOpenable: false },
-        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: !isLocked, isOpenable: false },
+        { name: "notes.md", path: `${projectPath.replace(/\/$/, "")}/notes.md`, format: "markdown", editable: !isLocked, capability: isLocked ? "read_only" : "editable", saveStrategy: isLocked ? "none" : "markdown", isOpenable: false },
+        { name: "uat-signoff.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/uat-signoff.docx`, format: "docx", editable: false, capability: "read_only", saveStrategy: "none", isOpenable: false },
+        { name: "prod-lv.docx", path: `${projectPath.replace(/\/$/, "")}/_cr-docs/prod-lv.docx`, format: "docx", editable: false, capability: "read_only", saveStrategy: "none", isOpenable: false },
       ];
       // Append any .msg files already present in _cr-docs/ (created by Piece C).
       const msgResp = await callBridge<FileRow[]>("file_list", `${projectPath.replace(/\/$/, "")}/_cr-docs`);
       if (msgResp.ok && msgResp.data) {
         for (const f of msgResp.data) {
           if (f.name.toLowerCase().endsWith(".msg")) {
-            list.push({ name: f.name, path: f.path, format: "msg", editable: false, isOpenable: true });
+            list.push({ name: f.name, path: f.path, format: "msg", editable: false, capability: "unsupported", saveStrategy: "none", isOpenable: true });
           }
         }
       }
@@ -664,16 +669,25 @@
     }
   }
 
+  function setInteractionLock(source: string, locked: boolean) {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("app:interaction-lock", { detail: { source, locked } }));
+  }
+
   /** Load the selected CR doc content (or prepare the .msg open-external panel). */
   async function selectCrDoc(path: string) {
-    selectedCrDocPath = path;
-    crDocContent = null;
-    crDocContentPath = "";
-    const file = crDocsFiles.find((f) => f.path === path);
-    if (!file) return;
-    if (file.format === "msg") return; // rendered as open-external panel
-    crDocsLoading = true; crDocsError = "";
+    crDocsFlushing = true;
+    setInteractionLock("project-details-rte", true);
     try {
+      const flushed = await rteEditorFlush?.();
+      if (flushed === false) { crDocsError = "Save failed"; return; }
+      selectedCrDocPath = path;
+      crDocContent = null;
+      crDocContentPath = "";
+      const file = crDocsFiles.find((f) => f.path === path);
+      if (!file) return;
+      if (file.format === "msg") return; // rendered as open-external panel
+      crDocsLoading = true; crDocsError = "";
       const resp = await getRteFile(path);
       if (!resp.ok) { crDocsError = resp.error.message; return; }
       // A3 fix: only mount the editor after content for the selected path is ready.
@@ -684,6 +698,8 @@
       crDocsError = err instanceof Error ? err.message : String(err);
     } finally {
       crDocsLoading = false;
+      crDocsFlushing = false;
+      setInteractionLock("project-details-rte", false);
     }
   }
 
@@ -691,18 +707,6 @@
   async function openCrDocExternal(path: string) {
     const resp = await callBridge("file_open", path);
     if (!resp.ok) addToast(`Could not open file: ${resp.error.message}`, "error");
-  }
-
-  async function exportSelectedDocToWord() {
-    const selected = selectedCrDoc;
-    const name = selected?.name ?? "notes.md";
-    const suggested = `${name.replace(/\.(md|docx|html?)$/i, "")}.docx`;
-    const html = selected && selected.format !== "markdown"
-      ? (crDocContent?.content ?? "")
-      : renderMarkdown(notes);
-    const resp = await exportToDocx(html, suggested);
-    if (!resp.ok) { addToast(`Export failed: ${resp.error.message}`, "error"); return; }
-    if (resp.data?.written) addToast(`Exported Word file: ${resp.data.path}`, "success");
   }
 
   /** The currently selected CR Docs file (or null). */
@@ -1068,7 +1072,6 @@
                 <div class="pd-section-headline">
                   <h4 class="pd-section-title">Notes</h4>
                   <div class="pd-doc-actions">
-                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord}>Export to Word</button>
                     <button class="pd-command-btn" type="button" onclick={() => (showNotesEditor = !showNotesEditor)}>
                       {showNotesEditor ? "Close Notes" : "Edit Notes"}
                     </button>
@@ -1076,7 +1079,7 @@
                 </div>
                 {#if showNotesEditor}
                   {#key detail.project_path}
-                    <NotesEditor projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
+                    <NotesEditor onReady={setRteEditorApi} projectPath={detail.project_path} initialNotes={notes} onSaved={(n: string) => { notes = n; }} />
                   {/key}
                 {:else}
                   <div class="pd-notes-preview">
@@ -1092,14 +1095,27 @@
                       aria-label="Select document to edit"
                       value={selectedCrDocPath}
                       onchange={(e) => selectCrDoc(e.currentTarget.value)}
+                      disabled={crDocsLoading || crDocsFlushing}
                     >
                       {#each crDocsFiles as f}
                         <option value={f.path}>{f.name}</option>
                       {/each}
                     </select>
-                    <button class="pd-command-btn" type="button" onclick={exportSelectedDocToWord} disabled={selectedCrDoc?.format === "msg"}>
-                      Export to Word
-                    </button>
+                    <span class="pd-rte-status" class:pd-rte-status-warn={selectedCrDoc?.capability === "read_only"} class:pd-rte-status-err={selectedCrDoc?.capability === "unsupported"}>
+                      {#if crDocsFlushing}
+                        Saving…
+                      {:else if crDocsLoading}
+                        Loading…
+                      {:else if crDocsError}
+                        Save failed
+                      {:else if selectedCrDoc?.capability === "unsupported"}
+                        Unsupported format
+                      {:else if selectedCrDoc?.capability === "read_only"}
+                        Read-only
+                      {:else}
+                        Saved
+                      {/if}
+                    </span>
                   </div>
                 </div>
                 {#if crDocsLoading}
@@ -1108,36 +1124,39 @@
                   <p class="pd-muted pd-error-text">Could not load document: {crDocsError}</p>
                 {:else if selectedCrDoc && selectedCrDoc.format === "msg"}
                   <div class="pd-msg-panel">
-                    <p class="pd-muted">This is an Outlook message and cannot be edited in-app.</p>
+                    <p class="pd-muted">Unsupported format: Format .msg belum dapat dibuka di editor ini.</p>
                     <button class="pd-command-btn" type="button" onclick={() => selectedCrDoc && openCrDocExternal(selectedCrDoc.path)}>
                       Open Externally
                     </button>
                   </div>
                 {:else if selectedCrDoc}
-                  {#if !selectedCrDoc.editable}
-                    <p class="pd-muted pd-locked-text">View only — project is in IMPLEMENTED state.</p>
+                  {#if crDocContent?.capability === "read_only"}
+                    <p class="pd-muted pd-locked-text">Read-only: format ini dapat ditampilkan tetapi belum dapat diedit dengan aman.</p>
+                  {:else if crDocContent?.capability === "unsupported"}
+                    <div class="pd-msg-panel">
+                      <p class="pd-muted pd-error-text">Unsupported format: {crDocContent.message || "Format ini belum dapat dibuka di editor ini."}</p>
+                      <button class="pd-command-btn" type="button" onclick={() => selectedCrDoc && openCrDocExternal(selectedCrDoc.path)}>
+                        Open Externally
+                      </button>
+                    </div>
                   {/if}
                   {#if !crDocReady}
                     <p class="pd-muted">Loading…</p>
-                  {:else}
+                  {:else if crDocContent?.capability !== "unsupported"}
                     {#key selectedCrDoc.path}
-                      {#if selectedCrDoc.format === "html" || selectedCrDoc.format === "docx"}
-                        <NotesEditor
-                          projectPath={detail.project_path}
-                          filePath={selectedCrDoc.path}
-                          fileFormat={selectedCrDoc.format}
-                          initialNotes={crDocContent?.content ?? ""}
-                          editable={selectedCrDoc.editable}
-                          onSaved={(n: string) => { if (crDocContent) crDocContent.content = n; }}
-                        />
-                      {:else}
-                        <NotesEditor
-                          projectPath={detail.project_path}
-                          initialNotes={crDocContent?.content ?? notes}
-                          editable={selectedCrDoc.editable}
-                          onSaved={(n: string) => { notes = n; if (crDocContent) crDocContent.content = n; }}
-                        />
-                      {/if}
+                      <NotesEditor
+                        onReady={setRteEditorApi}
+                        projectPath={detail.project_path}
+                        filePath={selectedCrDoc.path}
+                        fileFormat={crDocContent?.format ?? selectedCrDoc?.format ?? "markdown"}
+                        initialNotes={crDocContent?.content ?? ""}
+                        editable={crDocContent?.editable ?? selectedCrDoc?.editable ?? false}
+                        capability={crDocContent?.capability ?? selectedCrDoc?.capability ?? "unsupported"}
+                        saveStrategy={crDocContent?.saveStrategy ?? selectedCrDoc?.saveStrategy ?? "none"}
+                        supportedEditorFeatures={crDocContent?.supportedEditorFeatures ?? selectedCrDoc?.supportedEditorFeatures}
+                        message={crDocContent?.message ?? selectedCrDoc?.message}
+                        onSaved={(n: string) => { notes = selectedCrDoc?.format === "markdown" ? n : notes; if (crDocContent) crDocContent.content = n; }}
+                      />
                     {/key}
                   {/if}
                 {:else}
@@ -1202,6 +1221,10 @@
   .pd-doc-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .pd-doc-select { height:28px; padding:0 8px; border:1px solid var(--color-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; cursor:pointer; max-width:200px; }
   .pd-doc-select:focus { border-color:var(--color-dbs-red); outline:none; box-shadow:0 0 0 2px var(--color-dbs-red-active); }
+  .pd-doc-select:disabled { opacity:0.55; cursor:not-allowed; }
+  .pd-rte-status { display:inline-flex; align-items:center; height:24px; padding:0 8px; border-radius:999px; background:var(--tag-green-bg); color:var(--tag-green-ink); font-size:10px; font-weight:900; white-space:nowrap; }
+  .pd-rte-status-warn { background:var(--tag-amber-bg); color:var(--tag-amber-ink); }
+  .pd-rte-status-err { background:var(--tag-red-bg); color:var(--tag-red-ink); }
   .pd-msg-panel { display:flex; flex-direction:column; gap:8px; align-items:flex-start; padding:10px; border:1px dashed var(--color-border); border-radius:6px; background:var(--color-workspace); }
   .pd-error-text { color:var(--color-dbs-red); }
   .pd-locked-text { color:var(--tag-amber-ink); margin-bottom:6px; }

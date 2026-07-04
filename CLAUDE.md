@@ -150,7 +150,8 @@ Use `_docs/session-notes.md`, `_docs/PROGRESS.md`, and `_docs/DECISIONS.md` firs
 
 ## Design-First Rule
 
-Any UI work → mockup/preview first → user approves → code → manual checklist → user tests → fix → approve.
+NO separate mockups/previews (user rule 2026-07-04 — they burn tokens). Any UI work → deliberate design decisions up front (tokens, layout, spacing, hierarchy, responsive at 3+ sizes) → code directly in the app → manual checklist → user tests live → fix → approve.
+"Design-first" = the visual QUALITY bar comes first: user strongly rejects ugly resolution/layout/colors/positioning — expect iteration on visual details as normal.
 Read `_docs/DESIGN_RULES.md` for design system when doing frontend.
 
 ## Slice Completion Checklist (Mandatory)

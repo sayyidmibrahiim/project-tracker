@@ -192,3 +192,67 @@ def test_file_open_dev_skipped_off_windows(js_api):
     """File open is wired: dev-skipped (ok=true) off-Windows, no os.startfile (Req 6.5)."""
     result = js_api.file_open("/tmp/x")
     assert result["ok"] is True
+
+
+# ── RTE format capabilities ────────────────────────────────────────────────
+
+
+def test_rte_markdown_capability_and_save(js_api, temp_project):
+    notes_path = temp_project["project_path"] / "notes.md"
+
+    loaded = js_api.get_rte_file(str(notes_path))
+    assert loaded["ok"] is True
+    assert loaded["data"]["format"] == "markdown"
+    assert loaded["data"]["capability"] == "editable"
+    assert loaded["data"]["saveStrategy"] == "markdown"
+
+    saved = js_api.save_rte_file(str(notes_path), "# Updated")
+    assert saved["ok"] is True
+    assert notes_path.read_text(encoding="utf-8") == "# Updated"
+
+
+def test_rte_text_capability_and_plain_text_save(js_api, temp_project):
+    text_path = temp_project["project_path"] / "plain.txt"
+    text_path.write_text("plain", encoding="utf-8")
+
+    loaded = js_api.get_rte_file(str(text_path))
+    assert loaded["ok"] is True
+    assert loaded["data"]["format"] == "text"
+    assert loaded["data"]["capability"] == "editable"
+    assert loaded["data"]["saveStrategy"] == "plain_text"
+    assert loaded["data"]["supportedEditorFeatures"] == ["plain_text"]
+
+    saved = js_api.save_rte_file(str(text_path), "new plain")
+    assert saved["ok"] is True
+    assert text_path.read_text(encoding="utf-8") == "new plain"
+
+
+def test_rte_docx_is_read_only_until_source_sync_adapter_exists(js_api, temp_project):
+    docx_path = temp_project["project_path"] / "_cr-docs" / "uat-signoff.docx"
+
+    loaded = js_api.get_rte_file(str(docx_path))
+    assert loaded["ok"] is True
+    assert loaded["data"]["format"] == "docx"
+    assert loaded["data"]["capability"] == "read_only"
+    assert loaded["data"]["editable"] is False
+    assert loaded["data"]["saveStrategy"] == "none"
+
+    saved = js_api.save_rte_file(str(docx_path), "<p>must not save</p>")
+    assert saved["ok"] is False
+    assert saved["error"]["code"] == "RTE_SAVE_FAILED"
+
+
+def test_rte_msg_is_unsupported_and_never_saved(js_api, temp_project):
+    msg_path = temp_project["project_path"] / "_cr-docs" / "mail.msg"
+    msg_path.parent.mkdir(parents=True, exist_ok=True)
+    msg_path.write_bytes(b"not text")
+
+    loaded = js_api.get_rte_file(str(msg_path))
+    assert loaded["ok"] is True
+    assert loaded["data"]["format"] == "msg"
+    assert loaded["data"]["capability"] == "unsupported"
+    assert loaded["data"]["content"] == ""
+
+    saved = js_api.save_rte_file(str(msg_path), "nope")
+    assert saved["ok"] is False
+    assert saved["error"]["code"] == "RTE_SAVE_FAILED"

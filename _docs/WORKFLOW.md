@@ -122,7 +122,7 @@ Generate this after every code completion:
 
 ### Visual
 
-- [ ] Matches approved design mockup
+- [ ] Matches design system + approved design direction
 - [ ] Colors consistent with design system
 - [ ] Typography consistent (sizes, weights, fonts)
 - [ ] Spacing consistent (4px grid)
@@ -153,16 +153,16 @@ Generate this after every code completion:
 
 ```
 1. User requests UI work
-2. Claude creates branch: design/{menu}-{desc}
-3. Claude creates mockup (SVG preview or minimal HTML)
-4. User reviews → gives feedback
-5. Iterate mockup until user says "ok" / "lanjut"
-6. Claude codes production Svelte implementation
-7. Claude generates manual checklist
-8. User runs app, checks checklist
-9. User gives feedback → Claude fixes
-10. User approves → merge to main
-11. Update _docs/PROGRESS.md, PRD.md if behavior changed
+2. Claude creates branch: {menu}/{desc}
+3. Claude makes deliberate design decisions up front (DESIGN_RULES tokens,
+   layout, spacing, hierarchy, responsive 3+ sizes) — NO separate mockup
+   (user rule 2026-07-04: mockups burn tokens; quality bar stays high)
+4. Claude codes production Svelte implementation directly
+5. Claude generates manual checklist
+6. User runs app, checks checklist
+7. User gives feedback → Claude fixes (visual iteration is normal)
+8. User approves → merge to main
+9. Update _docs/PROGRESS.md, PRD.md if behavior changed
 ```
 
 ## Shared Element Protocol

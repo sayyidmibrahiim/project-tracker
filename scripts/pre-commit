@@ -7,6 +7,15 @@ echo "=== pre-commit: svelte-check ==="
 npm --prefix frontend run check 2>&1
 SVELTE_EXIT=$?
 
+# esbuild's Go runtime intermittently dies at startup ("out of memory
+# allocating heap arena map") under transient system memory pressure.
+# One retry keeps the gate honest: real check errors fail both runs.
+if [ $SVELTE_EXIT -ne 0 ]; then
+    echo "=== pre-commit: svelte-check retry (transient failure guard) ==="
+    npm --prefix frontend run check 2>&1
+    SVELTE_EXIT=$?
+fi
+
 if [ $SVELTE_EXIT -ne 0 ]; then
     echo "BLOCKED: svelte-check failed (exit $SVELTE_EXIT)"
     exit 1
