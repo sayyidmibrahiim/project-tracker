@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { IdleExportScheduler, docxStatusLabel, mapExportState } from "../src/lib/rteDocxState.ts";
+import { IdleExportScheduler, docxCountdownLabel, docxStatusLabel, mapExportState } from "../src/lib/rteDocxState.ts";
 import type { RteExportState } from "../src/lib/types.ts";
 
 function state(partial: Partial<RteExportState>): RteExportState {
@@ -35,6 +35,12 @@ test("docxStatusLabel renders pipeline labels and falls back to the base label",
   assert.equal(docxStatusLabel("locked", "Saved"), "DOCX locked — will retry");
   assert.equal(docxStatusLabel("failed", "Saved"), "Export failed — source safe");
   assert.equal(docxStatusLabel("idle", "Saved"), "Saved");
+});
+
+test("docxCountdownLabel shows whole seconds and never 0s", () => {
+  assert.equal(docxCountdownLabel(5), "Saved — DOCX in 5s");
+  assert.equal(docxCountdownLabel(1), "Saved — DOCX in 1s");
+  assert.equal(docxCountdownLabel(0.4), "Saved — DOCX in 1s");
 });
 
 test("IdleExportScheduler fires once per quiet period; bumps restart the wait", async () => {

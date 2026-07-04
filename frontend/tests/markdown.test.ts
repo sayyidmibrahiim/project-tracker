@@ -163,6 +163,20 @@ test("base64 embeds without asset refs pass through unchanged (legacy notes)", (
   assert.match(back, /!\[old\]\(data:image\/png;base64,AAAA\)/);
 });
 
+test("resized images keep their width via whitelisted inline HTML", () => {
+  // Serialize: a width attr switches the image to inline HTML (markdown image
+  // syntax cannot hold a width), still preferring the stable asset ref.
+  const back = htmlToMarkdown(
+    '<img src="data:image/png;base64,AAAA" alt="shot" width="240" data-asset-src=".rte/assets/ab12cd34ef56ab78.png">',
+  );
+  assert.match(back, /<img src="\.rte\/assets\/ab12cd34ef56ab78\.png" alt="shot" width="240" \/>/);
+
+  // Render: the saved inline HTML keeps src + width for the editor.
+  const html = renderMarkdown('<img src=".rte/assets/ab12cd34ef56ab78.png" alt="shot" width="240" />');
+  assert.match(html, /src="\.rte\/assets\/ab12cd34ef56ab78\.png"/);
+  assert.match(html, /width="240"/);
+});
+
 test("traversal and non-asset relative srcs are still dropped", () => {
   assert.match(renderMarkdown("![x](../secret.png)"), /<img src=""/);
   assert.match(renderMarkdown("![x](.rte/assets/../../x.png)"), /<img src=""/);

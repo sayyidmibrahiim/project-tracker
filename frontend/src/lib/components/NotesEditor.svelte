@@ -12,7 +12,7 @@
   } from "../bridge";
   import { escapeHtml, htmlToMarkdown, renderMarkdown } from "../markdown";
   import type { RteCapabilityLevel, RteFormat, RteSaveReason, RteSaveStrategy } from "../types";
-  import { IdleExportScheduler, docxStatusLabel, mapExportState } from "../rteDocxState";
+  import { IdleExportScheduler, docxCountdownLabel, docxStatusLabel, mapExportState } from "../rteDocxState";
   import type { DocxExportDisplay } from "../rteDocxState";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
@@ -97,14 +97,17 @@
   // walk) runs only in flush(), not on every keystroke.
   let dirty = $state(false);
   let fullscreen = $state(false);
-  // Non-reactive: Tiptap transaction events fire during mount; Svelte state here can loop.
-  let rev = 0;
+  // Reactive render token: bumped on every Tiptap transaction/selection so the
+  // toolbar re-evaluates isActive()/alignIs() (toggle buttons show their state).
+  // Safe: no $effect reads it, so mount-time transactions cannot loop.
+  let rev = $state(0);
 
   let colorOpen = $state(false);
   let colorMode: 'fore' | 'back' = $state('fore');
   let tableOpen = $state(false);
   let tableHover = $state({ rows: 1, cols: 1 });
   let emojiOpen = $state(false);
+  let helpOpen = $state(false);
   let fontSelVal = $state('');
   let sizeSelVal = $state('');
   // Inline link dialog (replaces unreliable WebView2 prompt()).
@@ -156,7 +159,7 @@
   ];
 
   const AUTOSAVE_MS = 1000;
-  const IDLE_EXPORT_MS = 20_000;
+  const IDLE_EXPORT_MS = 5_000;
   const EXPORT_POLL_MS = 1000;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -169,9 +172,30 @@
   let hydrating = false;
   let exportDisplay = $state<DocxExportDisplay>("idle");
   let exportPollTimer: ReturnType<typeof setInterval> | undefined;
+  /** Seconds until the idle DOCX export fires (0 = no countdown shown). */
+  let exportCountdown = $state(0);
+  let countdownTimer: ReturnType<typeof setInterval> | undefined;
   const idleExport = new IdleExportScheduler(IDLE_EXPORT_MS, () => {
+    stopExportCountdown();
     void requestDocxExport();
   });
+
+  function startExportCountdown(): void {
+    stopExportCountdown();
+    exportCountdown = Math.round(IDLE_EXPORT_MS / 1000);
+    countdownTimer = setInterval(() => {
+      exportCountdown = Math.max(0, exportCountdown - 1);
+      if (exportCountdown <= 0) stopExportCountdown();
+    }, 1000);
+  }
+
+  function stopExportCountdown(): void {
+    if (countdownTimer !== undefined) {
+      clearInterval(countdownTimer);
+      countdownTimer = undefined;
+    }
+    exportCountdown = 0;
+  }
 
   const baseStatusLabel = $derived(
     capability === "unsupported" ? "Unsupported format"
@@ -185,7 +209,9 @@
   );
   const statusLabel = $derived(
     docxPipelineMode && canEdit && (status === "saved" || status === "idle")
-      ? docxStatusLabel(exportDisplay, baseStatusLabel)
+      ? (exportCountdown > 0 && exportDisplay !== "exporting"
+          ? docxCountdownLabel(exportCountdown)
+          : docxStatusLabel(exportDisplay, baseStatusLabel))
       : baseStatusLabel,
   );
 
@@ -269,9 +295,11 @@
     if (saved.export_scheduled) {
       exportDisplay = "exporting";
       idleExport.cancel();
+      stopExportCountdown();
       startExportPoll();
     } else if (!saved.skipped) {
       idleExport.bump();
+      startExportCountdown();
     }
     return true;
   }
@@ -372,7 +400,7 @@
 
   function closeAllPopovers() {
     colorOpen = false; tableOpen = false; emojiOpen = false;
-    linkOpen = false; imgOpen = false;
+    linkOpen = false; imgOpen = false; helpOpen = false;
   }
 
   function onWindowClick(e: MouseEvent) {
@@ -483,11 +511,13 @@
   // ── Active-state helpers (reactive via the rev token) ──
 
   function isActive(name: string, attrs?: Record<string, unknown>): boolean {
+    void rev; // subscribe: re-evaluate on every editor transaction
     return editor?.isActive(name, attrs) ?? false;
   }
 
   /** TextAlign marks live as a node attribute; check it directly. */
   function alignIs(value: string): boolean {
+    void rev; // subscribe: re-evaluate on every editor transaction
     if (!editor) return false;
     const cur = (editor.getAttributes("paragraph").textAlign as string) || (editor.getAttributes("heading").textAlign as string) || "";
     return cur === value;
@@ -661,6 +691,7 @@
     savePendingBeforeDispose();
     idleExport.cancel();
     stopExportPoll();
+    stopExportCountdown();
     if (timer) clearTimeout(timer);
     if (typeof window !== "undefined") window.removeEventListener('resize', recalcHeight);
     if (typeof document !== "undefined") document.body.style.overflow = '';
@@ -824,6 +855,7 @@
     disposeSaveStarted = false;
     idleExport.cancel();
     stopExportPoll();
+    stopExportCountdown();
     docRevision = nextRevision;
     lastExportedRevision = nextRevision;
     lastSavedDocJson = "";
@@ -989,6 +1021,24 @@
     </div>
 
     <div class="ne-actions">
+      <div class="ne-popover-wrap">
+        <button type="button" class="ne-tbtn ne-fsbtn" class:active={helpOpen} title="Shortcuts & tips" aria-label="Shortcuts and tips" onmousedown={(e) => { e.preventDefault(); const next = !helpOpen; closeAllPopovers(); helpOpen = next; }}>?</button>
+        {#if helpOpen}
+          <div class="ne-popover ne-help-pop">
+            <div class="ne-help-title">Shortcuts & tips</div>
+            <div class="ne-help-row"><kbd>Ctrl+S</kbd><span>{docxPipelineMode ? "Save + export DOCX now" : "Save now"}</span></div>
+            <div class="ne-help-row"><kbd>Ctrl+B / I / U</kbd><span>Bold / Italic / Underline</span></div>
+            <div class="ne-help-row"><kbd>Ctrl+Z / Ctrl+Y</kbd><span>Undo / Redo</span></div>
+            <div class="ne-help-row"><kbd>Win+Shift+S</kbd><span>Screenshot, then <kbd>Ctrl+V</kbd> to paste here</span></div>
+            <div class="ne-help-row"><span class="ne-help-icon">🖱</span><span>Drag & drop an image file into the editor</span></div>
+            <div class="ne-help-row"><span class="ne-help-icon">↔</span><span>Drag image corner / table column edge to resize</span></div>
+            {#if docxPipelineMode}
+              <div class="ne-help-row"><span class="ne-help-icon">⏱</span><span>DOCX exports automatically 5s after Saved</span></div>
+              <div class="ne-help-row"><span class="ne-help-icon">📄</span><span>Editor width = printable page area (Narrow margins)</span></div>
+            {/if}
+          </div>
+        {/if}
+      </div>
       <button type="button" class="ne-tbtn ne-fsbtn" class:active={fullscreen} title={fullscreen ? "Exit fullscreen" : "Fullscreen"} onmousedown={(e) => { e.preventDefault(); toggleFullscreen(); }}>
         {#if fullscreen}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/></svg>
@@ -1003,7 +1053,7 @@
     </div>
   </div>
 
-  <div class="ne-editor-host" bind:this={hostEl}></div>
+  <div class="ne-editor-host" class:ne-docx-page={docxPipelineMode} bind:this={hostEl}></div>
 </div>
 
 <style>
@@ -1045,6 +1095,12 @@
   .ne-act-btn { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .ne-emoji-btn { font-size:16px; width:22px; height:22px; border:0; background:transparent; cursor:pointer; border-radius:3px; padding:0; display:inline-flex; align-items:center; justify-content:center; }
   .ne-emoji-btn:hover { background:var(--soft-pink-surface); }
+  .ne-help-pop { left:auto; right:0; transform:none; width:250px; padding:8px; display:flex; flex-direction:column; gap:5px; }
+  .ne-help-title { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:2px; }
+  .ne-help-row { display:flex; align-items:baseline; gap:6px; font-size:10px; font-weight:700; color:var(--color-ink); line-height:1.35; }
+  .ne-help-row kbd { flex:0 0 auto; font-family:Consolas, monospace; font-size:9px; font-weight:800; background:var(--soft-pink-surface); border:1px solid var(--soft-white-border); border-radius:3px; padding:0 4px; white-space:nowrap; }
+  .ne-help-row span kbd { display:inline-block; }
+  .ne-help-icon { flex:0 0 auto; width:16px; text-align:center; }
 
   /* Editor surface — Tiptap mounts its contenteditable inside this host.
      Default font is Times New Roman (DECISIONS D-0007 / bug 3 fix). */
@@ -1073,6 +1129,19 @@
   :global(.ne-editor-host .ne-textarea th), :global(.ne-editor-host .ne-textarea td) { border:1px solid var(--input-border); padding:4px 6px; position:relative; }
   :global(.ne-editor-host .ne-textarea th) { background:var(--soft-pink-surface); font-weight:800; }
   :global(.ne-editor-host .ne-textarea img) { max-width:100%; }
+  /* WYSIWYG page bounds (docx pipeline): the editable area is exactly the
+     printable width of A4 + Narrow 12.7mm margins (184.6mm ≈ 698px @96dpi;
+     720px border-box = 698 content + 2×10 padding + 2×1 border), so what fits
+     on screen fits on the exported page — no separate ruler needed. */
+  :global(.ne-editor-host.ne-docx-page) { overflow-x:auto; }
+  :global(.ne-editor-host.ne-docx-page .ne-textarea) { width:720px; max-width:none; margin:0 auto; box-sizing:border-box; }
+  /* Image drag-resize handle (AssetImage node view). */
+  :global(.ne-editor-host .ne-img-wrap) { position:relative; display:inline-block; max-width:100%; line-height:0; }
+  :global(.ne-editor-host .ne-img-wrap img) { display:block; max-width:100%; }
+  :global(.ne-editor-host .ne-img-handle) { position:absolute; right:-5px; bottom:-5px; width:11px; height:11px; background:var(--card-white); border:2px solid var(--color-dbs-red); border-radius:3px; cursor:nwse-resize; opacity:0; transition:opacity 80ms; z-index:5; }
+  :global(.ne-editor-host .ne-img-wrap:hover .ne-img-handle),
+  :global(.ne-editor-host .ProseMirror-selectednode .ne-img-handle) { opacity:1; }
+  :global(.ne-editor-host .ne-img-wrap.ProseMirror-selectednode img) { outline:2px solid var(--color-dbs-red); outline-offset:1px; }
   /* Column-resize handle + cursor for resizable tables (bug 11). */
   :global(.ne-editor-host .ne-textarea .selectedCell) { background:var(--soft-pink-surface); }
   :global(.ne-editor-host .ne-textarea .column-resize-handle) { position:absolute; right:-2px; top:0; bottom:-2px; width:4px; background:var(--color-dbs-red); pointer-events:none; z-index:10; }
