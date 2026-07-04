@@ -141,3 +141,30 @@ test("serializes Tiptap HTML headings, lists, links, code, images, tables, and t
   assert.match(markdown, /- \[x\] done/);
 });
 
+
+// ── RTE asset references (D-0012): .rte/assets round-trip ──
+
+test("asset image refs render with data-asset-src and round-trip to markdown", () => {
+  const md = "![shot](.rte/assets/ab12cd34ef56ab78.png)";
+  const html = renderMarkdown(md);
+  assert.match(html, /<img src="\.rte\/assets\/ab12cd34ef56ab78\.png"/);
+  assert.match(html, /data-asset-src="\.rte\/assets\/ab12cd34ef56ab78\.png"/);
+
+  // Serializing an editor img that carries data-asset-src prefers the stable
+  // relative ref over its (display-only) data-URI src.
+  const back = htmlToMarkdown(
+    '<img src="data:image/png;base64,AAAA" alt="shot" data-asset-src=".rte/assets/ab12cd34ef56ab78.png">',
+  );
+  assert.match(back, /!\[shot\]\(\.rte\/assets\/ab12cd34ef56ab78\.png\)/);
+});
+
+test("base64 embeds without asset refs pass through unchanged (legacy notes)", () => {
+  const back = htmlToMarkdown('<img src="data:image/png;base64,AAAA" alt="old">');
+  assert.match(back, /!\[old\]\(data:image\/png;base64,AAAA\)/);
+});
+
+test("traversal and non-asset relative srcs are still dropped", () => {
+  assert.match(renderMarkdown("![x](../secret.png)"), /<img src=""/);
+  assert.match(renderMarkdown("![x](.rte/assets/../../x.png)"), /<img src=""/);
+  assert.match(renderMarkdown("![x](.rte/assets/NOTHEX.png)"), /<img src=""/);
+});

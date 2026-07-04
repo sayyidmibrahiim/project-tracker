@@ -40,10 +40,15 @@ function sanitizeHref(rawUrl: string): string {
   return "#";
 }
 
-/** Allow only http/https/data:image srcs; anything else is dropped. */
+/** Relative RTE asset reference (D-0012): .rte/assets/<16-hex-id>.<ext>.
+ *  The fixed shape admits no separators or dots beyond the extension, so
+ *  path traversal cannot be expressed. */
+const RTE_ASSET_SRC = /^\.rte\/assets\/[0-9a-f]{16}\.(png|jpe?g|gif|webp)$/;
+
+/** Allow http/https/data:image srcs plus relative RTE asset refs. */
 function sanitizeImgSrc(rawUrl: string): string {
   const url = rawUrl.trim();
-  if (/^(https?:|data:image\/)/i.test(url)) {
+  if (/^(https?:|data:image\/)/i.test(url) || RTE_ASSET_SRC.test(url)) {
     return url;
   }
   return "";
@@ -95,7 +100,7 @@ const BLOCK_TAGS = new Set([
 /** Per-tag attribute allow-list. Unlisted tags get the default set. */
 const TAG_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "style"]),
+  img: new Set(["src", "alt", "style", "data-asset-src", "data-asset-id"]),
   span: new Set(["style"]),
   div: new Set(["style", "align"]),
   p: new Set(["style", "align"]),
@@ -202,9 +207,16 @@ function renderInline(escaped: string): string {
   // Inline code first so its contents are not further transformed.
   out = out.replace(/`([^`]+)`/g, (_m, code) => `<code>${code}</code>`);
   // Images ![alt](url) — before links so the `!` prefix is consumed here.
+  // Relative asset refs additionally carry data-asset-src so the editor's
+  // AssetImage node keeps the stable reference while src gets hydrated to a
+  // data URI for display (D-0012).
   out = out.replace(
     /!\[([^\]]*)\]\(([^)\s]+)\)/g,
-    (_m, alt, url) => `<img src="${sanitizeImgSrc(url)}" alt="${alt}" />`,
+    (_m, alt, url) => {
+      const src = sanitizeImgSrc(url);
+      const assetAttr = RTE_ASSET_SRC.test(src) ? ` data-asset-src="${src}"` : "";
+      return `<img src="${src}" alt="${alt}"${assetAttr} />`;
+    },
   );
   // Links [label](url) — brackets/parens are not HTML-escaped, so this is safe.
   out = out.replace(
@@ -411,7 +423,9 @@ function domNodeToMarkdown(node: Node): string {
     case "div": return `${children}\n`;
     case "hr": return "---\n\n";
     case "br": return "\n";
-    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("src") || ""})`;
+    // Asset-backed images serialize their stable relative ref, never the
+    // (large, display-only) data-URI src (D-0012).
+    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("data-asset-src") || el.getAttribute("src") || ""})`;
     case "table": {
       const rows = Array.from(el.querySelectorAll("tr"));
       if (rows.length === 0) return children;
@@ -465,7 +479,8 @@ function fallbackHtmlToMarkdown(html: string): string {
     .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, (_m, text) => `\n## ${stripHtmlTags(text)}\n\n`)
     .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_m, text) => `\n### ${stripHtmlTags(text)}\n\n`)
     .replace(/<img\b([^>]*)>/gi, (_m, attrs) => {
-      const src = attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
+      const assetSrc = attrs.match(/data-asset-src=["']([^"']*)["']/i)?.[1] || "";
+      const src = assetSrc || attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
       const alt = attrs.match(/alt=["']([^"']*)["']/i)?.[1] || "";
       return `![${alt}](${src})`;
     })

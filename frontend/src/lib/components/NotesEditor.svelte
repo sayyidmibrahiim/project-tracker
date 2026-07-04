@@ -1,8 +1,19 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { callBridge, isPywebviewReady, saveRteFile } from "../bridge";
+  import {
+    callBridge,
+    isPywebviewReady,
+    rteAssetRead,
+    rteDocumentSave,
+    rteExportRequest,
+    rteExportStatus,
+    rteImageSave,
+    saveRteFile,
+  } from "../bridge";
   import { escapeHtml, htmlToMarkdown, renderMarkdown } from "../markdown";
-  import type { RteCapabilityLevel, RteFormat, RteSaveStrategy } from "../types";
+  import type { RteCapabilityLevel, RteFormat, RteSaveReason, RteSaveStrategy } from "../types";
+  import { IdleExportScheduler, docxStatusLabel, mapExportState } from "../rteDocxState";
+  import type { DocxExportDisplay } from "../rteDocxState";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   // NOTE: Underline + Link are bundled INSIDE StarterKit v3 — re-registering them
@@ -10,7 +21,7 @@
   import Subscript from "@tiptap/extension-subscript";
   import Superscript from "@tiptap/extension-superscript";
   import { FontFamily, TextStyle } from "@tiptap/extension-text-style";
-  import Image from "@tiptap/extension-image";
+  import { AssetImage } from "../extensions/AssetImage";
   import { Table } from "@tiptap/extension-table";
   import TableRow from "@tiptap/extension-table-row";
   import TableCell from "@tiptap/extension-table-cell";
@@ -39,6 +50,12 @@
     supportedEditorFeatures?: string[];
     message?: string;
     onReady?: (api: { flushNow: () => Promise<boolean> } | undefined) => void;
+    /** DOCX pipeline (D-0012): initial Tiptap JSON doc from rte_document_open. */
+    initialDoc?: Record<string, unknown> | null;
+    /** DOCX pipeline: revision of {@link initialDoc}. */
+    initialRevision?: number;
+    /** DOCX pipeline: true when initialNotes carries mammoth migration HTML. */
+    needsMigration?: boolean;
   }
   let {
     projectPath,
@@ -52,6 +69,9 @@
     supportedEditorFeatures = [],
     message = "",
     onReady,
+    initialDoc = null,
+    initialRevision = 0,
+    needsMigration = false,
   }: Props = $props();
 
   /** Resolved target file: explicit path, else the project's notes.md. */
@@ -60,6 +80,8 @@
   const canEdit = $derived(editable && capability === "editable" && effectiveSaveStrategy !== "none");
   const isPlainTextMode = $derived(effectiveSaveStrategy === "plain_text");
   const directHtmlMode = $derived(effectiveSaveStrategy === "html" || effectiveSaveStrategy === "docx_legacy");
+  /** DOCX pipeline mode: JSON source of truth, .docx = derived export. */
+  const docxPipelineMode = $derived(effectiveSaveStrategy === "docx_pipeline");
   const richToolbarEnabled = $derived(canEdit && !isPlainTextMode && (supportedEditorFeatures.length === 0 || supportedEditorFeatures.some((feature) => feature !== "plain_text")));
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
@@ -134,9 +156,24 @@
   ];
 
   const AUTOSAVE_MS = 1000;
+  const IDLE_EXPORT_MS = 20_000;
+  const EXPORT_POLL_MS = 1000;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const statusLabel = $derived(
+  // ── DOCX pipeline state (D-0012) ──
+  let docRevision = 0;
+  let lastSavedDocJson = "";
+  let lastExportedRevision = 0;
+  let migrationPending = false;
+  /** Guards the asset-hydration transactions from marking the doc dirty. */
+  let hydrating = false;
+  let exportDisplay = $state<DocxExportDisplay>("idle");
+  let exportPollTimer: ReturnType<typeof setInterval> | undefined;
+  const idleExport = new IdleExportScheduler(IDLE_EXPORT_MS, () => {
+    void requestDocxExport();
+  });
+
+  const baseStatusLabel = $derived(
     capability === "unsupported" ? "Unsupported format"
     : !canEdit ? "Read-only"
     : status === "saving" ? "Saving…"
@@ -146,6 +183,42 @@
     : status === "error" ? `Save failed: ${errorText}`
     : "Saved",
   );
+  const statusLabel = $derived(
+    docxPipelineMode && canEdit && (status === "saved" || status === "idle")
+      ? docxStatusLabel(exportDisplay, baseStatusLabel)
+      : baseStatusLabel,
+  );
+
+  async function requestDocxExport(): Promise<void> {
+    if (!docxPipelineMode || !canEdit || !isPywebviewReady()) return;
+    if (lastExportedRevision >= docRevision && exportDisplay !== "locked") return;
+    const resp = await rteExportRequest(targetFile);
+    if (!resp.ok || !resp.data) {
+      exportDisplay = "failed";
+      return;
+    }
+    exportDisplay = mapExportState(resp.data);
+    startExportPoll();
+  }
+
+  function startExportPoll(): void {
+    stopExportPoll();
+    exportPollTimer = setInterval(async () => {
+      if (!isPywebviewReady()) { stopExportPoll(); return; }
+      const resp = await rteExportStatus(targetFile);
+      if (!resp.ok || !resp.data) { stopExportPoll(); return; }
+      exportDisplay = mapExportState(resp.data);
+      lastExportedRevision = resp.data.last_exported_revision;
+      if (resp.data.state !== "running") stopExportPoll();
+    }, EXPORT_POLL_MS);
+  }
+
+  function stopExportPoll(): void {
+    if (exportPollTimer !== undefined) {
+      clearInterval(exportPollTimer);
+      exportPollTimer = undefined;
+    }
+  }
 
   function serializeEditor(): string {
     if (!editor) return text;
@@ -159,15 +232,57 @@
     status = "pending";
     disposeSaveStarted = false;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(flush, AUTOSAVE_MS);
+    timer = setTimeout(() => void flush(), AUTOSAVE_MS);
   }
 
-  async function flush(): Promise<boolean> {
+  /** DOCX pipeline save: JSON revision to source.json; export via reason/idle. */
+  async function flushDocx(reason: RteSaveReason): Promise<boolean> {
+    if (!editor) { status = "idle"; return true; }
+    status = "saving";
+    errorText = "";
+    const content = editor.getJSON() as unknown as Record<string, unknown>;
+    const canonical = JSON.stringify(content);
+    if (canonical === lastSavedDocJson && !migrationPending) {
+      dirty = false;
+      status = "saved";
+      return true;
+    }
+    const resp = await rteDocumentSave(targetFile, { content, base_revision: docRevision, reason });
+    if (!resp.ok) {
+      status = "error";
+      errorText = resp.error.code === "RTE_REVISION_STALE"
+        ? "Document changed elsewhere — reopen the file"
+        : resp.error.message;
+      return false;
+    }
+    const saved = resp.data;
+    if (!saved) {
+      status = "error";
+      errorText = "Empty save response";
+      return false;
+    }
+    docRevision = saved.revision;
+    lastSavedDocJson = canonical;
+    migrationPending = false;
+    dirty = false;
+    status = "saved";
+    if (saved.export_scheduled) {
+      exportDisplay = "exporting";
+      idleExport.cancel();
+      startExportPoll();
+    } else if (!saved.skipped) {
+      idleExport.bump();
+    }
+    return true;
+  }
+
+  async function flush(reason: RteSaveReason = "autosave"): Promise<boolean> {
     if (timer) { clearTimeout(timer); timer = undefined; }
     if (!canEdit) { status = "idle"; return true; }
-    if (!dirty) { status = "saved"; return true; }
+    if (!dirty && !(docxPipelineMode && migrationPending)) { status = "saved"; return true; }
     if (!editor) { status = "idle"; return true; }
     if (!isPywebviewReady()) { status = "offline"; return false; }
+    if (docxPipelineMode) return flushDocx(reason);
     status = "saving";
     errorText = "";
     // Serialize ONCE at debounced save time. Never on every keystroke.
@@ -186,7 +301,8 @@
   }
 
   export async function flushNow(): Promise<boolean> {
-    return flush();
+    // Manual/switch flushes schedule the DOCX export immediately (flow-tiptap §8).
+    return flush("manual");
   }
 
   async function saveSnapshot(
@@ -213,6 +329,16 @@
   function savePendingBeforeDispose() {
     if (disposeSaveStarted || !dirty || !editor) return;
     disposeSaveStarted = true;
+    if (docxPipelineMode) {
+      if (!canEdit || !isPywebviewReady()) return;
+      const content = editor.getJSON() as unknown as Record<string, unknown>;
+      void rteDocumentSave(targetFile, {
+        content,
+        base_revision: docRevision,
+        reason: "switch",
+      });
+      return;
+    }
     const pendingHtml = editor.getHTML();
     const filePath = targetFile;
     const project = projectPath;
@@ -260,9 +386,91 @@
   }
 
   function onEditorUpdate() {
-    if (!editor || !canEdit) return;
+    if (!editor || !canEdit || hydrating) return;
     dirty = true;
     scheduleSave();
+  }
+
+  // ── Image paste/drop upload (Win+Shift+S → Ctrl+V) ──
+
+  function extractImageFile(dt: DataTransfer | null): File | null {
+    if (!dt) return null;
+    for (const item of Array.from(dt.items ?? [])) {
+      if (item.kind === "file" && /^image\/(png|jpe?g|gif|webp)$/i.test(item.type)) {
+        return item.getAsFile();
+      }
+    }
+    return null;
+  }
+
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Could not read image from clipboard"));
+      reader.onload = () => {
+        const url = String(reader.result || "");
+        const comma = url.indexOf(",");
+        if (comma < 0) reject(new Error("Unexpected clipboard image data"));
+        else resolve(url.slice(comma + 1));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadAndInsertImage(file: File, pos?: number): Promise<void> {
+    if (!editor) return;
+    try {
+      const b64 = await fileToBase64(file);
+      const resp = await rteImageSave(targetFile, b64);
+      if (!resp.ok || !resp.data) {
+        status = "error";
+        errorText = resp.ok ? "Empty image save response" : resp.error.message;
+        return; // no broken image node on failure
+      }
+      const attrs = {
+        src: resp.data.data_uri,
+        assetId: resp.data.asset_id,
+        assetSrc: resp.data.rel_src,
+        alt: file.name || "Screenshot",
+      };
+      const chain = editor.chain().focus();
+      if (typeof pos === "number") chain.insertContentAt(pos, { type: "image", attrs }).run();
+      else chain.insertContent({ type: "image", attrs }).run();
+      rev++;
+    } catch (err) {
+      status = "error";
+      errorText = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  /** Hydrate `.rte/assets/...` image refs (md files) into data URIs for display. */
+  async function hydrateAssetImages(inst: Editor): Promise<void> {
+    if (!isPywebviewReady()) return;
+    const refs: { pos: number; src: string }[] = [];
+    inst.state.doc.descendants((node, pos) => {
+      if (node.type.name === "image") {
+        const src = String(node.attrs.src || "");
+        if (src.startsWith(".rte/assets/")) refs.push({ pos, src });
+      }
+    });
+    for (const ref of refs) {
+      const resp = await rteAssetRead(targetFile, ref.src);
+      if (!resp.ok || !resp.data) continue;
+      const node = inst.state.doc.nodeAt(ref.pos);
+      if (!node || node.type.name !== "image") continue;
+      hydrating = true;
+      try {
+        const tr = inst.state.tr.setNodeMarkup(ref.pos, undefined, {
+          ...node.attrs,
+          src: resp.data.data_uri,
+          assetSrc: ref.src,
+        });
+        tr.setMeta("addToHistory", false);
+        inst.view.dispatch(tr);
+      } finally {
+        hydrating = false;
+      }
+    }
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -370,10 +578,37 @@
   function confirmImage() {
     const url = imgUrl.trim();
     if (url) {
-      editor?.chain().focus().setImage({ src: url, alt: imgAlt.trim() }).run();
-      rev++;
+      void insertImageAsAsset(url, imgAlt.trim());
     }
     imgOpen = false;
+  }
+
+  /** Insert a picked image; data URIs become asset files (D-0012), with a
+   *  plain data-URI embed as the fallback so insertion never blocks. */
+  async function insertImageAsAsset(url: string, alt: string): Promise<void> {
+    if (!editor) return;
+    if (url.startsWith("data:image/") && isPywebviewReady()) {
+      const comma = url.indexOf(",");
+      const b64 = comma >= 0 ? url.slice(comma + 1) : "";
+      if (b64) {
+        const resp = await rteImageSave(targetFile, b64);
+        if (resp.ok && resp.data) {
+          editor.chain().focus().insertContent({
+            type: "image",
+            attrs: {
+              src: resp.data.data_uri,
+              assetId: resp.data.asset_id,
+              assetSrc: resp.data.rel_src,
+              alt,
+            },
+          }).run();
+          rev++;
+          return;
+        }
+      }
+    }
+    editor.chain().focus().setImage({ src: url, alt }).run();
+    rev++;
   }
 
   function onImageKeydown(e: KeyboardEvent) {
@@ -424,6 +659,8 @@
   onDestroy(() => {
     onReady?.(undefined);
     savePendingBeforeDispose();
+    idleExport.cancel();
+    stopExportPoll();
     if (timer) clearTimeout(timer);
     if (typeof window !== "undefined") window.removeEventListener('resize', recalcHeight);
     if (typeof document !== "undefined") document.body.style.overflow = '';
@@ -454,16 +691,31 @@
     const direct = untrack(() => directHtmlMode);
     const plainText = untrack(() => isPlainTextMode);
     const format = untrack(() => fileFormat);
+    const pipeline = untrack(() => docxPipelineMode);
+    const startDoc = untrack(() => initialDoc);
+    const startRevision = untrack(() => initialRevision ?? 0);
+    const migrate = untrack(() => needsMigration);
     text = startText;
     lastSaved = startText;
     lastPath = startPath;
     dirty = false;
     disposeSaveStarted = false;
+    docRevision = startRevision;
+    lastExportedRevision = startRevision;
+    lastSavedDocJson = "";
+    migrationPending = pipeline && migrate;
+    exportDisplay = "idle";
+
+    // Pipeline docs load their JSON source directly; migration passes
+    // mammoth HTML through initialNotes exactly once.
+    const startContent = pipeline && startDoc
+      ? (startDoc as object)
+      : toEditorHtml(startText, direct, plainText);
 
     const instance = new Editor({
       element: hostEl,
       editable: editableNow,
-      content: toEditorHtml(startText, direct, plainText),
+      content: startContent,
       extensions: [
         StarterKit.configure({
           // StarterKit v3 bundles bold/italic/strike/code, heading, blockquote,
@@ -478,7 +730,7 @@
         Color,
         FontSize,
         Highlight.configure({ multicolor: true }),
-        Image.configure({ inline: true, allowBase64: true }),
+        AssetImage.configure({ inline: true, allowBase64: true }),
         TaskList,
         TaskItem.configure({ nested: false }),
         TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -500,6 +752,25 @@
           "aria-multiline": "true",
           role: "textbox",
         },
+        // Manual paste/drop image capture (no FileHandler dep): consume the
+        // event exactly once so duplicate nodes can never appear (spec §24).
+        handlePaste: (_view, event) => {
+          if (plainText || !untrack(() => canEdit) || !isPywebviewReady()) return false;
+          const file = extractImageFile(event.clipboardData);
+          if (!file) return false;
+          event.preventDefault();
+          void uploadAndInsertImage(file);
+          return true;
+        },
+        handleDrop: (view, event, _slice, moved) => {
+          if (moved || plainText || !untrack(() => canEdit) || !isPywebviewReady()) return false;
+          const file = extractImageFile(event.dataTransfer);
+          if (!file) return false;
+          event.preventDefault();
+          const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          void uploadAndInsertImage(file, pos);
+          return true;
+        },
       },
     });
     instance.on("transaction", () => { rev++; });
@@ -507,6 +778,13 @@
     instance.on("update", onEditorUpdate);
     editor = instance;
     rev++;
+    if (pipeline && migrationPending) {
+      // Persist the migrated legacy .docx content as revision 1 + first export.
+      dirty = true;
+      void flush("migration");
+    } else if (!pipeline && !plainText) {
+      void hydrateAssetImages(instance);
+    }
     if (!windowClickBound) {
       windowClickBound = true;
       window.addEventListener('click', onWindowClick);
@@ -535,12 +813,32 @@
     const nextText = untrack(() => initialNotes ?? "");
     const direct = untrack(() => directHtmlMode);
     const plainText = untrack(() => isPlainTextMode);
+    const pipeline = untrack(() => docxPipelineMode);
+    const nextDoc = untrack(() => initialDoc);
+    const nextRevision = untrack(() => initialRevision ?? 0);
+    const migrate = untrack(() => needsMigration);
     lastPath = nextPath;
     text = nextText;
     lastSaved = nextText;
     dirty = false;
     disposeSaveStarted = false;
-    editor.commands.setContent(toEditorHtml(nextText, direct, plainText), { emitUpdate: false });
+    idleExport.cancel();
+    stopExportPoll();
+    docRevision = nextRevision;
+    lastExportedRevision = nextRevision;
+    lastSavedDocJson = "";
+    migrationPending = pipeline && migrate;
+    exportDisplay = "idle";
+    if (pipeline && nextDoc) {
+      editor.commands.setContent(nextDoc as object, { emitUpdate: false });
+    } else {
+      editor.commands.setContent(toEditorHtml(nextText, direct, plainText), { emitUpdate: false });
+      if (!pipeline && !plainText) void hydrateAssetImages(editor);
+    }
+    if (pipeline && migrationPending) {
+      dirty = true;
+      void flush("migration");
+    }
   });
 </script>
 
