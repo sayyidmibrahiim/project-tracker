@@ -31,24 +31,14 @@ class DocxTargetLockedError(RuntimeError):
 
 DEFAULT_DOCUMENT_SETTINGS: dict[str, Any] = {
     "page_format": "A4",
-    # Word "Narrow" margins (12.7 mm / 0.5"). The editor page width mirrors the
-    # resulting printable area so on-screen bounds match the exported .docx.
-    "margin_top_mm": 12.7,
-    "margin_right_mm": 12.7,
-    "margin_bottom_mm": 12.7,
-    "margin_left_mm": 12.7,
+    "margin_top_mm": 20,
+    "margin_right_mm": 20,
+    "margin_bottom_mm": 20,
+    "margin_left_mm": 20,
     "default_font_family": "Times New Roman",
     "default_font_size_pt": 11,
     "line_height": 1.15,
 }
-
-
-def content_width_mm(settings: dict[str, Any]) -> float:
-    """Printable width (page minus side margins) for the configured page."""
-    page_w = 210.0  # A4; the only page format the pipeline emits
-    left = float(settings.get("margin_left_mm", 12.7))
-    right = float(settings.get("margin_right_mm", 12.7))
-    return max(page_w - left - right, 40.0)
 
 _ALIGN = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
@@ -108,9 +98,6 @@ class _Renderer:
         self.doc = document
         self.assets_dir = assets_dir
         self.settings = settings
-        # Anything wider than the printable area gets clamped so exported
-        # images/tables are never cut off at the right margin.
-        self.content_width_px = content_width_mm(settings) / 25.4 * 96.0
         self._renderers: dict[str, Callable[[dict, Any], None]] = {
             "paragraph": self._paragraph,
             "heading": self._heading,
@@ -289,14 +276,6 @@ class _Renderer:
                         self._render_block(child, container=cell)
                 c += colspan
 
-        # Columns dragged wider than the printable area scale down
-        # proportionally so the exported table never crosses the margin.
-        specified = [w for w in col_widths_px if w]
-        total_px = sum(specified)
-        if total_px > self.content_width_px:
-            scale = self.content_width_px / total_px
-            col_widths_px = [w * scale if w else None for w in col_widths_px]
-
         # Column widths: px -> dxa (1 px ≈ 15 dxa at 96dpi/20 twips-per-pt).
         for idx, px in enumerate(col_widths_px):
             if px is None:
@@ -440,21 +419,9 @@ class _Renderer:
             run.italic = True
             return
         width = attrs.get("width")
-        max_width = Inches(self.content_width_px / 96.0)
         kwargs = {}
         if isinstance(width, (int, float)) and width > 0:
-            kwargs["width"] = min(Inches(float(width) / 96.0), max_width)
-        else:
-            # No explicit width: clamp the natural size to the printable area.
-            try:
-                from docx.image.image import Image as _DocxImage
-
-                probe = _DocxImage.from_file(str(path))
-                natural = Inches(probe.px_width / float(probe.horz_dpi or 96))
-                if natural > max_width:
-                    kwargs["width"] = max_width
-            except Exception:
-                pass
+            kwargs["width"] = Inches(float(width) / 96.0)
         try:
             paragraph.add_run().add_picture(str(path), **kwargs)
         except Exception:
@@ -474,10 +441,10 @@ def _apply_page_setup(document: Document, settings: dict[str, Any]) -> None:
     if str(settings.get("page_format", "A4")).upper() == "A4":
         section.page_width = Mm(210)
         section.page_height = Mm(297)
-    section.top_margin = Mm(float(settings.get("margin_top_mm", 12.7)))
-    section.right_margin = Mm(float(settings.get("margin_right_mm", 12.7)))
-    section.bottom_margin = Mm(float(settings.get("margin_bottom_mm", 12.7)))
-    section.left_margin = Mm(float(settings.get("margin_left_mm", 12.7)))
+    section.top_margin = Mm(float(settings.get("margin_top_mm", 20)))
+    section.right_margin = Mm(float(settings.get("margin_right_mm", 20)))
+    section.bottom_margin = Mm(float(settings.get("margin_bottom_mm", 20)))
+    section.left_margin = Mm(float(settings.get("margin_left_mm", 20)))
     style = document.styles["Normal"]
     family = _first_family(settings.get("default_font_family"))
     if family:

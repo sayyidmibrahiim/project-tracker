@@ -100,7 +100,7 @@ const BLOCK_TAGS = new Set([
 /** Per-tag attribute allow-list. Unlisted tags get the default set. */
 const TAG_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "style", "width", "data-asset-src", "data-asset-id"]),
+  img: new Set(["src", "alt", "style", "data-asset-src", "data-asset-id"]),
   span: new Set(["style"]),
   div: new Set(["style", "align"]),
   p: new Set(["style", "align"]),
@@ -425,15 +425,7 @@ function domNodeToMarkdown(node: Node): string {
     case "br": return "\n";
     // Asset-backed images serialize their stable relative ref, never the
     // (large, display-only) data-URI src (D-0012).
-    case "img": {
-      const src = el.getAttribute("data-asset-src") || el.getAttribute("src") || "";
-      const alt = el.getAttribute("alt") || "";
-      const width = el.getAttribute("width") || "";
-      // Markdown image syntax cannot hold a width, so resized images
-      // round-trip as whitelisted inline HTML instead.
-      if (/^\d+$/.test(width)) return `<img src="${src}" alt="${escapeMarkdownAttr(alt)}" width="${width}" />`;
-      return `![${alt}](${src})`;
-    }
+    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("data-asset-src") || el.getAttribute("src") || ""})`;
     case "table": {
       const rows = Array.from(el.querySelectorAll("tr"));
       if (rows.length === 0) return children;
@@ -471,9 +463,6 @@ function domNodeToMarkdown(node: Node): string {
 }
 
 function fallbackHtmlToMarkdown(html: string): string {
-  // Inline-HTML img output (resized images) must survive the final
-  // strip-all-tags pass, so it is tokenized and restored at the end.
-  const keepImgs: string[] = [];
   return html
     .replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_m, code) => `\n\n\`\`\`\n${stripHtmlTags(code)}\n\`\`\`\n\n`)
     .replace(/<li[^>]*data-type=["']taskItem["'][^>]*data-checked=["'](true|false)["'][^>]*>([\s\S]*?)<\/li>/gi, (_m, checked, body) => `\n- [${checked === "true" ? "x" : " "}] ${stripHtmlTags(body)}\n`)
@@ -493,11 +482,6 @@ function fallbackHtmlToMarkdown(html: string): string {
       const assetSrc = attrs.match(/data-asset-src=["']([^"']*)["']/i)?.[1] || "";
       const src = assetSrc || attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
       const alt = attrs.match(/alt=["']([^"']*)["']/i)?.[1] || "";
-      const width = attrs.match(/width=["'](\d+)["']/i)?.[1] || "";
-      if (width) {
-        keepImgs.push(`<img src="${src}" alt="${alt}" width="${width}" />`);
-        return `\u0000K${keepImgs.length - 1}\u0000`;
-      }
       return `![${alt}](${src})`;
     })
     .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `[${stripHtmlTags(text)}](${href})`)
@@ -510,7 +494,6 @@ function fallbackHtmlToMarkdown(html: string): string {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>|<\/div>/gi, "\n\n")
     .replace(/<[^>]+>/g, "")
-    .replace(/\u0000K(\d+)\u0000/g, (_m, i) => keepImgs[Number(i)] ?? "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

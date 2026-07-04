@@ -25,7 +25,6 @@ import copy
 import hashlib
 import json
 import re
-import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -114,19 +113,6 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
-
-
-def _hide_dir_windows(path: Path) -> None:
-    """Best-effort: mark the .rte sidecar dir hidden in Explorer (Windows)."""
-    if sys.platform != "win32" or not path.is_dir():
-        return
-    try:
-        import ctypes
-
-        FILE_ATTRIBUTE_HIDDEN = 0x02
-        ctypes.windll.kernel32.SetFileAttributesW(str(path), FILE_ATTRIBUTE_HIDDEN)
-    except Exception:
-        pass  # cosmetic only; the pipeline works with a visible dir too
 
 
 def _docx_to_html(path: Path) -> str:
@@ -253,7 +239,6 @@ class RteDocumentService:
             self.source_path(docx_path),
             json.dumps(source, ensure_ascii=False, indent=1),
         )
-        _hide_dir_windows(self.sidecar_dir(docx_path))
 
     def _new_source(self, docx_path: Path) -> dict:
         return {
@@ -440,9 +425,6 @@ class RteDocumentService:
                 source["content"] = dehydrated
                 source["content_hash"] = new_hash
                 source["saved_at"] = _utc_now_iso()
-                # Refresh page settings so sidecars written under older
-                # defaults (20mm margins) pick up the current layout.
-                source["document_settings"] = dict(DEFAULT_DOCUMENT_SETTINGS)
                 self._store_source(docx_path, source)
 
             export_scheduled = False
@@ -477,7 +459,6 @@ class RteDocumentService:
         target = self.assets_dir(document_path) / file_name
         if not target.is_file():
             _atomic_write_bytes(target, data)
-            _hide_dir_windows(self.sidecar_dir(document_path))
         return {
             "asset_id": asset_id,
             "file_name": file_name,

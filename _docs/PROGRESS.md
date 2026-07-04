@@ -7,7 +7,9 @@
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
 Active branch: `project-details/tiptap-docx-pipeline`.
-Active slice: **Tiptap DOCX pipeline (roadmap #2, D-0012)** — implemented + fix round after first manual check (toolbar toggle active states, 5s export countdown in status, hidden `.rte`, "?" shortcuts popover, Narrow-margin WYSIWYG page bounds + export clamp + image drag-resize), pending user re-verify: `.docx` CR docs editable via source.json sidecar + background python-docx export (latest-revision-wins, locked-file retry), image paste/drop as content-addressed asset files for all editors, `.rte/assets` refs in notes.md, migration import for legacy docx, shutdown flush. Header redesign (roadmap #1) user-verified + merged 2026-07-04.
+2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline is back at the first-manual-check state; fixes will be re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
+
+Active slice: **Tiptap DOCX pipeline (roadmap #2, D-0012)** — implemented, pending user manual verify: `.docx` CR docs editable via source.json sidecar + background python-docx export (latest-revision-wins, locked-file retry), image paste/drop as content-addressed asset files for all editors, `.rte/assets` refs in notes.md, migration import for legacy docx, shutdown flush. Header redesign (roadmap #1) user-verified + merged 2026-07-04.
 
 Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.md`/`.txt` editable, `.docx` read-only pending pipeline, interaction lock).
 

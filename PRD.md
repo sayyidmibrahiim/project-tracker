@@ -1167,14 +1167,8 @@ uat-signoff.docx / prod-lv.docx (pipeline):
     (Tiptap JSON + revision + content hash)
   → Autosave 1000ms saves JSON only; identical content is skipped (hash)
   → Real .docx regenerated in the background (custom Tiptap-JSON→python-docx
-    exporter): on Ctrl+S, on doc switch, after 5s idle, and on app close
-  → Status shows a countdown ("Saved — DOCX in 5s") until the idle export fires
+    exporter): on Ctrl+S, on doc switch, after 20s idle, and on app close
   → Max 1 export worker; latest revision wins; atomic tmp→replace
-  → Page = A4 with Word "Narrow" margins (12.7mm); the editor area is exactly
-    the printable width (WYSIWYG bounds), and the exporter clamps images/
-    tables that exceed it so exported content is never cut off
-  → Images drag-resize via corner handle; tables drag-resize per column edge
-  → .rte sidecar folders are hidden (Windows hidden attribute)
   → .docx open in Word (locked): status "DOCX locked — will retry",
     old file untouched, retried on next open — source is always safe
   → .docx edited directly in Word: re-imported on next open (stale check)
@@ -1184,12 +1178,7 @@ Images (all rich editors):
   → Win+Shift+S screenshot → Ctrl+V pastes into the editor (also drag-drop)
   → Bytes stored once as content-addressed asset files in .rte/assets/
     (magic-byte validation, 15 MB cap); never permanent base64
-  → notes.md references assets as ![alt](.rte/assets/<id>.<ext>);
-    resized images round-trip as inline <img … width> HTML
-
-Toolbar: toggle buttons reflect the active format at the cursor (red active
-state); a "?" popover lists shortcuts & tips (Ctrl+S export, screenshot paste,
-drag-resize, 5s export timing).
+  → notes.md references assets as ![alt](.rte/assets/<id>.<ext>)
 
 Locking: IMPLEMENTED project state = all docs read-only (unchanged).
 .msg files stay open-externally (unchanged).

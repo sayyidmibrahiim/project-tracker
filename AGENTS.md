@@ -164,6 +164,16 @@ Every completed slice → produce FORM CHECKLIST for user:
 - Consistency: matches `_docs/DESIGN_RULES.md` tokens
 - Way to test: exact steps user follows to verify
 
+## RTE Change Safety (binding — incident 2026-07-04)
+
+A 5-part RTE fix round (reactive toolbar token, 5s export countdown, hidden `.rte`, help popover, WYSIWYG page width + image-resize NodeView) shipped as ONE bundle made "all editor behavior abnormal" for the user and was fully rolled back on `project-details/tiptap-docx-pipeline`. Rules for EVERY AI agent:
+
+1. `NotesEditor.svelte`, `extensions/*.ts`, and `markdown.ts` have app-wide blast radius (every project's notes.md). Change them **one behavior per round**, user manual check between rounds. Never bundle 5 behavior changes.
+2. Never run `npm run build` (web/static) while the app may be open; the served bundle breaks live. After every build the user must restart the app before testing.
+3. `web/static` is gitignored — `git checkout` does NOT switch it. After any branch switch, rebuild before running, or the frontend calls bridge methods the backend doesn't have ("everything abnormal").
+4. Never write raw control characters (e.g. NUL) into source files; use escape sequences (` `).
+5. Automated green (svelte-check/tests/smoke) ≠ safe: none of them exercise real editor interaction. Treat RTE changes as unverified until the user tests.
+
 ## Documentation Sync
 
 Product behavior change → PRD.md + \_docs/PROGRESS.md. Progress change → \_docs/PROGRESS.md.
