@@ -245,7 +245,7 @@ export interface SecondBrainItem {
 /** RTE file format reported by the backend (see _detect_rte_format). */
 export type RteFormat = "html" | "markdown" | "msg" | "text" | "docx";
 export type RteCapabilityLevel = "editable" | "read_only" | "unsupported";
-export type RteSaveStrategy = "markdown" | "plain_text" | "html" | "docx_legacy" | "none";
+export type RteSaveStrategy = "markdown" | "plain_text" | "html" | "docx_legacy" | "docx_pipeline" | "none";
 export type RteEditorFeature =
   | "plain_text"
   | "bold"
@@ -289,4 +289,55 @@ export interface DocxExportResult {
   path: string | null;
   written: boolean;
 }
+
+// ── DOCX pipeline (D-0012) — mirror rte_document_* bridge shapes ──
+
+/** Export state block returned by rte_export_status / rte_document_open. */
+export interface RteExportState {
+  state: "idle" | "running" | "pending_retry" | "error";
+  revision: number;
+  last_exported_revision: number;
+  export_pending: boolean;
+  last_error: string | null;
+}
+
+/** Payload returned by rte_document_open. */
+export interface RteDocumentPayload {
+  /** Hydrated Tiptap JSON doc, or null when needs_migration. */
+  content: Record<string, unknown> | null;
+  /** Mammoth HTML for first migration of an existing .docx. */
+  content_html: string | null;
+  needs_migration: boolean;
+  revision: number;
+  content_hash: string;
+  format: "docx";
+  editable: boolean;
+  capability: RteCapabilityLevel;
+  saveStrategy: RteSaveStrategy;
+  supportedEditorFeatures: RteEditorFeature[];
+  message?: string;
+  export: RteExportState;
+}
+
+/** Result of rte_document_save. */
+export interface RteSaveResult {
+  revision: number;
+  content_hash: string;
+  skipped: boolean;
+  export_scheduled: boolean;
+}
+
+/** Result of rte_image_save. */
+export interface RteImageSaveResult {
+  asset_id: string;
+  file_name: string;
+  /** Canonical stored reference (asset://<id>.<ext>). */
+  src: string;
+  /** Path relative to the document folder (.rte/assets/<id>.<ext>) for md files. */
+  rel_src: string;
+  /** Display source for the editor. */
+  data_uri: string;
+}
+
+export type RteSaveReason = "autosave" | "manual" | "switch" | "migration";
 

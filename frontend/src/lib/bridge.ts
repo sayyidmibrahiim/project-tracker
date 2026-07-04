@@ -1,4 +1,15 @@
-import type { BridgeResponse, DocxExportResult, GlobalPlan, PywebviewApi, RteFileContent } from "./types";
+import type {
+  BridgeResponse,
+  DocxExportResult,
+  GlobalPlan,
+  PywebviewApi,
+  RteDocumentPayload,
+  RteExportState,
+  RteFileContent,
+  RteImageSaveResult,
+  RteSaveReason,
+  RteSaveResult,
+} from "./types";
 import { BridgeErrorCode } from "./types";
 
 /** Maximum time to wait for a single bridge call before treating it as failed. */
@@ -296,4 +307,45 @@ export function exportToDocx(
   suggestedName: string,
 ): Promise<BridgeResponse<DocxExportResult>> {
   return callBridge("export_to_docx", html, "html", suggestedName);
+}
+
+// ── DOCX pipeline (D-0012): source.json = truth, .docx = derived export ──
+
+/** Open a pipeline document (Tiptap JSON source or migration HTML). */
+export function rteDocumentOpen(filePath: string): Promise<BridgeResponse<RteDocumentPayload>> {
+  return callBridge("rte_document_open", filePath);
+}
+
+/** Save a Tiptap JSON revision to the document's source.json. */
+export function rteDocumentSave(
+  filePath: string,
+  payload: { content: unknown; base_revision: number; reason: RteSaveReason },
+): Promise<BridgeResponse<RteSaveResult>> {
+  return callBridge("rte_document_save", filePath, payload);
+}
+
+/** Store a pasted/inserted image as an asset file next to the document. */
+export function rteImageSave(
+  filePath: string,
+  dataB64: string,
+): Promise<BridgeResponse<RteImageSaveResult>> {
+  return callBridge("rte_image_save", filePath, dataB64);
+}
+
+/** Resolve an asset reference (asset:// or .rte/assets/...) to a data URI. */
+export function rteAssetRead(
+  filePath: string,
+  src: string,
+): Promise<BridgeResponse<{ data_uri: string }>> {
+  return callBridge("rte_asset_read", filePath, src);
+}
+
+/** Queue a background DOCX export of the latest saved revision. */
+export function rteExportRequest(filePath: string): Promise<BridgeResponse<RteExportState>> {
+  return callBridge("rte_export_request", filePath);
+}
+
+/** Poll the export state (only while an export is known to be active). */
+export function rteExportStatus(filePath: string): Promise<BridgeResponse<RteExportState>> {
+  return callBridge("rte_export_status", filePath);
 }
