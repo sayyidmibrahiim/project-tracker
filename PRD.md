@@ -1150,15 +1150,38 @@ Rename File: → inline rename → save
 Note: all file ops disabled in PROD_READY and IMPLEMENTED states (except Add/Edit Notes)
 ```
 
-### 12.12 User Flow — Notes
+### 12.12 User Flow — Notes & CR Docs (RTE, D-0007/D-0010/D-0012)
+
+Per-format strategy (D-0012, 2026-07-04): formats Tiptap saves natively write
+directly; `.docx` uses the document pipeline (JSON source of truth + derived
+Word export).
 
 ```
-User edits in markdown textarea
-  → Autosave triggers 1000ms after last keystroke
-  → "Saving..." indicator while pending
-  → "Saved" indicator after write to notes.md completes
-  → Markdown toolbar inserts syntax at cursor position
-  → Edit/Preview toggle: Preview renders markdown as HTML (via marked.js)
+notes.md / .txt (direct save):
+  → Tiptap editor; autosave 1000ms after last keystroke
+  → "Saving..." / "Saved" indicator; Ctrl+S = immediate save
+  → .md serializes to Markdown, .txt to plain text (atomic write)
+
+uat-signoff.docx / prod-lv.docx (pipeline):
+  → Editable in Tiptap; source of truth = _cr-docs/.rte/<name>.source.json
+    (Tiptap JSON + revision + content hash)
+  → Autosave 1000ms saves JSON only; identical content is skipped (hash)
+  → Real .docx regenerated in the background (custom Tiptap-JSON→python-docx
+    exporter): on Ctrl+S, on doc switch, after 20s idle, and on app close
+  → Max 1 export worker; latest revision wins; atomic tmp→replace
+  → .docx open in Word (locked): status "DOCX locked — will retry",
+    old file untouched, retried on next open — source is always safe
+  → .docx edited directly in Word: re-imported on next open (stale check)
+  → First open of a legacy non-empty .docx migrates via mammoth HTML import
+
+Images (all rich editors):
+  → Win+Shift+S screenshot → Ctrl+V pastes into the editor (also drag-drop)
+  → Bytes stored once as content-addressed asset files in .rte/assets/
+    (magic-byte validation, 15 MB cap); never permanent base64
+  → notes.md references assets as ![alt](.rte/assets/<id>.<ext>)
+
+Locking: IMPLEMENTED project state = all docs read-only (unchanged).
+.msg files stay open-externally (unchanged).
 ```
 
 ### 12.13 User Flow — REOPEN
@@ -2193,10 +2216,18 @@ All methods callable from Svelte frontend via `window.pywebview.api.*`.
 
 ### 21.7 Notes
 
-| Method       | Params          | Returns                  |
-| ------------ | --------------- | ------------------------ |
-| `notes_read` | `path`          | Content of notes.md      |
-| `notes_save` | `path, content` | Atomic write to notes.md |
+| Method                | Params                                          | Returns                                             |
+| --------------------- | ----------------------------------------------- | --------------------------------------------------- |
+| `notes_get`           | `project_path`                                  | Content of notes.md                                  |
+| `notes_update`        | `project_path, notes`                           | Atomic write to notes.md                             |
+| `get_rte_file`        | `file_path`                                     | Content + capability metadata (md/txt/html/msg)      |
+| `save_rte_file`       | `file_path, content`                            | Atomic save for natively-supported formats           |
+| `rte_document_open`   | `file_path`                                     | Tiptap JSON source + revision + export state (docx)  |
+| `rte_document_save`   | `file_path, {content, base_revision, reason}`   | New revision; `RTE_REVISION_STALE` on conflict       |
+| `rte_image_save`      | `file_path, data_b64`                           | `{asset_id, src, rel_src, data_uri}`                 |
+| `rte_asset_read`      | `file_path, src`                                | `{data_uri}` (traversal-guarded)                     |
+| `rte_export_request`  | `file_path`                                     | Queue background DOCX export (latest revision wins)  |
+| `rte_export_status`   | `file_path`                                     | `{state, revision, last_exported_revision, …}`       |
 
 ### 21.8 Report
 

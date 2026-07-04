@@ -8,7 +8,23 @@
 
 ---
 
-## 2026-07-04
+## 2026-07-04 (later — Branch 2)
+
+Branch aktif: `project-details/tiptap-docx-pipeline` (Branch 1 header-redesign merged to main after user verify).
+
+**Now:** DOCX pipeline (D-0012) implemented end-to-end: dot-folder drone guard; `infrastructure/docx_writer.py` (Tiptap JSON→python-docx, full mapping table, atomic replace, DocxTargetLockedError); `services/rte_document_service.py` (source.json store, revision/hash, stale-revision reject, IMPLEMENTED lock, mammoth migration + external-Word-edit stale rule, content-addressed image assets, ExportCoordinator single worker latest-revision-wins); 6 bridge methods `rte_document_open/save, rte_image_save, rte_asset_read, rte_export_request/status` + shutdown flush in app_web; frontend AssetImage extension, paste/drop upload, docx_pipeline editor mode (idle 20s export, 1s poll while exporting, status labels), markdown.ts `.rte/assets` round-trip; ProjectDetails routes docx via pipeline (editable unless IMPLEMENTED).
+
+**Next:** User manual verify pipeline checklist → merge → Branch 3 `automations/approval-polling` (Piece C).
+
+**Blocked:** 6 pre-existing test failures on main (year_create, project_list — fail identically on main; queued for Branch 5). Stray `notes.md` created at repo root by app/pytest run — Branch 5.
+
+**Verification:** svelte-check 154 files 0/0; frontend tests 164 pass; pytest full suite 1809 pass / 6 pre-existing fails (identical on main); app smoke 14s clean; build ok.
+
+**active_menu:** project-details
+
+---
+
+## 2026-07-04 (Branch 1)
 
 Branch aktif: `general/header-redesign` (Branch 1 of master plan; Branch 0 merged to main same day).
 

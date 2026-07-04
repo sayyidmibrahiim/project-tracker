@@ -6,8 +6,8 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `general/header-redesign`.
-Active slice: **Header redesign (roadmap #1)** — implemented, pending user manual verify: red `.app-header` removed (Header.svelte deleted), Dashboard controls in Dashboard `.page-header-actions`, live clock in TitleBar, red token unification, nav a11y (aria-labels + active indicator bar), PRD §10.2–10.4 rewritten, D-0011.
+Active branch: `project-details/tiptap-docx-pipeline`.
+Active slice: **Tiptap DOCX pipeline (roadmap #2, D-0012)** — implemented, pending user manual verify: `.docx` CR docs editable via source.json sidecar + background python-docx export (latest-revision-wins, locked-file retry), image paste/drop as content-addressed asset files for all editors, `.rte/assets` refs in notes.md, migration import for legacy docx, shutdown flush. Header redesign (roadmap #1) user-verified + merged 2026-07-04.
 
 Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.md`/`.txt` editable, `.docx` read-only pending pipeline, interaction lock).
 
@@ -20,8 +20,8 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | # | Branch | Scope | Status |
 | - | ------ | ----- | ------ |
 | 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | ✅ Merged 2026-07-04 |
-| 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | Active |
-| 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | Planned |
+| 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | ✅ Merged 2026-07-04 |
+| 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | Implemented — awaiting user manual check |
 | 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Planned |
 | 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Planned |
 | 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
