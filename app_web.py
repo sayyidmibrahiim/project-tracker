@@ -1869,6 +1869,7 @@ def create_js_api(
         appcode_service=_AppCodeServiceAdapter(_settings_store),
         file_service=_FileServiceAdapter(_settings_store),
         notes_service=_NotesServiceAdapter(),
+        rte_document_service=_get_rte_document_service_lazy(),
         outlook_service=_OutlookServiceAdapter(
             _settings_store,
             _metadata_store,
@@ -1881,6 +1882,14 @@ def create_js_api(
         ),
         global_plan_service=global_plan_svc,
     )
+
+
+def _get_rte_document_service_lazy():
+    """Process-wide docx pipeline service (D-0012); import kept local so tests
+    that build a JsApi without the pipeline stay import-light."""
+    from services.rte_document_service import get_rte_document_service
+
+    return get_rte_document_service()
 
 
 def get_frontend_entry_path(*, project_root: Path = PROJECT_ROOT) -> Path:
@@ -1931,6 +1940,12 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
         register_win_events(window)
     if start_webview:
         webview.start(http_server=True)
+        # Window closed: flush pending DOCX exports. source.json is already
+        # saved by the frontend debounce; only derived .docx files may lag,
+        # and export_pending regenerates them on next open (flow-tiptap §21).
+        from services.rte_document_service import shutdown_rte_document_service  # noqa: PLC0415
+
+        shutdown_rte_document_service(timeout_s=10.0)
 
 
 if __name__ == "__main__":

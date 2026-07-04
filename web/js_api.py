@@ -299,6 +299,32 @@ class NotesServiceProtocol(Protocol):
         """Return a base64-encoded .docx byte stream for legacy/internal export."""
 
 
+class RteDocumentServiceProtocol(Protocol):
+    """Docx pipeline service surface used by JsApi (D-0012).
+
+    Tiptap JSON sidecar (.rte/<stem>.source.json) is the source of truth;
+    the real .docx is a derived background export.
+    """
+
+    def open_document(self, docx_path: Path) -> object:
+        """Return hydrated Tiptap JSON + revision + capability + export state."""
+
+    def save_document(self, docx_path: Path, payload: dict) -> object:
+        """Persist a Tiptap JSON revision. Raises StaleRevisionError when stale."""
+
+    def save_image(self, document_path: Path, data_b64: str) -> object:
+        """Validate + store pasted image bytes as a content-addressed asset."""
+
+    def read_asset(self, document_path: Path, src: str) -> object:
+        """Return {data_uri} for an asset reference (traversal-guarded)."""
+
+    def request_export(self, docx_path: Path) -> object:
+        """Queue a DOCX export for the latest revision."""
+
+    def export_status(self, docx_path: Path) -> object:
+        """Return the current export state for a document."""
+
+
 class SettingsDependencyProtocol(Protocol):
     """Settings service/store surface used by JsApi."""
 
@@ -491,6 +517,7 @@ class JsApi:
         year_service: YearServiceProtocol | None = None,
         file_service: FileServiceProtocol | None = None,
         notes_service: NotesServiceProtocol | None = None,
+        rte_document_service: RteDocumentServiceProtocol | None = None,
         settings_service: SettingsDependencyProtocol | None = None,
         settings_store: SettingsDependencyProtocol | None = None,
         linkbank_service: LinkBankDependencyProtocol | None = None,
@@ -514,6 +541,7 @@ class JsApi:
         self._rules_service = rules_service
         self._file_service = file_service
         self._notes_service = notes_service
+        self._rte_document_service = rte_document_service
         self._settings_dependency = settings_service or settings_store
         self._linkbank_dependency = linkbank_service or linkbank_store
         self._second_brain_service = second_brain_service
@@ -1648,6 +1676,79 @@ class JsApi:
         except Exception as exc:
             log_backend_event("bridge.save_rte_file.failed", {"file_path": file_path, "error": str(exc)})
             return fail(str(exc), code="RTE_SAVE_FAILED")
+
+    def rte_document_open(self, file_path: str) -> dict[str, object]:
+        """Open a pipeline document: Tiptap JSON source (or migration HTML)."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path:
+                return fail("file_path is required", code="RTE_OPEN_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.open_document(Path(file_path))))
+        except Exception as exc:
+            log_backend_event("bridge.rte_document_open.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code="RTE_OPEN_FAILED")
+
+    def rte_document_save(self, file_path: str, payload: dict | None = None) -> dict[str, object]:
+        """Save a Tiptap JSON revision to the document's source.json."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path or not isinstance(payload, dict):
+                return fail("file_path and payload are required", code="RTE_SAVE_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.save_document(Path(file_path), payload)))
+        except Exception as exc:
+            from services.rte_document_service import StaleRevisionError
+
+            code = "RTE_REVISION_STALE" if isinstance(exc, StaleRevisionError) else "RTE_SAVE_FAILED"
+            log_backend_event("bridge.rte_document_save.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code=code)
+
+    def rte_image_save(self, file_path: str, data_b64: str = "") -> dict[str, object]:
+        """Store a pasted/inserted editor image as an asset file."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path or not data_b64:
+                return fail("file_path and data_b64 are required", code="RTE_IMAGE_SAVE_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.save_image(Path(file_path), data_b64)))
+        except Exception as exc:
+            log_backend_event("bridge.rte_image_save.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code="RTE_IMAGE_SAVE_FAILED")
+
+    def rte_asset_read(self, file_path: str, src: str = "") -> dict[str, object]:
+        """Resolve an asset reference to a data URI for editor display."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path or not src:
+                return fail("file_path and src are required", code="RTE_ASSET_READ_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.read_asset(Path(file_path), src)))
+        except Exception as exc:
+            return fail(str(exc), code="RTE_ASSET_READ_FAILED")
+
+    def rte_export_request(self, file_path: str) -> dict[str, object]:
+        """Queue a background DOCX export for the latest saved revision."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path:
+                return fail("file_path is required", code="RTE_EXPORT_REQUEST_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.request_export(Path(file_path))))
+        except Exception as exc:
+            log_backend_event("bridge.rte_export_request.failed", {"file_path": file_path, "error": str(exc)})
+            return fail(str(exc), code="RTE_EXPORT_REQUEST_FAILED")
+
+    def rte_export_status(self, file_path: str) -> dict[str, object]:
+        """Return the export state for a pipeline document."""
+        try:
+            if self._rte_document_service is None:
+                return fail("rte_document_service is not configured", code="SERVICE_UNAVAILABLE")
+            if not file_path:
+                return fail("file_path is required", code="RTE_EXPORT_STATUS_FAILED")
+            return ok(_to_frontend_safe(self._rte_document_service.export_status(Path(file_path))))
+        except Exception as exc:
+            return fail(str(exc), code="RTE_EXPORT_STATUS_FAILED")
 
     def export_to_docx(self, content_html: str, source_format: str = "html", suggested_name: str = "export.docx") -> dict[str, object]:
         """Export rendered HTML to a user-chosen .docx file."""
