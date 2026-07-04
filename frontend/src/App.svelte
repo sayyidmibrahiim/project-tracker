@@ -44,6 +44,15 @@
   let rootUnset: boolean = $state(false);
   let interactionLocks: Set<string> = $state(new Set());
   let interactionLocked = $derived(interactionLocks.size > 0);
+  const INTERACTION_LOCK_WATCHDOG_MS = 10_000;
+  let interactionLockWatchdog: ReturnType<typeof setTimeout> | undefined;
+
+  function clearInteractionLockWatchdog() {
+    if (interactionLockWatchdog !== undefined) {
+      clearTimeout(interactionLockWatchdog);
+      interactionLockWatchdog = undefined;
+    }
+  }
 
   function onInteractionLock(event: Event) {
     const detail = (event as CustomEvent<{ source?: string; locked?: boolean }>).detail ?? {};
@@ -52,6 +61,17 @@
     if (detail.locked) next.add(source);
     else next.delete(source);
     interactionLocks = next;
+    if (detail.locked) {
+      clearInteractionLockWatchdog();
+      interactionLockWatchdog = setTimeout(() => {
+        interactionLockWatchdog = undefined;
+        if (interactionLocks.size === 0) return;
+        interactionLocks = new Set();
+        console.warn("interaction-lock watchdog released");
+      }, INTERACTION_LOCK_WATCHDOG_MS);
+    } else if (next.size === 0) {
+      clearInteractionLockWatchdog();
+    }
   }
 
   function navigate(id: string) {
@@ -200,6 +220,7 @@
 
   onDestroy(() => {
     stopPolling();
+    clearInteractionLockWatchdog();
     window.removeEventListener("app:interaction-lock", onInteractionLock);
     stopActivityLogging?.();
   });

@@ -95,3 +95,15 @@ test("RTE interaction lock does not disable top menu navigation", () => {
   assert.doesNotMatch(navEach, /disabled=\{interactionLocked\}/);
   assert.doesNotMatch(navEach, /aria-disabled=\{interactionLocked\}/);
 });
+
+test("RTE interaction lock has local cleanup and a 10-second app watchdog", () => {
+  const selectCrDocBody = PD.match(/async function selectCrDoc\(path: string\) \{([\s\S]*?)\n  \}/)?.[1] ?? "";
+  assert.match(selectCrDocBody, /setInteractionLock\("project-details-rte", true\)/);
+  assert.match(selectCrDocBody, /finally \{[\s\S]*setInteractionLock\("project-details-rte", false\)/);
+
+  assert.match(APP, /const INTERACTION_LOCK_WATCHDOG_MS = 10_000/);
+  assert.match(APP, /setTimeout\([\s\S]*INTERACTION_LOCK_WATCHDOG_MS/);
+  assert.match(APP, /interactionLocks = new Set\(\)/);
+  assert.match(APP, /console\.warn\("interaction-lock watchdog released"\)/);
+  assert.match(APP, /clearTimeout\(interactionLockWatchdog\)/);
+});
