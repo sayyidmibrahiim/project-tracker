@@ -14,7 +14,9 @@
 
 **Root-cause status:** NOT yet identified — exact symptoms not specified. Suspect ranking to test ONE at a time (each with user verify before the next): (1) AssetImage NodeView (touches every editor incl. notes.md — biggest blast radius); (2) reactive `rev` re-render per transaction; (3) 720px docx page width; (4) environment mismatch — `web/static` rebuilt mid-session while app open / branch switched (web/static is gitignored, does not follow checkout); (5) hidden-attr + countdown (cosmetic, unlikely).
 
-**Next:** Get exact repro from user (which behaviors, md or docx, error messages, app restarted after build?) → verify hypothesis → re-apply fixes incrementally.
+**Update 2026-07-05:** User confirmed app normal again after rollback + rebuild + restart. Symptoms identified: RTE slow-load + titlebar nav frozen (the `app:interaction-lock` held the whole shell while RTE load hung) — consistent with the stale-`web/static`/lock-without-failsafe hypothesis. Fix round v2 is delegated to Codex desktop via the step-by-step prompt at `_docs/specs/superpowers/plans/2026-07-05-codex-fix-round-v2-prompt.md` (steps 0–7, ONE behavior per step, user verify between; step 0 = interaction-lock watchdog; new points: SVG toolbar icons, default TNR 18px↔13.5pt).
+
+**Next:** User runs the Codex prompt → per-step manual verify → after all steps pass, merge Branch 2 → Branch 3 `automations/approval-polling` (Piece C).
 
 ---
 
