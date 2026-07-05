@@ -441,6 +441,7 @@ class RteDocumentService:
                 source["content"] = dehydrated
                 source["content_hash"] = new_hash
                 source["saved_at"] = _utc_now_iso()
+                source["document_settings"] = dict(DEFAULT_DOCUMENT_SETTINGS)
                 self._store_source(docx_path, source)
 
             export_scheduled = False

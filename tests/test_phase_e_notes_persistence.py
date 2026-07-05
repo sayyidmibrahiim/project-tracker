@@ -378,6 +378,57 @@ def test_rte_pipeline_save_revisions_hash_skip_and_stale(rte_docx):
         svc.save_document(docx, {"content": _doc("b"), "base_revision": 0})
 
 
+def test_docx_writer_uses_narrow_printable_width():
+    from docx import Document
+    from docx.shared import Mm
+
+    from infrastructure.docx_writer import (
+        DEFAULT_DOCUMENT_SETTINGS,
+        _apply_page_setup,
+        content_width_mm,
+    )
+
+    assert {
+        DEFAULT_DOCUMENT_SETTINGS["margin_top_mm"],
+        DEFAULT_DOCUMENT_SETTINGS["margin_right_mm"],
+        DEFAULT_DOCUMENT_SETTINGS["margin_bottom_mm"],
+        DEFAULT_DOCUMENT_SETTINGS["margin_left_mm"],
+    } == {12.7}
+    assert content_width_mm(DEFAULT_DOCUMENT_SETTINGS) == pytest.approx(184.6)
+    assert content_width_mm({"margin_left_mm": 100, "margin_right_mm": 100}) == 40.0
+
+    document = Document()
+    _apply_page_setup(document, {})
+    section = document.sections[0]
+    assert section.top_margin == Mm(12.7)
+    assert section.right_margin == Mm(12.7)
+    assert section.bottom_margin == Mm(12.7)
+    assert section.left_margin == Mm(12.7)
+
+
+def test_rte_pipeline_revision_migrates_document_settings(rte_docx):
+    import json as jsonlib
+
+    from infrastructure.docx_writer import DEFAULT_DOCUMENT_SETTINGS
+
+    svc, docx = rte_docx["service"], rte_docx["docx"]
+    source = svc._new_source(docx)
+    source["document_settings"] = {
+        **DEFAULT_DOCUMENT_SETTINGS,
+        "margin_top_mm": 25,
+        "margin_right_mm": 25,
+        "margin_bottom_mm": 25,
+        "margin_left_mm": 25,
+    }
+    svc._store_source(docx, source)
+
+    saved = svc.save_document(docx, {"content": _doc("narrow"), "base_revision": 0})
+
+    assert saved["revision"] == 1
+    stored = jsonlib.loads(svc.source_path(docx).read_text(encoding="utf-8"))
+    assert stored["document_settings"] == DEFAULT_DOCUMENT_SETTINGS
+
+
 def test_rte_pipeline_hides_sidecar_dir_on_windows(rte_docx):
     import ctypes
     import sys
@@ -525,3 +576,93 @@ def test_rte_pipeline_real_export_roundtrip(temp_project):
     assert docx.is_file() and docx.stat().st_size > 0
     texts = [p.text for p in Document(str(docx)).paragraphs]
     assert any("exported body" in t for t in texts)
+
+
+def test_rte_pipeline_real_export_clamps_image_and_table(temp_project):
+    import base64 as b64
+
+    from docx import Document
+    from docx.oxml.ns import qn
+    from docx.shared import Mm
+
+    from infrastructure.docx_writer import DEFAULT_DOCUMENT_SETTINGS, content_width_mm
+    from services.rte_document_service import RteDocumentService
+
+    svc = RteDocumentService()
+    docx = temp_project["project_path"] / "_cr-docs" / "wide-content.docx"
+    docx.parent.mkdir(parents=True, exist_ok=True)
+    image = svc.save_image(docx, b64.b64encode(PNG_1PX).decode())
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "image",
+                        "attrs": {
+                            "src": image["src"],
+                            "assetId": image["asset_id"],
+                            "width": 5000,
+                        },
+                    }
+                ],
+            },
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {
+                                "type": "tableCell",
+                                "attrs": {
+                                    "colspan": 1,
+                                    "rowspan": 1,
+                                    "colwidth": [900],
+                                },
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "A"}],
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "tableCell",
+                                "attrs": {
+                                    "colspan": 1,
+                                    "rowspan": 1,
+                                    "colwidth": [900],
+                                },
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "B"}],
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+
+    svc.save_document(
+        docx,
+        {"content": content, "base_revision": 0, "reason": "manual"},
+    )
+    assert svc.coordinator.wait_idle(timeout_s=15)
+    svc.coordinator.shutdown(timeout_s=5.0)
+
+    exported = Document(str(docx))
+    printable_mm = content_width_mm(DEFAULT_DOCUMENT_SETTINGS)
+    assert exported.inline_shapes[0].width <= Mm(printable_mm) + 1000
+    widths_dxa = []
+    for cell in exported.tables[0].rows[0].cells:
+        tc_w = cell._tc.get_or_add_tcPr().find(qn("w:tcW"))
+        assert tc_w is not None
+        widths_dxa.append(int(tc_w.get(qn("w:w"))))
+    printable_dxa = printable_mm / 25.4 * 96.0 * 15
+    assert sum(widths_dxa) <= printable_dxa + 15

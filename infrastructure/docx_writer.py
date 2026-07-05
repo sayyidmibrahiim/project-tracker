@@ -20,6 +20,7 @@ from typing import Any, Callable
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.image.image import Image as _DocxImage
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Mm, Pt, RGBColor
@@ -31,14 +32,24 @@ class DocxTargetLockedError(RuntimeError):
 
 DEFAULT_DOCUMENT_SETTINGS: dict[str, Any] = {
     "page_format": "A4",
-    "margin_top_mm": 20,
-    "margin_right_mm": 20,
-    "margin_bottom_mm": 20,
-    "margin_left_mm": 20,
+    "margin_top_mm": 12.7,
+    "margin_right_mm": 12.7,
+    "margin_bottom_mm": 12.7,
+    "margin_left_mm": 12.7,
     "default_font_family": "Times New Roman",
     "default_font_size_pt": 11,
     "line_height": 1.15,
 }
+
+
+def content_width_mm(settings: dict[str, Any]) -> float:
+    return max(
+        210.0
+        - float(settings.get("margin_left_mm", 12.7))
+        - float(settings.get("margin_right_mm", 12.7)),
+        40.0,
+    )
+
 
 _ALIGN = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
@@ -98,6 +109,7 @@ class _Renderer:
         self.doc = document
         self.assets_dir = assets_dir
         self.settings = settings
+        self.content_width_px = content_width_mm(settings) / 25.4 * 96.0
         self._renderers: dict[str, Callable[[dict, Any], None]] = {
             "paragraph": self._paragraph,
             "heading": self._heading,
@@ -276,6 +288,11 @@ class _Renderer:
                         self._render_block(child, container=cell)
                 c += colspan
 
+        specified_width_px = sum(px for px in col_widths_px if px is not None)
+        if specified_width_px > self.content_width_px:
+            scale = self.content_width_px / specified_width_px
+            col_widths_px = [px * scale if px is not None else None for px in col_widths_px]
+
         # Column widths: px -> dxa (1 px ≈ 15 dxa at 96dpi/20 twips-per-pt).
         for idx, px in enumerate(col_widths_px):
             if px is None:
@@ -420,8 +437,17 @@ class _Renderer:
             return
         width = attrs.get("width")
         kwargs = {}
+        max_width = Inches(self.content_width_px / 96.0)
         if isinstance(width, (int, float)) and width > 0:
-            kwargs["width"] = Inches(float(width) / 96.0)
+            kwargs["width"] = min(Inches(float(width) / 96.0), max_width)
+        else:
+            try:
+                probe = _DocxImage.from_file(str(path))
+                natural = Inches(probe.px_width / float(probe.horz_dpi or 96))
+                if natural > max_width:
+                    kwargs["width"] = max_width
+            except Exception:
+                pass
         try:
             paragraph.add_run().add_picture(str(path), **kwargs)
         except Exception:
@@ -441,10 +467,10 @@ def _apply_page_setup(document: Document, settings: dict[str, Any]) -> None:
     if str(settings.get("page_format", "A4")).upper() == "A4":
         section.page_width = Mm(210)
         section.page_height = Mm(297)
-    section.top_margin = Mm(float(settings.get("margin_top_mm", 20)))
-    section.right_margin = Mm(float(settings.get("margin_right_mm", 20)))
-    section.bottom_margin = Mm(float(settings.get("margin_bottom_mm", 20)))
-    section.left_margin = Mm(float(settings.get("margin_left_mm", 20)))
+    section.top_margin = Mm(float(settings.get("margin_top_mm", 12.7)))
+    section.right_margin = Mm(float(settings.get("margin_right_mm", 12.7)))
+    section.bottom_margin = Mm(float(settings.get("margin_bottom_mm", 12.7)))
+    section.left_margin = Mm(float(settings.get("margin_left_mm", 12.7)))
     style = document.styles["Normal"]
     family = _first_family(settings.get("default_font_family"))
     if family:
