@@ -115,6 +115,7 @@
   let tableOpen = $state(false);
   let tableHover = $state({ rows: 1, cols: 1 });
   let emojiOpen = $state(false);
+  let helpOpen = $state(false);
   let fontSelVal = $state('');
   let sizeSelVal = $state('');
   // Inline link dialog (replaces unreliable WebView2 prompt()).
@@ -410,7 +411,7 @@
 
   function closeAllPopovers() {
     colorOpen = false; tableOpen = false; emojiOpen = false;
-    linkOpen = false; imgOpen = false;
+    linkOpen = false; imgOpen = false; helpOpen = false;
   }
 
   function onWindowClick(e: MouseEvent) {
@@ -1047,6 +1048,22 @@
     </div>
 
     <div class="ne-actions">
+      <div class="ne-popover-wrap">
+        <button type="button" class="ne-tbtn ne-help-btn" class:active={helpOpen} aria-label="Show editor shortcuts" aria-expanded={helpOpen} title="Shortcuts" onmousedown={(e) => { e.preventDefault(); const next = !helpOpen; closeAllPopovers(); helpOpen = next; }}>?</button>
+        {#if helpOpen}
+          <div class="ne-popover ne-help-pop">
+            <div class="ne-help-row"><kbd class="ne-kbd">Ctrl+S</kbd><span>{docxPipelineMode ? 'Save + export DOCX now' : 'Save'}</span></div>
+            <div class="ne-help-row"><kbd class="ne-kbd">Ctrl+B/I/U</kbd><span>Bold, italic, underline</span></div>
+            <div class="ne-help-row"><kbd class="ne-kbd">Ctrl+Z / Ctrl+Y</kbd><span>Undo / redo</span></div>
+            <div class="ne-help-row"><kbd class="ne-kbd">Win+Shift+S</kbd><span>Capture, then Ctrl+V to paste</span></div>
+            <div class="ne-help-row"><kbd class="ne-kbd">Drop image</kbd><span>Insert image file</span></div>
+            <div class="ne-help-row"><kbd class="ne-kbd">Drag edge</kbd><span>Resize image or table column</span></div>
+            {#if docxPipelineMode}
+              <div class="ne-help-row"><kbd class="ne-kbd">DOCX</kbd><span>DOCX exports automatically 5s after Saved</span></div>
+            {/if}
+          </div>
+        {/if}
+      </div>
       <button type="button" class="ne-tbtn ne-fsbtn" class:active={fullscreen} title={fullscreen ? "Exit fullscreen" : "Fullscreen"} onmousedown={(e) => { e.preventDefault(); toggleFullscreen(); }}>
         {#if fullscreen}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/></svg>
@@ -1094,6 +1111,9 @@
   .ne-tcell.ne-thover { background:var(--color-dbs-red); border-color:var(--color-dbs-red); }
   .ne-table-label { text-align:center; font-size:9px; font-weight:800; color:var(--color-muted); margin:4px 0; }
   .ne-link-pop { left:auto; right:0; transform:none; padding:8px; width:200px; display:flex; flex-direction:column; gap:2px; }
+  .ne-help-pop { left:auto; right:0; transform:none; padding:8px; width:250px; display:flex; flex-direction:column; gap:6px; }
+  .ne-help-row { display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:center; font-size:10px; color:var(--color-muted); line-height:1.3; }
+  .ne-kbd { display:inline-flex; align-items:center; justify-content:center; min-height:18px; padding:1px 5px; border:1px solid var(--soft-white-border); border-radius:4px; background:var(--soft-pink-surface); color:var(--color-dbs-red); font-size:9px; font-weight:850; white-space:nowrap; }
   .ne-field-label { font-size:9px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.3px; }
   .ne-alt-label { margin-top:4px; }
   .ne-image-picked { padding:4px 6px; border:1px solid var(--soft-white-border); border-radius:4px; font-size:10px; font-weight:800; color:var(--color-muted); background:var(--soft-pink-surface); }

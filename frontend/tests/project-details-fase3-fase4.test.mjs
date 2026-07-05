@@ -70,6 +70,18 @@ test("NotesEditor Ctrl+S skips pending DOCX countdown and retries locked export"
   assert.match(NE, /export async function flushNow\(\): Promise<boolean> \{[\s\S]*idleExport\.cancel\(\);[\s\S]*stopExportCountdown\(\);[\s\S]*await requestDocxExport\(\)/);
 });
 
+test("NotesEditor exposes a compact shortcuts help popover", () => {
+  assert.match(NE, /let helpOpen = \$state\(false\)/);
+  assert.match(NE, /function closeAllPopovers\(\)[\s\S]*helpOpen = false/);
+  assert.match(NE, /aria-label="Show editor shortcuts"/);
+  assert.match(NE, /class="ne-popover ne-help-pop"/);
+  assert.match(NE, /Ctrl\+S/);
+  assert.match(NE, /Win\+Shift\+S/);
+  assert.match(NE, /DOCX exports automatically 5s after Saved/);
+  assert.match(NE, /\.ne-help-pop[\s\S]*width:250px/);
+  assert.match(NE, /\.ne-kbd[\s\S]*var\(--soft-pink-surface\)/);
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);
