@@ -89,7 +89,7 @@ test("NotesEditor scopes fixed printable width to DOCX mode", () => {
   );
   assert.match(
     NE,
-    /\.ne-editor-host\.ne-docx-page\s*\{\s*overflow-x:auto;\s*\}/,
+    /\.ne-editor-host\.ne-docx-page\s*\{[^}]*overflow-x:auto;/,
   );
   assert.match(
     NE,
@@ -98,6 +98,17 @@ test("NotesEditor scopes fixed printable width to DOCX mode", () => {
   assert.match(
     NE,
     /:global\(\.ne-editor-host \.ne-textarea\)\s*\{[^}]*width:100%;/,
+  );
+});
+
+test("NotesEditor gives DOCX page a neutral workspace", () => {
+  assert.match(
+    NE,
+    /\.ne-editor-host\.ne-docx-page\s*\{[^}]*overflow-x:auto;[^}]*box-sizing:border-box;[^}]*padding:12px;[^}]*background:var\(--main-panel-bg\);[^}]*border-radius:6px;/,
+  );
+  assert.match(
+    NE,
+    /:global\(\.ne-editor-host\.ne-docx-page \.ne-textarea\)\s*\{[^}]*width:720px;[^}]*background:var\(--color-workspace-panel\);/,
   );
 });
 

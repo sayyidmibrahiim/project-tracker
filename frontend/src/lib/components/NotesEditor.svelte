@@ -1130,8 +1130,8 @@
   :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; }
   /* DOCX page: 184.6mm printable width at 96dpi = 698px,
      plus 20px padding and 2px border = 720px border-box. */
-  .ne-editor-host.ne-docx-page { overflow-x:auto; }
-  :global(.ne-editor-host.ne-docx-page .ne-textarea) { width:720px; max-width:none; margin:0 auto; box-sizing:border-box; }
+  .ne-editor-host.ne-docx-page { overflow-x:auto; box-sizing:border-box; padding:12px; background:var(--main-panel-bg); border-radius:6px; }
+  :global(.ne-editor-host.ne-docx-page .ne-textarea) { width:720px; max-width:none; margin:0 auto; box-sizing:border-box; background:var(--color-workspace-panel); }
   :global(.ne-editor-host .ne-textarea:focus) { border-color:var(--color-dbs-red); }
   :global(.ne-editor-host .ne-textarea.ne-fs) { max-height:none; resize:none; }
   :global(.ne-editor-host .ne-textarea p.is-editor-empty:first-child::before) { content:attr(data-placeholder); color:var(--color-muted); opacity:0.7; pointer-events:none; float:left; height:0; }
