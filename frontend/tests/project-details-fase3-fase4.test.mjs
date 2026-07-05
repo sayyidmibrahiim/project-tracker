@@ -82,6 +82,25 @@ test("NotesEditor exposes a compact shortcuts help popover", () => {
   assert.match(NE, /\.ne-kbd[\s\S]*var\(--soft-pink-surface\)/);
 });
 
+test("NotesEditor scopes fixed printable width to DOCX mode", () => {
+  assert.match(
+    NE,
+    /<div class="ne-editor-host" class:ne-docx-page=\{docxPipelineMode\} bind:this=\{hostEl\}><\/div>/,
+  );
+  assert.match(
+    NE,
+    /\.ne-editor-host\.ne-docx-page\s*\{\s*overflow-x:auto;\s*\}/,
+  );
+  assert.match(
+    NE,
+    /:global\(\.ne-editor-host\.ne-docx-page \.ne-textarea\)\s*\{[^}]*width:720px;[^}]*max-width:none;[^}]*margin:0 auto;[^}]*box-sizing:border-box;/,
+  );
+  assert.match(
+    NE,
+    /:global\(\.ne-editor-host \.ne-textarea\)\s*\{[^}]*width:100%;/,
+  );
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);
