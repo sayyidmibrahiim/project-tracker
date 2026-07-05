@@ -83,6 +83,9 @@
   /** DOCX pipeline mode: JSON source of truth, .docx = derived export. */
   const docxPipelineMode = $derived(effectiveSaveStrategy === "docx_pipeline");
   const richToolbarEnabled = $derived(canEdit && !isPlainTextMode && (supportedEditorFeatures.length === 0 || supportedEditorFeatures.some((feature) => feature !== "plain_text")));
+  const ZOOM_MIN = 100;
+  const ZOOM_MAX = 500;
+  const ZOOM_STEP = 25;
 
   type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error" | "offline";
 
@@ -97,6 +100,7 @@
   // walk) runs only in flush(), not on every keystroke.
   let dirty = $state(false);
   let fullscreen = $state(false);
+  let zoomPercent = $state(100);
   // Non-reactive: Tiptap transaction events fire during mount; Svelte state here can loop.
   let rev = 0;
   let uiTick = $state(0);
@@ -516,7 +520,30 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       void flushNow();
+      return;
     }
+    if (!(e.ctrlKey || e.metaKey) || capability === "unsupported" || !hostEl?.contains(e.target as Node)) return;
+    if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      zoomIn();
+    } else if (e.key === "-") {
+      e.preventDefault();
+      zoomOut();
+    }
+  }
+
+  function setZoom(next: number) {
+    zoomPercent = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  }
+
+  function zoomIn() { setZoom(zoomPercent + ZOOM_STEP); }
+  function zoomOut() { setZoom(zoomPercent - ZOOM_STEP); }
+
+  function onZoomWheel(e: WheelEvent) {
+    if (!e.ctrlKey || capability === "unsupported") return;
+    e.preventDefault();
+    if (e.deltaY < 0) zoomIn();
+    else if (e.deltaY > 0) zoomOut();
   }
 
   // ── Active-state helpers (reactive via a toolbar-only token) ──
@@ -1048,6 +1075,13 @@
     </div>
 
     <div class="ne-actions">
+      {#if capability !== "unsupported"}
+        <div class="ne-zoom" aria-label="Editor zoom">
+          <button type="button" class="ne-tbtn ne-zoom-btn" aria-label="Zoom out" title="Zoom out" disabled={zoomPercent <= ZOOM_MIN} onmousedown={(e) => { e.preventDefault(); zoomOut(); }}>−</button>
+          <button type="button" class="ne-tbtn ne-zoom-val" aria-label="Reset zoom to 100%" title="Reset zoom to 100%" onmousedown={(e) => { e.preventDefault(); setZoom(100); }}>{zoomPercent}%</button>
+          <button type="button" class="ne-tbtn ne-zoom-btn" aria-label="Zoom in" title="Zoom in" disabled={zoomPercent >= ZOOM_MAX} onmousedown={(e) => { e.preventDefault(); zoomIn(); }}>+</button>
+        </div>
+      {/if}
       <div class="ne-popover-wrap">
         <button type="button" class="ne-tbtn ne-help-btn" class:active={helpOpen} aria-label="Show editor shortcuts" aria-expanded={helpOpen} title="Shortcuts" onmousedown={(e) => { e.preventDefault(); const next = !helpOpen; closeAllPopovers(); helpOpen = next; }}>?</button>
         {#if helpOpen}
@@ -1078,7 +1112,7 @@
     </div>
   </div>
 
-  <div class="ne-editor-host" class:ne-docx-page={docxPipelineMode} bind:this={hostEl}></div>
+  <div class="ne-editor-host" class:ne-docx-page={docxPipelineMode} style={`--ne-zoom:${zoomPercent / 100}`} onwheel={onZoomWheel} bind:this={hostEl}></div>
 </div>
 
 <style>
@@ -1097,6 +1131,9 @@
   .ne-tselect:active { transform:none; }
   .ne-tbtn s { color:inherit; text-decoration:line-through; }
   .ne-tselect { min-width:68px; width:auto; padding:0 16px 0 6px; appearance:none; font-size:9px; background-image:linear-gradient(45deg,transparent 50%,var(--text-strong) 50%),linear-gradient(135deg,var(--text-strong) 50%,transparent 50%); background-position:calc(100% - 6px) 10px,calc(100% - 2px) 10px; background-size:4px 4px,4px 4px; background-repeat:no-repeat; background-color:var(--card-white); }
+  .ne-zoom { display:inline-flex; align-items:center; gap:3px; }
+  .ne-zoom-btn { min-width:24px; }
+  .ne-zoom-val { min-width:48px; }
   .ne-fsbtn { min-width:30px; padding:0; }
   .ne-root.fullscreen .ne-tbtn { border-color:var(--input-border); }
   .ne-popover-wrap { position:relative; display:inline-flex; }
@@ -1126,8 +1163,8 @@
 
   /* Editor surface — Tiptap mounts its contenteditable inside this host.
      Default font is Times New Roman (DECISIONS D-0007 / bug 3 fix). */
-  .ne-editor-host { width:100%; }
-  :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; }
+  .ne-editor-host { width:100%; overflow-x:auto; }
+  :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; zoom:var(--ne-zoom, 1); }
   /* DOCX page: 184.6mm printable width at 96dpi = 698px,
      plus 20px padding and 2px border = 720px border-box. */
   .ne-editor-host.ne-docx-page { overflow-x:auto; box-sizing:border-box; padding:12px; background:var(--main-panel-bg); border-radius:6px; }

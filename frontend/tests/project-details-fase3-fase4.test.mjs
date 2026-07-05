@@ -85,7 +85,7 @@ test("NotesEditor exposes a compact shortcuts help popover", () => {
 test("NotesEditor scopes fixed printable width to DOCX mode", () => {
   assert.match(
     NE,
-    /<div class="ne-editor-host" class:ne-docx-page=\{docxPipelineMode\} bind:this=\{hostEl\}><\/div>/,
+    /<div class="ne-editor-host" class:ne-docx-page=\{docxPipelineMode\}[\s\S]*bind:this=\{hostEl\}><\/div>/,
   );
   assert.match(
     NE,
@@ -110,6 +110,23 @@ test("NotesEditor gives DOCX page a neutral workspace", () => {
     NE,
     /:global\(\.ne-editor-host\.ne-docx-page \.ne-textarea\)\s*\{[^}]*width:720px;[^}]*background:var\(--color-workspace-panel\);/,
   );
+});
+
+test("NotesEditor supports Word-like cross-format zoom", () => {
+  assert.match(NE, /const ZOOM_MIN = 100/);
+  assert.match(NE, /const ZOOM_MAX = 500/);
+  assert.match(NE, /const ZOOM_STEP = 25/);
+  assert.match(NE, /let zoomPercent = \$state\(100\)/);
+  assert.match(NE, /function setZoom\([^)]*\)[\s\S]*Math\.min\(ZOOM_MAX, Math\.max\(ZOOM_MIN/);
+  assert.match(NE, /function onZoomWheel\(e: WheelEvent\)[\s\S]*e\.ctrlKey[\s\S]*e\.preventDefault\(\)/);
+  assert.match(NE, /e\.key === "\+" \|\| e\.key === "="/);
+  assert.match(NE, /e\.key === "-"/);
+  assert.match(NE, /aria-label="Zoom out"/);
+  assert.match(NE, /aria-label="Reset zoom to 100%"/);
+  assert.match(NE, /aria-label="Zoom in"/);
+  assert.match(NE, /capability !== "unsupported"/);
+  assert.match(NE, /--ne-zoom/);
+  assert.match(NE, /zoom:var\(--ne-zoom, 1\)/);
 });
 
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
