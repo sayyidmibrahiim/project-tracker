@@ -321,6 +321,10 @@ export function approvalSetEnabled(projectPath: string, enabled: boolean): Promi
   return callBridge("approval_set_enabled", projectPath, enabled);
 }
 
+export function approvalSetAutoDownload(projectPath: string, kind: "uat" | "lv", enabled: boolean): Promise<BridgeResponse<{ kind: string; auto_download: boolean }>> {
+  return callBridge("approval_set_auto_download", projectPath, kind, enabled);
+}
+
 export function sendUatApprovalRequest(projectPath: string): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
   return callBridge("send_uat_approval_request", projectPath);
 }

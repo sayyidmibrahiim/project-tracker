@@ -357,10 +357,13 @@ export interface ApprovalKindStatus {
   eligible: boolean;
   reasons: string[];
   job: ApprovalJob | null;
+  auto_download: boolean;
 }
 
 export interface ApprovalStatus {
+  /** Effective value: per-project override else global default, forced off when locked. */
   automation_enabled: boolean;
+  automation_locked: boolean;
   outlook_available: boolean;
   uat: ApprovalKindStatus;
   lv: ApprovalKindStatus;

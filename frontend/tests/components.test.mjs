@@ -27,7 +27,6 @@ const CONFIRM = "../src/lib/components/ConfirmModal.svelte";
 const DISABLED = "../src/lib/components/DisabledHint.svelte";
 const AUTOMATIONS = "../src/lib/components/Automations.svelte";
 const AUTOMATIONS_OUTLOOK = "../src/lib/components/AutomationsOutlook.svelte";
-const EMAIL_TEMPLATE_DIALOG = "../src/lib/components/EmailTemplateDialog.svelte";
 const NOTES_EDITOR = "../src/lib/components/NotesEditor.svelte";
 const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
 const SUB_PROJECT_TABLE = "../src/lib/components/DroneTable.svelte";
@@ -173,30 +172,11 @@ test("AutomationsOutlook renders the two-column send/download scaffold and draft
   assert.match(body, /DOWNLOAD AUTOMATION/);
   assert.match(body, /Downloaded Emails/);
   assert.match(body, /Draft-first Outlook is the safe default/);
-  assert.match(body, /ACK_UAT/);
-  assert.match(body, /APRVL_CR/);
-});
-
-test("EmailTemplateDialog renders the PRD §16.3 two-column editor for a fixed category", async () => {
-  const body = await renderViaLoader(EMAIL_TEMPLATE_DIALOG, {
-    categoryCode: "ACK_UAT",
-    onClose: () => {},
-  });
-  assert.match(body, /ACK_UAT/);
-  assert.match(body, /Subject Template/);
-  assert.match(body, /Body Template/);
-  assert.match(body, /Active Conditions/);
-  assert.match(body, /Condition Preview/);
-  // Placeholder chips and the always-present condition controls render.
-  assert.match(body, /\{PROJECT_NAME\}/);
-  assert.match(body, /\{IMPLEMENTATION_PLAN\}/);
-  assert.match(body, /\+ Add Condition/);
-  assert.match(body, /No conditions defined/);
-  // Draft-first mode options render (send-immediately is an explicit opt-in).
-  assert.match(body, /Send Immediately/);
-  // Footer controls.
-  assert.match(body, /Save/);
-  assert.match(body, /Cancel/);
+  assert.match(body, /Email Ack \(UAT\)/);
+  assert.match(body, /Email LV \(Prod\)/);
+  assert.match(body, /New-CR automation default/);
+  assert.doesNotMatch(body, /ACK_SOP/);
+  assert.doesNotMatch(body, /APRVL_SOP/);
 });
 
 test("NotesEditor renders the markdown toolbar and autosave status", async () => {
@@ -360,16 +340,21 @@ test("ProjectDetails source follows the prototype Project Command Center structu
   assert.doesNotMatch(src, /Folder Transitions/);
 });
 
-test("Automations exposes Piece C approval template editor", () => {
+test("Automations exposes Piece C approval template editor inside the Outlook tab", () => {
   const AT = readFileSync(fileURLToPath(new URL("../src/lib/components/ApprovalTemplates.svelte", import.meta.url)), "utf8");
   const AU = readFileSync(fileURLToPath(new URL("../src/lib/components/Automations.svelte", import.meta.url)), "utf8");
+  const AO = readFileSync(fileURLToPath(new URL("../src/lib/components/AutomationsOutlook.svelte", import.meta.url)), "utf8");
   const ST = readFileSync(fileURLToPath(new URL("../src/lib/components/Settings.svelte", import.meta.url)), "utf8");
   assert.match(AT, /getApprovalTemplate/);
   assert.match(AT, /updateApprovalTemplate/);
   assert.match(AT, /previewApprovalTemplate/);
   assert.match(AT, /\{CR_NUMBER\}/);
-  assert.match(AU, /ApprovalTemplates/);
-  assert.match(AU, /"approval"/);
+  assert.match(AT, /initialKind/);
+  // No dedicated Approval tab: the editor is hosted by the Outlook tab dialog.
+  assert.doesNotMatch(AU, /"approval"/);
+  assert.doesNotMatch(AU, /ApprovalTemplates/);
+  assert.match(AO, /ApprovalTemplates/);
+  assert.match(AO, /automation_default_enabled/);
   assert.match(ST, /approval_polling_interval_minutes/);
   assert.match(ST, /approval_polling_max_hours/);
 });

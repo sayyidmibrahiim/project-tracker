@@ -5,15 +5,13 @@
   import TeamsActions from "./TeamsActions.svelte";
   import SchedulerActions from "./SchedulerActions.svelte";
   import RulesActions from "./RulesActions.svelte";
-  import ApprovalTemplates from "./ApprovalTemplates.svelte";
 
-  type TabId = "outlook" | "teams" | "reminder" | "rules" | "approval";
+  type TabId = "outlook" | "teams" | "reminder" | "rules";
   const tabs: { id: TabId; label: string }[] = [
     { id: "outlook", label: "Outlook" },
     { id: "teams", label: "Teams" },
     { id: "reminder", label: "Reminder" },
     { id: "rules", label: "Rules Engine" },
-    { id: "approval", label: "Approval" },
   ];
 
   let activeTab: TabId = $state("outlook");
@@ -75,8 +73,6 @@
       <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">🔔</span><span class="panel-title">Reminder Rules</span><span class="panel-subtitle">scheduler control surface</span></div><SchedulerActions /></div>
     {:else if activeTab === "rules"}
       <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">▣</span><span class="panel-title">Rules Engine</span><span class="panel-subtitle">trigger / condition / action</span></div><RulesActions /></div>
-    {:else}
-      <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">✉</span><span class="panel-title">Approval Templates</span><span class="panel-subtitle">Piece C — UAT/LV request emails + polling</span></div><ApprovalTemplates /></div>
     {/if}
   </div>
 </section>

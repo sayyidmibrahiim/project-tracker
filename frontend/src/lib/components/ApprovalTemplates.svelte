@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { callBridge, getApprovalTemplate, isPywebviewReady, previewApprovalTemplate, updateApprovalTemplate } from "../bridge";
   import type { ApprovalTemplate } from "../types";
 
@@ -11,10 +11,12 @@
   const PLACEHOLDERS = "{CR_NUMBER} {PROJECT_NAME} {DRONE_TICKET} {START_DATETIME} {END_DATETIME}";
   const EMPTY: ApprovalTemplate = { to: "", cc: "", subject: "", body: "", mode: "draft" };
 
+  let { initialKind = null }: { initialKind?: Kind | null } = $props();
+
   type ProjectRow = { project_path: string; project_name: string };
   let projects: ProjectRow[] = $state([]);
   let selectedProject = $state("");
-  let kind: Kind = $state("uat");
+  let kind: Kind = $state(untrack(() => initialKind) ?? "uat");
   let form: ApprovalTemplate = $state({ ...EMPTY });
   let source = $state("none");
   let status = $state("");
@@ -80,11 +82,13 @@
         {#each projects as p}<option value={p.project_path}>{p.project_name}</option>{/each}
       </select>
     </label>
-    <div class="apt-tabs">
-      {#each KINDS as k}
-        <button type="button" class="sb-tab" class:active={kind === k.id} onclick={() => { kind = k.id; void loadTemplate(); }}>{k.label}</button>
-      {/each}
-    </div>
+    {#if initialKind === null}
+      <div class="apt-tabs">
+        {#each KINDS as k}
+          <button type="button" class="sb-tab" class:active={kind === k.id} onclick={() => { kind = k.id; void loadTemplate(); }}>{k.label}</button>
+        {/each}
+      </div>
+    {/if}
   </div>
   <p class="apt-source">Editing: <strong>{source}</strong> · Placeholders: <code>{PLACEHOLDERS}</code></p>
   <label class="field"><span>To</span><input class="input" bind:value={form.to} /></label>
