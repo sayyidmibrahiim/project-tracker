@@ -423,3 +423,16 @@ class ApprovalPollingService:
 
     def _on_warning(self, job: dict[str, Any], message: str) -> None:
         print(f"[approval-polling] WARN {job['job_id']}: {message}")
+
+
+_ACTIVE_SERVICE: ApprovalPollingService | None = None
+
+
+def register_approval_polling_service(service: ApprovalPollingService) -> None:
+    global _ACTIVE_SERVICE
+    _ACTIVE_SERVICE = service
+
+
+def shutdown_approval_polling_service() -> None:
+    if _ACTIVE_SERVICE is not None:
+        _ACTIVE_SERVICE.shutdown()

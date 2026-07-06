@@ -487,6 +487,31 @@ class TeamsServiceProtocol(Protocol):
         """Send a Teams message (auto-send only when enabled and confirmed)."""
 
 
+class ApprovalServiceProtocol(Protocol):
+    """Piece C approval automation surface used by JsApi."""
+
+    def get_status(self, project_path: Path) -> dict[str, object]:
+        """Conditions + latest job per request kind."""
+
+    def set_enabled(self, project_path: Path, enabled: bool) -> dict[str, object]:
+        """Persist the per-project automation toggle."""
+
+    def send_request(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Send an approval request email and start polling."""
+
+    def stop(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Stop polling for a request kind."""
+
+    def get_template(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Return the effective template + its source."""
+
+    def update_template(self, project_path: Path, kind: str, template: dict[str, object]) -> dict[str, object]:
+        """Persist a per-project template override."""
+
+    def preview_template(self, project_path: Path, kind: str, template: dict[str, object] | None) -> dict[str, object]:
+        """Render a template with real project data."""
+
+
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
 
@@ -529,6 +554,7 @@ class JsApi:
         teams_service: TeamsServiceProtocol | None = None,
         global_plan_service: GlobalPlanServiceProtocol | None = None,
         appcode_service: AppCodeServiceProtocol | None = None,
+        approval_service: ApprovalServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -549,6 +575,7 @@ class JsApi:
         self._teams_service = teams_service
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
+        self._approval_service = approval_service
 
     def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
         """Persist a frontend activity/debug event to the AppData frontend log."""
@@ -1134,6 +1161,91 @@ class JsApi:
             return ok(_to_frontend_safe(self._scheduler_service.trigger_entry(entry_id)))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_ENTRY_TRIGGER_FAILED")
+
+    def _approval_guard(self):
+        if self._approval_service is None:
+            return fail("approval_service is not configured", code="SERVICE_UNAVAILABLE")
+        return None
+
+    def get_approval_status(self, project_path: str) -> dict[str, object]:
+        """Piece C: conditions + job status for both request kinds."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return ok(_to_frontend_safe(self._approval_service.get_status(Path(project_path))))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_STATUS_FAILED")
+
+    def approval_set_enabled(self, project_path: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project automation toggle."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.set_enabled(Path(project_path), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def send_uat_approval_request(self, project_path: str) -> dict[str, object]:
+        """Piece C: send the UAT approval request and start polling."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.send_request(Path(project_path), "uat")
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_SEND_FAILED")
+
+    def send_lv_approval_request(self, project_path: str) -> dict[str, object]:
+        """Piece C: send the LV approval request and start polling."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.send_request(Path(project_path), "lv")
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_SEND_FAILED")
+
+    def stop_approval_polling(self, project_path: str, request_type: str) -> dict[str, object]:
+        """Piece C: stop polling for one request kind."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.stop(Path(project_path), str(request_type))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_STOP_FAILED")
+
+    def get_approval_template(self, project_path: str, kind: str) -> dict[str, object]:
+        """Piece C: effective approval template + source."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.get_template(Path(project_path), str(kind))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def update_approval_template(self, project_path: str, kind: str, template: dict[str, object]) -> dict[str, object]:
+        """Piece C: persist a per-project approval template."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.update_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def preview_approval_template(self, project_path: str, kind: str, template: dict[str, object] | None = None) -> dict[str, object]:
+        """Piece C: render a template with real project data."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.preview_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
 
     def project_get(self, project_path: str) -> dict[str, object]:
         """Return full project detail."""

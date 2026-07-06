@@ -34,6 +34,7 @@ from infrastructure.link_bank_store import LinkBankStore
 from infrastructure.metadata_store import MetadataStore
 from infrastructure.settings_store import SettingsStore, app_config_dir
 from services.automation_service import AutomationService
+from services.approval_polling_service import ApprovalPollingService, register_approval_polling_service
 from services.dashboard_service import DashboardService
 from services.global_plan_service import GlobalPlanService
 from services.download_email_service import DownloadEmailService
@@ -236,6 +237,16 @@ def create_js_api(
         folder_provider=lambda: _settings_store.read().second_brain_folder,
     )
     global_plan_svc = GlobalPlanService()
+    email_svc = EmailService()
+    approval_svc = ApprovalPollingService(
+        settings_store=_settings_store,
+        metadata_store=_metadata_store,
+        email_service=email_svc,
+        cache=cache_db,
+        notification_service=notification_svc,
+    )
+    approval_svc.resume_pending()
+    register_approval_polling_service(approval_svc)
 
     # ── settings adapter (SettingsStore.read() → get_settings()) ──────
     class _SettingsAdapter:
@@ -1873,7 +1884,7 @@ def create_js_api(
         outlook_service=_OutlookServiceAdapter(
             _settings_store,
             _metadata_store,
-            EmailService(),
+            email_svc,
             DownloadEmailService(notification_service=notification_svc),
         ),
         teams_service=_TeamsServiceAdapter(
@@ -1881,6 +1892,7 @@ def create_js_api(
             TeamsService(),
         ),
         global_plan_service=global_plan_svc,
+        approval_service=approval_svc,
     )
 
 
@@ -1946,6 +1958,10 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
         from services.rte_document_service import shutdown_rte_document_service  # noqa: PLC0415
 
         shutdown_rte_document_service(timeout_s=10.0)
+
+        from services.approval_polling_service import shutdown_approval_polling_service  # noqa: PLC0415
+
+        shutdown_approval_polling_service()
 
 
 if __name__ == "__main__":
