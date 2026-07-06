@@ -359,3 +359,17 @@ test("ProjectDetails source follows the prototype Project Command Center structu
   assert.doesNotMatch(src, /Project Actions/);
   assert.doesNotMatch(src, /Folder Transitions/);
 });
+
+test("Automations exposes Piece C approval template editor", () => {
+  const AT = readFileSync(fileURLToPath(new URL("../src/lib/components/ApprovalTemplates.svelte", import.meta.url)), "utf8");
+  const AU = readFileSync(fileURLToPath(new URL("../src/lib/components/Automations.svelte", import.meta.url)), "utf8");
+  const ST = readFileSync(fileURLToPath(new URL("../src/lib/components/Settings.svelte", import.meta.url)), "utf8");
+  assert.match(AT, /getApprovalTemplate/);
+  assert.match(AT, /updateApprovalTemplate/);
+  assert.match(AT, /previewApprovalTemplate/);
+  assert.match(AT, /\{CR_NUMBER\}/);
+  assert.match(AU, /ApprovalTemplates/);
+  assert.match(AU, /"approval"/);
+  assert.match(ST, /approval_polling_interval_minutes/);
+  assert.match(ST, /approval_polling_max_hours/);
+});
