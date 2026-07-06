@@ -8,6 +8,20 @@
 
 ---
 
+## 2026-07-06 (Piece C implemented — Branch 3)
+
+**Now:** Branch 3 `automations/approval-polling` implemented through automated verification. Scope: `ProjectMetadata.automation_enabled` + `approval_templates`, default approval templates/settings fields, SQLite `approval_polling_jobs`, `ApprovalPollingService` with Outlook send/draft + reply polling + startup resume + shutdown hook, JsApi/bridge wrappers, Project Details approval toggle/UAT/LV controls, Automations Approval Templates editor.
+
+**Next:** User closes Project Tracker app → run frontend build → user manual checklist. No merge until manual pass + explicit merge approval.
+
+**Blocked:** Build intentionally not run yet because RTE safety rule forbids `npm run build` while app may be open. Full pytest still has 6 known baseline failures outside Piece C (`test_phase_c_js_api_project.py` x3, `test_phase_d_app_web_project_service_adapter.py` x1, `test_year_create.py` x2).
+
+**Verification:** `npm --prefix frontend run check` 0/0; frontend node tests 123 pass; targeted pytest 53 pass; full pytest 1821 passed / 20 skipped / 6 known baseline failures; app smoke alive after 15s with empty stdout/stderr.
+
+**active_menu:** automations
+
+---
+
 ## 2026-07-06 (Branch 3 plan ready — Piece C)
 
 **Now:** Branch 2 merged to main. Branch 3 `automations/approval-polling` created; detailed executable plan committed at `_docs/specs/superpowers/plans/2026-07-06-piece-c-approval-polling-plan.md` (written to be executed verbatim by ANY model — full code per task, locked design decisions, no room for improvisation). Spec = `_docs/specs/superpowers/specs/2026-07-02-approval-automation-design.md`.

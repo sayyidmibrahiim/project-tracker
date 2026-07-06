@@ -1873,6 +1873,23 @@ Actions:
 
 ---
 
+### 16.7 Project Approval Polling (Piece C)
+
+Project Details exposes approval automation for CR projects:
+
+- `automation_enabled` is stored per project in `project_data.json`.
+- UAT approval button is enabled only when automation is ON, Outlook is available, project type is CR, CR number can be extracted from `cr_link`, `_cr-docs/uat-signoff.docx` is non-empty, at least one Drone ticket is `PENDING APPROVAL`, CR State is `PENDING SUBMISSION`, and a UAT approval template exists.
+- LV approval button is enabled only when automation is ON, Outlook is available, project type is CR, CR number can be extracted from `cr_link`, `_cr-docs/prod-lv.docx` is non-empty, CR State or a Drone ticket is `APPROVED`, and an LV approval template exists.
+- Approval templates support `to`, `cc`, `subject`, `body`, and `mode` (`draft` or `send`). Templates may be saved per project or as global defaults in Settings. Subject must include `{CR_NUMBER}`; send + polling use the same CR number extracted from `cr_link`.
+- Sending creates an Outlook draft by default or sends immediately when configured, records a project history entry, persists an `approval_polling_jobs` row in SQLite, and starts polling.
+- Polling scans Inbox replies received after the request time and matches the CR number in the subject. Matching replies are saved via Outlook `SaveAs olMSG` into `_cr-docs/uat-approval.msg` or `_cr-docs/prod-approval.msg`.
+- Polling resumes on app startup for jobs still marked `polling`; users may stop polling manually.
+- Settings expose polling interval (1–60 minutes, default 5) and max duration (1–24 hours, default 3). Timeout creates an in-app warning notification.
+
+Automations adds an Approval Templates tab for editing per-project templates, editing global defaults, and previewing rendered output.
+
+---
+
 ## 17. Settings — User Flows & Components
 
 ### 17.1 Purpose

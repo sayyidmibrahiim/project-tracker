@@ -6,10 +6,11 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `project-details/tiptap-docx-pipeline`.
-2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline is back at the first-manual-check state; fixes will be re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
+Active branch: `automations/approval-polling`.
 
-Active slice: **Tiptap DOCX pipeline (roadmap #2, D-0012)** — implemented, pending user manual verify: `.docx` CR docs editable via source.json sidecar + background python-docx export (latest-revision-wins, locked-file retry), image paste/drop as content-addressed asset files for all editors, `.rte/assets` refs in notes.md, migration import for legacy docx, shutdown flush. Header redesign (roadmap #1) user-verified + merged 2026-07-04.
+Active slice: **Piece C approval automation (roadmap #3, D-0013)** — implemented, awaiting build gate + user manual check: per-project approval toggle/templates, UAT/LV conditional send controls in Project Details, Outlook draft/send, SQLite persisted polling jobs with resume, CR-number subject matching, `.msg` save to `_cr-docs/`, Approval Templates tab, and Settings polling interval/max fields.
+
+2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
 Fix round v2 (steps 0–7, one behavior per round, user manual verify each): **complete 2026-07-06**. Step 0 watchdog `c94e387`, step 1 toolbar active states `65202cf`, steps 2–5b (5s idle countdown, hidden `.rte`, help popover, Narrow margins + clamp, WYSIWYG page + zoom) committed earlier, step 5c image drag-resize `4ca0abd`, step 6 SVG toolbar icons `b1cf0dc`, step 7 default TNR 18px↔13.5pt + per-file toolbar font/size memory `37d8ca7`. PRD §12.12 synced. **Branch merged to `main` 2026-07-06** (user approved; branch kept per user rule).
 
@@ -26,7 +27,7 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | ✅ Merged 2026-07-04 |
 | 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | ✅ Merged 2026-07-04 |
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | ✅ Merged 2026-07-06 (incl. fix round v2 steps 0–7) |
-| 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Planned |
+| 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Implemented, awaiting user manual check |
 | 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Planned |
 | 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
@@ -63,8 +64,9 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 
 ```
 svelte-check: 0 errors, 0 warnings
-frontend tests: 155 pass / 0 fail
-RTE backend capability tests: 13 pass / 0 fail
-bridge contract guard: 3 pass / 0 fail
-app startup: no stdout/stderr traceback captured before 12s smoke was stopped
+frontend tests: 123 pass / 0 fail
+targeted backend tests: 53 passed
+full pytest: 1821 passed, 20 skipped, 6 known baseline failures
+app startup: alive after 15s; stdout/stderr empty
+build: not run yet — waiting for user to close app before `npm run build`
 ```
