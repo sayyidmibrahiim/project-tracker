@@ -8,6 +8,20 @@
 
 ---
 
+## 2026-07-06 (Piece C UI rework — Branch 3, after first manual check)
+
+**Now:** User manual check rejected 2 things: (1) new Approval tab (Outlook tab already owns email templates), (2) approval controls squeezed into PD command bar. Rework committed in 3 slices: `ca6be1f1` backend (automation_enabled → `bool|None` inherit `settings.automation_default_enabled`; `approval_auto_download` dict per kind, OFF = send records history but no polling job; `TERMINAL_CR_STATES` FINISHED/POSTPONED/CANCELED force effective off + `automation_locked`; `set_auto_download` + `approval_set_auto_download` bridge), `226c9670` Automations page (Approval tab deleted; SEND AUTOMATION = 2 rows Email Ack (UAT)/Email LV (Prod) opening ApprovalTemplates as kind-preset dialog; SOP rows + EmailTemplateDialog.svelte deleted — `settings.email.categories` data kept, backend outlook_draft/send_email still consumes it; "New-CR automation default" toggle in panel title row), `3dd2c09c` PD (dedicated CR-only "Automations" section bottom-left pane: master toggle + lock hint, always-visible send rows, auto-download toggles, 6 dev-stubs → toast "masih tahap development"; body `inert` + dimmed when off).
+
+**Known quirks:** legacy `automation_enabled: false` reads as explicit OFF (no inherit-reset UI — add if user asks). `ApprovalStatus.automation_enabled` is now the EFFECTIVE value. `OutlookActions.svelte` remains an orphan (pre-existing, untouched). Send not enabled-gated server-side (pre-existing, UI-gated).
+
+**Next:** User closes app → `npm run build` → user manual checklist (delivered in session) → docs commit → merge only after approval.
+
+**Verification:** svelte-check 154 files 0/0; frontend tests 182 pass; targeted pytest 27 pass; full pytest 1825 passed / 20 skipped / 6 known baseline failures (extra 7th failure earlier was TEMP-path-too-long from sandbox tmp dir, not code).
+
+**active_menu:** automations
+
+---
+
 ## 2026-07-06 (Piece C implemented — Branch 3)
 
 **Now:** Branch 3 `automations/approval-polling` implemented through automated verification. Scope: `ProjectMetadata.automation_enabled` + `approval_templates`, default approval templates/settings fields, SQLite `approval_polling_jobs`, `ApprovalPollingService` with Outlook send/draft + reply polling + startup resume + shutdown hook, JsApi/bridge wrappers, Project Details approval toggle/UAT/LV controls, Automations Approval Templates editor.

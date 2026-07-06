@@ -1555,7 +1555,7 @@ Tab Bar: [Outlook] [Teams] [Scheduler] [Rules Engine]
 
 #### Purpose
 
-Manage outbound Outlook email templates (ACK_UAT, ACK_SOP, APRVL_CR, APRVL_SOP) and download email jobs.
+Manage outbound Outlook approval-request email templates and download email jobs. The SEND AUTOMATION table hosts the two Piece C approval kinds: **Email Ack (UAT)** (kind `uat`, template key `uat_approval`) and **Email LV (Prod)** (kind `lv`, template key `lv_approval`). The former ACK_SOP / APRVL_SOP UI rows were removed 2026-07-06 (special-CR templates, unused); the `settings.email.categories` data model is retained for the `outlook_draft_email` / `outlook_send_email` backend path.
 
 #### Layout
 
@@ -1563,10 +1563,10 @@ Manage outbound Outlook email templates (ACK_UAT, ACK_SOP, APRVL_CR, APRVL_SOP) 
 ┌──────────────────────────────────────┬──────────────────────────────────────┐
 │  SEND AUTOMATION                     │  DOWNLOAD AUTOMATION                  │
 │  ────────────────────────────────    │  ────────────────────────────────     │
-│  Hint: Double-click row to edit      │  Relation to Send categories          │
+│  [New-CR automation default: ON/OFF] │  Relation to Send categories          │
 │  [CATEGORY | PURPOSE | CONDITIONS]   │  [CATEGORY | DETAILS] table           │
-│  4 rows                              │  2 rows                               │
-│                   [+ Add Category]   │              [Downloaded Emails ▶]   │
+│  2 rows (Email Ack UAT, Email LV)    │  2 rows                               │
+│                                      │              [Downloaded Emails ▶]   │
 │  ──────────────────────────────────  │  ──────────────────────────────────   │
 │  Send Automation Log                 │  Download Tool Log                    │
 └──────────────────────────────────────┴──────────────────────────────────────┘
@@ -1574,28 +1574,19 @@ Manage outbound Outlook email templates (ACK_UAT, ACK_SOP, APRVL_CR, APRVL_SOP) 
 Metrics Row: [Send Categories] [Download Jobs] [HTML Templates] [On Going ACK] [On Going Tech LV]
 ```
 
-#### User Flow — View and Edit Send Category
+The **New-CR automation default** toggle persists `settings.automation_default_enabled`; CR projects without an explicit per-project toggle inherit it (see §16.7).
+
+#### User Flow — Edit Approval Template
 
 ```
-User double-clicks a send category row (e.g. ACK_UAT)
-  → Email Template Dialog opens (full-screen dialog)
+User clicks "Edit Template" on a send row (Email Ack (UAT) or Email LV (Prod))
+  → Approval Template dialog opens with the kind preset (no sub-tabs)
 
-Dialog layout (2-column):
-  LEFT:
-    - Category Code (editable)
-    - To, CC (email fields)
-    - Subject template with placeholders
-    - Body textarea (or HTML file option)
-    - Attachment field + Browse
-    - Automation Mode: [Draft Only] [Send Immediately]
-    - Placeholder chips (click to insert): {PROJECT_NAME} {CR_NUMBER} {CR_LINK} etc.
-
-  RIGHT:
-    - Active Conditions (condition grid: CR State op value, Drone State op value, Project Pattern)
-    - Condition Preview (live display of rule as text)
-    - Email Automation Log (scrollable, latest 10 entries)
-
-  Footer: [Cancel] [Save]
+Dialog content (ApprovalTemplates):
+  - Project selector (empty = global default in settings.default_approval_templates)
+  - To, CC, Subject (must contain {CR_NUMBER}), Body, Mode: [Draft] [Send Immediately]
+  - [Save template] (global default or per-project override)
+  - [Preview with real data] (requires a project; renders via backend placeholders)
 ```
 
 #### Email Template Placeholders
@@ -1875,9 +1866,15 @@ Actions:
 
 ### 16.7 Project Approval Polling (Piece C)
 
-Project Details exposes approval automation for CR projects:
+Project Details shows a dedicated **Automations** section (bottom of the left pane, below Drone Tickets) for CR projects only:
 
-- `automation_enabled` is stored per project in `project_data.json`.
+- Section header holds the master toggle (ON/OFF). Effective value = per-project `automation_enabled` if explicitly set, else `settings.automation_default_enabled`. CR State `FINISHED` / `POSTPONED` / `CANCELED` forces it OFF and disables the toggle (`automation_locked`, hint line shown). When effectively OFF the section body renders as a dimmed non-interactive preview (`inert`).
+- "Email approvals" group: per kind one row with the send button state machine (Send / Waiting for reply… + Stop / Approval received ✓ / retry after timeout; disabled Send shows eligibility reasons as tooltip) plus an "Auto download reply" toggle. The toggle persists per project in `approval_auto_download` (`{uat: bool, lv: bool}`, missing = ON); when OFF, sending records history but creates no polling job, and a toast confirms the send.
+- "In development" group: Auto update CR status, Auto update Drone status, Create Drone Ticket, Auto Followup Teams Ack / Teams LV / Request Approval Teams — visible dev-stubs; clicking shows a "masih tahap development" toast.
+
+Data model notes:
+
+- `automation_enabled` is stored per project in `project_data.json` as `true` / `false` / `null` (null = inherit global default). Legacy files with explicit `false` stay explicit OFF (no inherit-reset UI yet).
 - UAT approval button is enabled only when automation is ON, Outlook is available, project type is CR, CR number can be extracted from `cr_link`, `_cr-docs/uat-signoff.docx` is non-empty, at least one Drone ticket is `PENDING APPROVAL`, CR State is `PENDING SUBMISSION`, and a UAT approval template exists.
 - LV approval button is enabled only when automation is ON, Outlook is available, project type is CR, CR number can be extracted from `cr_link`, `_cr-docs/prod-lv.docx` is non-empty, CR State or a Drone ticket is `APPROVED`, and an LV approval template exists.
 - Approval templates support `to`, `cc`, `subject`, `body`, and `mode` (`draft` or `send`). Templates may be saved per project or as global defaults in Settings. Subject must include `{CR_NUMBER}`; send + polling use the same CR number extracted from `cr_link`.
@@ -1886,7 +1883,7 @@ Project Details exposes approval automation for CR projects:
 - Polling resumes on app startup for jobs still marked `polling`; users may stop polling manually.
 - Settings expose polling interval (1–60 minutes, default 5) and max duration (1–24 hours, default 3). Timeout creates an in-app warning notification.
 
-Automations adds an Approval Templates tab for editing per-project templates, editing global defaults, and previewing rendered output.
+Approval templates are edited from the Automations → Outlook tab SEND AUTOMATION rows (see §16.3); there is no separate Approval tab.
 
 ---
 

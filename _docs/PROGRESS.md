@@ -8,7 +8,7 @@ Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` br
 
 Active branch: `automations/approval-polling`.
 
-Active slice: **Piece C approval automation (roadmap #3, D-0013)** — implemented, awaiting build gate + user manual check: per-project approval toggle/templates, UAT/LV conditional send controls in Project Details, Outlook draft/send, SQLite persisted polling jobs with resume, CR-number subject matching, `.msg` save to `_cr-docs/`, Approval Templates tab, and Settings polling interval/max fields.
+Active slice: **Piece C approval automation (roadmap #3, D-0013)** — implemented + UI rework after first user manual check, awaiting build gate + user manual re-check. Rework 2026-07-06 (user feedback): Approval tab deleted — template editor merged into Outlook tab SEND AUTOMATION (2 rows: Email Ack (UAT)=uat, Email LV (Prod)=lv; ACK_SOP/APRVL_SOP UI rows deleted, EmailTemplateDialog.svelte deleted, `settings.email.categories` data kept for outlook_draft/send_email); Project Details approval controls moved from command bar into dedicated CR-only "Automations" section (master toggle + lock hint, always-visible UAT/LV send rows, auto-download reply toggles, 6 dev-stub controls with toast). New fields: `automation_enabled` tri-state (null = inherit new `settings.automation_default_enabled`, toggled in Outlook tab), `approval_auto_download` per kind (OFF = send without polling job), `automation_locked` when CR State is FINISHED/POSTPONED/CANCELED. Migration quirk: legacy `automation_enabled: false` = explicit OFF, no inherit-reset UI. Base features unchanged: Outlook draft/send, SQLite polling jobs with resume, CR-number subject matching, `.msg` save to `_cr-docs/`, Settings polling interval/max fields.
 
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
@@ -60,13 +60,12 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest)
+## Verification (latest — Piece C UI rework 2026-07-06)
 
 ```
 svelte-check: 0 errors, 0 warnings
-frontend tests: 123 pass / 0 fail
-targeted backend tests: 53 passed
-full pytest: 1821 passed, 20 skipped, 6 known baseline failures
-app startup: alive after 15s; stdout/stderr empty
+frontend tests: 182 pass / 0 fail
+targeted backend tests: 27 passed (phase_c automation/js_api + bridge contract)
+full pytest: 1825 passed, 20 skipped, 6 known baseline failures
 build: not run yet — waiting for user to close app before `npm run build`
 ```
