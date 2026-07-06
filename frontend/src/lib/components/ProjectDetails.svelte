@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { approvalGetStatus, approvalSetEnabled, callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, sendLvApprovalRequest, sendUatApprovalRequest, stopApprovalPolling, waitForPywebviewReady } from "../bridge";
+  import { approvalGetStatus, approvalSetAutoDownload, approvalSetEnabled, callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, sendLvApprovalRequest, sendUatApprovalRequest, stopApprovalPolling, waitForPywebviewReady } from "../bridge";
   import type { ApprovalStatus, ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
@@ -61,8 +61,23 @@
     approvalBusy = kind; approvalError = "";
     const resp = kind === "uat" ? await sendUatApprovalRequest(selectedPath) : await sendLvApprovalRequest(selectedPath);
     if (!resp.ok) approvalError = resp.error.message;
+    else if (resp.data?.status === "sent") addToast("Sent — auto-download reply is OFF for this request", "info");
     await loadApprovalStatus();
     approvalBusy = "";
+  }
+
+  async function toggleAutoDownload(kind: "uat" | "lv") {
+    if (!selectedPath || !approvalStatus) return;
+    const current = kind === "uat" ? approvalStatus.uat.auto_download : approvalStatus.lv.auto_download;
+    approvalBusy = kind; approvalError = "";
+    const resp = await approvalSetAutoDownload(selectedPath, kind, !current);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  function devStub() {
+    addToast("masih tahap development", "info");
   }
 
   async function stopApproval(kind: "uat" | "lv") {
@@ -922,31 +937,6 @@
           {/each}
         </select>
       </label>
-      {#if detail && !isNonCr && mode !== "new" && approvalStatus}
-        <label class="pd-command-field" for="pd-approval-toggle" title={approvalStatus.outlook_available ? "Approval automation" : "Outlook not configured"}>
-          <span>Automation</span>
-          <button id="pd-approval-toggle" type="button" class="pd-control pd-approval-toggle" class:on={approvalStatus.automation_enabled} disabled={approvalBusy === "toggle" || !approvalStatus.outlook_available} onclick={toggleApproval}>
-            {approvalStatus.automation_enabled ? "ON" : "OFF"}
-          </button>
-        </label>
-        {#if approvalStatus.automation_enabled}
-          {#each [["uat", "Send UAT Approval"], ["lv", "Send LV"]] as [kind, label]}
-            {@const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv}
-            {#if ks.eligible || ks.job}
-              {#if ks.job?.status === "polling"}
-                <button class="pd-command-btn" type="button" disabled>Waiting for reply…</button>
-                <button class="pd-command-btn pd-command-danger" type="button" disabled={approvalBusy !== ""} onclick={() => stopApproval(kind as "uat" | "lv")}>Stop</button>
-              {:else if ks.job?.status === "completed"}
-                <button class="pd-command-btn" type="button" disabled>Approval received ✓</button>
-              {:else}
-                <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "" : ks.reasons.join(", ")} onclick={() => sendApproval(kind as "uat" | "lv")}>
-                  {ks.job?.status === "timeout" ? `${label} (retry)` : label}
-                </button>
-              {/if}
-            {/if}
-          {/each}
-        {/if}
-      {/if}
       <div class="pd-command-spacer"></div>
       <button class="pd-command-btn" type="button" onclick={openProjectFolder} disabled={!selectedPath || topActionState === "saving"}>Open</button>
       <button class="pd-command-btn pd-command-danger" type="button" onclick={requestTopDelete} disabled={!selectedPath || topActionState === "saving"}>Delete</button>
@@ -956,9 +946,6 @@
     <p class="cr-link-feedback cr-link-err">✗ {topActionError}</p>
   {:else if topActionState === "success"}
     <p class="cr-link-feedback cr-link-ok">✓ Done</p>
-  {/if}
-  {#if approvalError}
-    <p class="cr-link-feedback cr-link-err">✗ {approvalError}</p>
   {/if}
   <div class="pd-body">
     <div class="pd-detail-panel">
@@ -1162,6 +1149,69 @@
                 {/if}
               </div>
             {/if}
+
+            {#if !isNonCr && approvalStatus}
+              <div class="pd-section">
+                <div class="pd-section-head">
+                  <h4 class="pd-section-title">Automations</h4>
+                  <button
+                    id="pd-approval-toggle"
+                    type="button"
+                    class="pd-control pd-approval-toggle"
+                    class:on={approvalStatus.automation_enabled}
+                    disabled={approvalBusy === "toggle" || approvalStatus.automation_locked || !approvalStatus.outlook_available}
+                    title={approvalStatus.automation_locked
+                      ? "Automation is unavailable: CR is FINISHED/POSTPONED/CANCELED"
+                      : !approvalStatus.outlook_available
+                        ? "Outlook not configured"
+                        : "CR automation master toggle"}
+                    onclick={toggleApproval}
+                  >{approvalStatus.automation_enabled ? "ON" : "OFF"}</button>
+                </div>
+                {#if approvalStatus.automation_locked}
+                  <p class="pd-auto-hint">Automation is forced OFF because the CR is finished, postponed, or canceled.</p>
+                {/if}
+                {#if approvalError}
+                  <p class="cr-link-feedback cr-link-err">✗ {approvalError}</p>
+                {/if}
+                <div class="pd-auto-body" class:pd-auto-off={!approvalStatus.automation_enabled} inert={!approvalStatus.automation_enabled}>
+                  <div class="pd-auto-group">
+                    <span class="pd-auto-group-title">Email approvals</span>
+                    {#each [["uat", "Send Email Ack (UAT)", "Auto download reply Email Ack"], ["lv", "Send Email LV", "Auto download reply Email LV"]] as [kind, sendLabel, dlLabel]}
+                      {@const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv}
+                      <div class="pd-auto-row">
+                        {#if ks.job?.status === "polling"}
+                          <button class="pd-command-btn" type="button" disabled>Waiting for reply…</button>
+                          <button class="pd-command-btn pd-command-danger" type="button" disabled={approvalBusy !== ""} onclick={() => stopApproval(kind as "uat" | "lv")}>Stop</button>
+                        {:else if ks.job?.status === "completed"}
+                          <button class="pd-command-btn" type="button" disabled>Approval received ✓</button>
+                        {:else}
+                          <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "" : ks.reasons.join(", ")} onclick={() => sendApproval(kind as "uat" | "lv")}>
+                            {ks.job?.status === "timeout" ? `${sendLabel} (retry)` : sendLabel}
+                          </button>
+                        {/if}
+                        <button class="pd-control pd-auto-mini-toggle" type="button" class:on={ks.auto_download} disabled={approvalBusy !== ""} onclick={() => toggleAutoDownload(kind as "uat" | "lv")}>
+                          {dlLabel}: {ks.auto_download ? "ON" : "OFF"}
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                  <div class="pd-auto-group">
+                    <span class="pd-auto-group-title">In development</span>
+                    <div class="pd-auto-row">
+                      <button class="pd-control pd-auto-mini-toggle" type="button" onclick={devStub}>Auto update CR status: OFF</button>
+                      <button class="pd-control pd-auto-mini-toggle" type="button" onclick={devStub}>Auto update Drone status: OFF</button>
+                      <button class="pd-command-btn" type="button" onclick={devStub}>Create Drone Ticket</button>
+                    </div>
+                    <div class="pd-auto-row">
+                      <button class="pd-command-btn" type="button" onclick={devStub}>Auto Followup Teams Ack</button>
+                      <button class="pd-command-btn" type="button" onclick={devStub}>Auto Followup Teams LV</button>
+                      <button class="pd-command-btn" type="button" onclick={devStub}>Auto Followup Request Approval Teams</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/if}
           </div>
 
           <div class="pane">
@@ -1305,6 +1355,14 @@
   .pd-command-project { min-width:180px; flex:0 1 240px; }
   .pd-approval-toggle { min-width: 44px; font-weight: 800; }
   .pd-approval-toggle.on { background: var(--soft-pink-surface); border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
+  .pd-auto-body { display:flex; flex-direction:column; gap:10px; }
+  .pd-auto-body.pd-auto-off { opacity:.45; }
+  .pd-auto-group { display:flex; flex-direction:column; gap:6px; }
+  .pd-auto-group-title { font-size:9.5px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:.05em; }
+  .pd-auto-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .pd-auto-mini-toggle { font-weight:800; }
+  .pd-auto-mini-toggle.on { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .pd-auto-hint { font-size:10.5px; color:var(--color-muted); margin:0 0 6px; }
   .pd-command-spacer { flex:1 1 auto; }
   .pd-control { height:28px; min-width:0; border:1px solid var(--color-input-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; padding:3px 9px; outline:none; }
   .pd-control:focus { border-color:var(--color-dbs-red); }

@@ -248,11 +248,20 @@ test("RTE interaction lock has local cleanup and a 10-second app watchdog", () =
 test("ProjectDetails wires Piece C approval automation controls", () => {
   assert.match(PD, /approvalGetStatus|get_approval_status/);
   assert.match(PD, /approvalSetEnabled/);
+  assert.match(PD, /approvalSetAutoDownload/);
   assert.match(PD, /sendUatApprovalRequest/);
   assert.match(PD, /sendLvApprovalRequest/);
   assert.match(PD, /stopApprovalPolling/);
-  assert.match(PD, /Send UAT Approval/);
-  assert.match(PD, /Send LV/);
+  assert.match(PD, /Send Email Ack \(UAT\)/);
+  assert.match(PD, /Send Email LV/);
   assert.match(PD, /Waiting for reply/);
   assert.match(PD, /clearInterval\(approvalPollTimer\)/);
+  // Dedicated Automations section: lock hint, dimmed preview when off, dev stubs.
+  assert.match(PD, />Automations</);
+  assert.match(PD, /automation_locked/);
+  assert.match(PD, /pd-auto-off/);
+  assert.match(PD, /masih tahap development/);
+  assert.match(PD, /Auto update CR status/);
+  assert.match(PD, /Create Drone Ticket/);
+  assert.match(PD, /Auto Followup Request Approval Teams/);
 });
