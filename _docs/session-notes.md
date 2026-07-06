@@ -8,6 +8,18 @@
 
 ---
 
+## 2026-07-06 (Branch 3 plan ready — Piece C)
+
+**Now:** Branch 2 merged to main. Branch 3 `automations/approval-polling` created; detailed executable plan committed at `_docs/specs/superpowers/plans/2026-07-06-piece-c-approval-polling-plan.md` (written to be executed verbatim by ANY model — full code per task, locked design decisions, no room for improvisation). Spec = `_docs/specs/superpowers/specs/2026-07-02-approval-automation-design.md`.
+
+**Next:** Execute the plan task-by-task with superpowers:executing-plans on this branch (Tasks 1–8: models → cache_db → service → bridge → frontend wrappers → PD controls → template editor/settings → verify+docs+gates). Rules binding: no new Python test files; follow plan anchors exactly; STOP if an anchor is missing; build gate + manual gate before commit of the final slice; no merge without user approval.
+
+**Blocked:** None.
+
+**active_menu:** automations
+
+---
+
 ## 2026-07-06 (fix round v2 complete — Branch 2)
 
 **Now:** Fix round v2 steps 0–7 all committed after per-step user manual verification. This session: step 5c image drag-resize `4ca0abd` (handle CSS reworked once after "gaudy" feedback: 8px, 1px border, subtle shadow); step 6 SVG toolbar icons `b1cf0dc` (18 buttons, lucide-style inline SVG, 13px stroke-2, currentColor; link 🔗 included); step 7 `37d8ca7` default TNR 18px editor ↔ 13.5pt exporter + fixes from manual feedback: SIZES must be strings (`bind:value` strict equality made the size select blank) and per-file last font/size memory via module-scope `Map<targetFile, {font,size}>` (session-scoped; `initialFileKey = untrack(() => targetFile)` avoids `state_referenced_locally` warning). Docs synced: PRD §12.12, PROGRESS.
