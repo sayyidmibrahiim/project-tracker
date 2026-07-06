@@ -8,6 +8,22 @@
 
 ---
 
+## 2026-07-06 (fix round v2 complete — Branch 2)
+
+**Now:** Fix round v2 steps 0–7 all committed after per-step user manual verification. This session: step 5c image drag-resize `4ca0abd` (handle CSS reworked once after "gaudy" feedback: 8px, 1px border, subtle shadow); step 6 SVG toolbar icons `b1cf0dc` (18 buttons, lucide-style inline SVG, 13px stroke-2, currentColor; link 🔗 included); step 7 `37d8ca7` default TNR 18px editor ↔ 13.5pt exporter + fixes from manual feedback: SIZES must be strings (`bind:value` strict equality made the size select blank) and per-file last font/size memory via module-scope `Map<targetFile, {font,size}>` (session-scoped; `initialFileKey = untrack(() => targetFile)` avoids `state_referenced_locally` warning). Docs synced: PRD §12.12, PROGRESS.
+
+**User rule 2026-07-06:** default session skills = using-superpowers + ponytail full + caveman full (recorded in CLAUDE.md/AGENTS.md §"Default Session Skills"; those files stay uncommitted — user-owned edits present).
+
+**Next:** User decides merge Branch 2 → main. After merge: Branch 3 `automations/approval-polling` (Piece C). Optional follow-up if requested: persist per-file font/size to disk (currently session-scoped).
+
+**Blocked:** None new. Known nonblocking pre-commit pytest fail `test_project_list_returns_converted_rows` (pre-existing on main, queued Branch 5).
+
+**Verification:** svelte-check 154 files 0/0; frontend tests 121 pass; phase E pytest 27 pass (TEMP redirect for stale `pytest-current` lock); builds ok; user manual `pass` on steps 5c/6/7.
+
+**active_menu:** project-details
+
+---
+
 ## 2026-07-04 (rollback — Branch 2 fix round)
 
 **Issue:** After the first manual check, a 5-part fix round was shipped as one bundle (toolbar `rev` → `$state` active states; idle export 20s→5s + countdown; hidden `.rte` attribute; "?" help popover; Narrow 12.7mm margins + 720px WYSIWYG page width + export clamp + AssetImage resize NodeView + `<img width>` markdown round-trip). User reported **"semua behavior jadi gak normal"** → full rollback to `9882694` code state (commits `e80996d` partial + `a30c512` reverted; user's `.codex/` + `AGENTS.md` kept). Binding lessons recorded in CLAUDE.md + AGENTS.md §"RTE Change Safety".

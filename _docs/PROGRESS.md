@@ -11,6 +11,8 @@ Active branch: `project-details/tiptap-docx-pipeline`.
 
 Active slice: **Tiptap DOCX pipeline (roadmap #2, D-0012)** — implemented, pending user manual verify: `.docx` CR docs editable via source.json sidecar + background python-docx export (latest-revision-wins, locked-file retry), image paste/drop as content-addressed asset files for all editors, `.rte/assets` refs in notes.md, migration import for legacy docx, shutdown flush. Header redesign (roadmap #1) user-verified + merged 2026-07-04.
 
+Fix round v2 (steps 0–7, one behavior per round, user manual verify each): **complete 2026-07-06**. Step 0 watchdog `c94e387`, step 1 toolbar active states `65202cf`, steps 2–5b (5s idle countdown, hidden `.rte`, help popover, Narrow margins + clamp, WYSIWYG page + zoom) committed earlier, step 5c image drag-resize `4ca0abd`, step 6 SVG toolbar icons `b1cf0dc`, step 7 default TNR 18px↔13.5pt + per-file toolbar font/size memory `37d8ca7`. PRD §12.12 synced. Branch awaits user merge decision.
+
 Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.md`/`.txt` editable, `.docx` read-only pending pipeline, interaction lock).
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.

@@ -1167,7 +1167,8 @@ uat-signoff.docx / prod-lv.docx (pipeline):
     (Tiptap JSON + revision + content hash)
   → Autosave 1000ms saves JSON only; identical content is skipped (hash)
   → Real .docx regenerated in the background (custom Tiptap-JSON→python-docx
-    exporter): on Ctrl+S, on doc switch, after 20s idle, and on app close
+    exporter): on Ctrl+S, on doc switch, after 5s idle (live countdown in
+    the status label), and on app close
   → Max 1 export worker; latest revision wins; atomic tmp→replace
   → .docx open in Word (locked): status "DOCX locked — will retry",
     old file untouched, retried on next open — source is always safe
@@ -1179,6 +1180,21 @@ Images (all rich editors):
   → Bytes stored once as content-addressed asset files in .rte/assets/
     (magic-byte validation, 15 MB cap); never permanent base64
   → notes.md references assets as ![alt](.rte/assets/<id>.<ext>)
+  → Images drag-resize via a small corner handle (min 40px); width persists
+    across save/switch/restart (notes.md serializes <img ... width="N" />);
+    export clamps to printable width
+
+Editor defaults & layout (fix round v2, 2026-07-06):
+  → DOCX editor is a WYSIWYG page: Word Narrow margins (12.7 mm), fixed
+    720px page width; exported images/tables never overflow the page
+  → Default font Times New Roman 18px in editor ↔ 13.5pt in Word; font/size
+    dropdowns show the real defaults and remember the last choice per file
+    (session-scoped, resets on app restart)
+  → Toolbar buttons use inline SVG icons (offline, currentColor tinting);
+    "?" popover lists shortcuts; toolbar toggles show live active states
+  → .rte sidecar folders are hidden on Windows Explorer
+  → app:interaction-lock has a 10s watchdog: a hung RTE load can never
+    freeze the titlebar/app shell
 
 Locking: IMPLEMENTED project state = all docs read-only (unchanged).
 .msg files stay open-externally (unchanged).
