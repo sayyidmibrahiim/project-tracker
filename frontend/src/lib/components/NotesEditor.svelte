@@ -1,3 +1,12 @@
+<script lang="ts" module>
+  // Per-file last chosen toolbar font/size. The editor component remounts per
+  // file (wiping instance state), so this map survives file switches.
+  // Session-scoped, not persisted to disk.
+  const DEFAULT_FONT = '"Times New Roman", serif';
+  const DEFAULT_SIZE = '18';
+  const lastFontByFile = new Map<string, { font: string; size: string }>();
+</script>
+
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import {
@@ -120,8 +129,12 @@
   let tableHover = $state({ rows: 1, cols: 1 });
   let emojiOpen = $state(false);
   let helpOpen = $state(false);
-  let fontSelVal = $state('');
-  let sizeSelVal = $state('');
+  // Dropdowns show the real editor defaults (TNR 18px ↔ 13.5pt in Word),
+  // seeded from this file's last choice when it has one. Initial-value capture
+  // is intentional: the component remounts per file, so init runs per file.
+  const initialFileKey = untrack(() => targetFile);
+  let fontSelVal = $state(lastFontByFile.get(initialFileKey)?.font ?? DEFAULT_FONT);
+  let sizeSelVal = $state(lastFontByFile.get(initialFileKey)?.size ?? DEFAULT_SIZE);
   // Inline link dialog (replaces unreliable WebView2 prompt()).
   let linkOpen = $state(false);
   let linkUrl = $state('');
@@ -144,7 +157,8 @@
     { label: 'Segoe UI', value: '"Segoe UI"' },
   ];
 
-  const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 42, 48, 56, 64, 72];
+  // Strings: <select bind:value> matches options by strict equality ('18' !== 18 → blank select).
+  const SIZES = ['8', '9', '10', '11', '12', '14', '16', '18', '20', '22', '24', '28', '32', '36', '42', '48', '56', '64', '72'];
 
   const COLORS = [
     '#000000','#434343','#666666','#999999','#b7b7b7','#cccccc','#d9d9d9','#efefef',
@@ -563,6 +577,7 @@
 
   function applyFont() {
     if (!fontSelVal) return;
+    lastFontByFile.set(targetFile, { font: fontSelVal, size: sizeSelVal });
     editor?.chain().focus().setFontFamily(fontSelVal).run();
     rev++;
     (document.getElementById('ne-font-select') as HTMLSelectElement | null)?.blur();
@@ -571,7 +586,10 @@
   function applySize() {
     const px = parseInt(sizeSelVal);
     if (isNaN(px)) editor?.chain().focus().unsetFontSize().run();
-    else editor?.chain().focus().setFontSize(`${px}px`).run();
+    else {
+      lastFontByFile.set(targetFile, { font: fontSelVal, size: sizeSelVal });
+      editor?.chain().focus().setFontSize(`${px}px`).run();
+    }
     rev++;
     (document.getElementById('ne-size-select') as HTMLSelectElement | null)?.blur();
   }
@@ -1164,7 +1182,7 @@
   /* Editor surface — Tiptap mounts its contenteditable inside this host.
      Default font is Times New Roman (DECISIONS D-0007 / bug 3 fix). */
   .ne-editor-host { width:100%; overflow-x:auto; }
-  :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:12px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; zoom:var(--ne-zoom, 1); }
+  :global(.ne-editor-host .ne-textarea) { width:100%; min-height:120px; max-height:300px; padding:10px; background:var(--color-workspace-panel); border:1px solid var(--soft-white-border); border-radius:6px; font-size:18px; font-family:"Times New Roman", serif; color:var(--color-ink); resize:vertical; outline:none; line-height:1.5; overflow-y:auto; flex:1 1 auto; zoom:var(--ne-zoom, 1); }
   /* DOCX page: 184.6mm printable width at 96dpi = 698px,
      plus 20px padding and 2px border = 720px border-box. */
   .ne-editor-host.ne-docx-page { overflow-x:auto; box-sizing:border-box; padding:12px; background:var(--main-panel-bg); border-radius:6px; }

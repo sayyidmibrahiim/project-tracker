@@ -37,7 +37,8 @@ DEFAULT_DOCUMENT_SETTINGS: dict[str, Any] = {
     "margin_bottom_mm": 12.7,
     "margin_left_mm": 12.7,
     "default_font_family": "Times New Roman",
-    "default_font_size_pt": 11,
+    # 13.5pt = 18px editor default × 0.75 (editor↔Word WYSIWYG).
+    "default_font_size_pt": 13.5,
     "line_height": 1.15,
 }
 

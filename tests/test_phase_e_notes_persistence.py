@@ -394,6 +394,9 @@ def test_docx_writer_uses_narrow_printable_width():
         DEFAULT_DOCUMENT_SETTINGS["margin_bottom_mm"],
         DEFAULT_DOCUMENT_SETTINGS["margin_left_mm"],
     } == {12.7}
+    assert DEFAULT_DOCUMENT_SETTINGS["default_font_family"] == "Times New Roman"
+    # 18px editor default × 0.75 = 13.5pt in Word (editor↔Word WYSIWYG).
+    assert DEFAULT_DOCUMENT_SETTINGS["default_font_size_pt"] == 13.5
     assert content_width_mm(DEFAULT_DOCUMENT_SETTINGS) == pytest.approx(184.6)
     assert content_width_mm({"margin_left_mm": 100, "margin_right_mm": 100}) == 40.0
 

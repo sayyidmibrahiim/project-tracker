@@ -160,6 +160,19 @@ test("NotesEditor toolbar uses inline SVG icons", () => {
   }
 });
 
+test("NotesEditor defaults to Times New Roman 18px and remembers last toolbar choice per file", () => {
+  assert.match(NE, /const DEFAULT_FONT = '"Times New Roman", serif';/);
+  assert.match(NE, /const DEFAULT_SIZE = '18';/);
+  assert.match(NE, /const lastFontByFile = new Map<string, \{ font: string; size: string \}>\(\);/);
+  assert.match(NE, /let fontSelVal = \$state\(lastFontByFile\.get\(initialFileKey\)\?\.font \?\? DEFAULT_FONT\);/);
+  assert.match(NE, /let sizeSelVal = \$state\(lastFontByFile\.get\(initialFileKey\)\?\.size \?\? DEFAULT_SIZE\);/);
+  // Option values must be strings or bind:value never matches ('18' !== 18 → blank select).
+  assert.match(NE, /const SIZES = \['8', '9', '10', '11', '12', '14', '16', '18', '20', '22', '24', '28', '32', '36', '42', '48', '56', '64', '72'\];/);
+  const setCalls = NE.match(/lastFontByFile\.set\(targetFile, \{ font: fontSelVal, size: sizeSelVal \}\);/g) || [];
+  assert.equal(setCalls.length, 2, "applyFont and applySize must both store the per-file choice");
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-textarea\)\s*\{[^}]*font-size:18px;/);
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);
