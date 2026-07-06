@@ -341,3 +341,36 @@ export interface RteImageSaveResult {
 
 export type RteSaveReason = "autosave" | "manual" | "switch" | "migration";
 
+// ── Piece C approval automation ──
+export interface ApprovalJob {
+  job_id: string;
+  project_path: string;
+  request_type: "uat" | "lv";
+  cr_number: string;
+  email_subject: string;
+  sent_at: string | null;
+  status: "polling" | "completed" | "timeout" | "stopped" | "dev_skipped";
+  reply_received_at: string | null;
+}
+
+export interface ApprovalKindStatus {
+  eligible: boolean;
+  reasons: string[];
+  job: ApprovalJob | null;
+}
+
+export interface ApprovalStatus {
+  automation_enabled: boolean;
+  outlook_available: boolean;
+  uat: ApprovalKindStatus;
+  lv: ApprovalKindStatus;
+}
+
+export interface ApprovalTemplate {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  mode: "draft" | "send";
+}
+

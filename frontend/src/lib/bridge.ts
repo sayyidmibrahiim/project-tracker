@@ -1,4 +1,6 @@
 import type {
+  ApprovalStatus,
+  ApprovalTemplate,
   BridgeResponse,
   DocxExportResult,
   GlobalPlan,
@@ -307,6 +309,40 @@ export function exportToDocx(
   suggestedName: string,
 ): Promise<BridgeResponse<DocxExportResult>> {
   return callBridge("export_to_docx", html, "html", suggestedName);
+}
+
+// ── Piece C approval automation ──
+
+export function approvalGetStatus(projectPath: string): Promise<BridgeResponse<ApprovalStatus>> {
+  return callBridge("get_approval_status", projectPath);
+}
+
+export function approvalSetEnabled(projectPath: string, enabled: boolean): Promise<BridgeResponse<{ automation_enabled: boolean }>> {
+  return callBridge("approval_set_enabled", projectPath, enabled);
+}
+
+export function sendUatApprovalRequest(projectPath: string): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_uat_approval_request", projectPath);
+}
+
+export function sendLvApprovalRequest(projectPath: string): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_lv_approval_request", projectPath);
+}
+
+export function stopApprovalPolling(projectPath: string, requestType: "uat" | "lv"): Promise<BridgeResponse<{ status: string }>> {
+  return callBridge("stop_approval_polling", projectPath, requestType);
+}
+
+export function getApprovalTemplate(projectPath: string, kind: "uat" | "lv"): Promise<BridgeResponse<{ source: string; template: ApprovalTemplate }>> {
+  return callBridge("get_approval_template", projectPath, kind);
+}
+
+export function updateApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate): Promise<BridgeResponse<{ source: string; template: ApprovalTemplate }>> {
+  return callBridge("update_approval_template", projectPath, kind, template);
+}
+
+export function previewApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate | null): Promise<BridgeResponse<{ to: string; cc: string; subject: string; body: string }>> {
+  return callBridge("preview_approval_template", projectPath, kind, template);
 }
 
 // ── DOCX pipeline (D-0012): source.json = truth, .docx = derived export ──
