@@ -119,3 +119,39 @@ def test_evaluate_all():
     skipped = [r for r in results if r.skipped]
     assert len(passed) == 4  # r-1, r-2, r-3, r-5
     assert len(skipped) == 1  # r-4
+
+
+def test_piece_c_model_fields_round_trip():
+    from core.models import AppSettings, ProjectMetadata
+
+    meta = ProjectMetadata.from_dict(
+        {
+            "automation_enabled": True,
+            "approval_templates": {"uat_approval": {"to": "a@b", "subject": "UAT {CR_NUMBER}"}},
+        }
+    )
+    assert meta.automation_enabled is True
+    assert meta.approval_templates["uat_approval"]["to"] == "a@b"
+    out = meta.to_dict()
+    assert out["automation_enabled"] is True
+    assert out["approval_templates"]["uat_approval"]["subject"] == "UAT {CR_NUMBER}"
+    assert ProjectMetadata.from_dict({}).automation_enabled is False
+    assert ProjectMetadata.from_dict({}).approval_templates == {}
+
+    settings = AppSettings.from_dict(
+        {
+            "default_approval_templates": {"lv_approval": {"subject": "LV {CR_NUMBER}"}},
+            "approval_polling_interval_minutes": 7,
+            "approval_polling_max_hours": 2,
+        }
+    )
+    assert settings.approval_polling_interval_minutes == 7
+    assert settings.approval_polling_max_hours == 2
+    assert settings.default_approval_templates["lv_approval"]["subject"] == "LV {CR_NUMBER}"
+    out = settings.to_dict()
+    assert out["approval_polling_interval_minutes"] == 7
+    assert out["approval_polling_max_hours"] == 2
+    defaults = AppSettings.from_dict({})
+    assert defaults.approval_polling_interval_minutes == 5
+    assert defaults.approval_polling_max_hours == 3
+    assert defaults.default_approval_templates == {}

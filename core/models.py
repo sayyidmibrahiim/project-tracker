@@ -148,6 +148,8 @@ class ProjectMetadata:
     h10_notified_at: datetime | None = None
     project_type: ProjectType = ProjectType.CR
     non_cr_state: NonCrState | None = None
+    automation_enabled: bool = False
+    approval_templates: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
@@ -168,6 +170,8 @@ class ProjectMetadata:
             h10_notified_at=datetime_from_json(data.get("h10_notified_at")),
             project_type=ProjectType(data.get("project_type", ProjectType.CR.value)),
             non_cr_state=NonCrState(data["non_cr_state"]) if data.get("non_cr_state") else None,
+            automation_enabled=bool(data.get("automation_enabled", False)),
+            approval_templates=dict(data["approval_templates"]) if isinstance(data.get("approval_templates"), dict) else {},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -189,6 +193,8 @@ class ProjectMetadata:
             "h10_notified_at": datetime_to_json(self.h10_notified_at),
             "project_type": self.project_type.value,
             "non_cr_state": self.non_cr_state.value if self.non_cr_state else None,
+            "automation_enabled": self.automation_enabled,
+            "approval_templates": self.approval_templates,
         }
 
 
@@ -516,6 +522,9 @@ class AppSettings:
     email: EmailSettings = field(default_factory=EmailSettings.default)
     teams: TeamsSettings = field(default_factory=TeamsSettings)
     automation: AutomationSettings = field(default_factory=AutomationSettings)
+    default_approval_templates: dict[str, Any] = field(default_factory=dict)
+    approval_polling_interval_minutes: int = 5
+    approval_polling_max_hours: int = 3
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AppSettings:
@@ -538,6 +547,9 @@ class AppSettings:
             email=EmailSettings.from_dict(data.get("email", {})),
             teams=TeamsSettings.from_dict(data.get("teams", {})),
             automation=AutomationSettings.from_dict(data.get("automation", {})),
+            default_approval_templates=dict(data["default_approval_templates"]) if isinstance(data.get("default_approval_templates"), dict) else {},
+            approval_polling_interval_minutes=int(data.get("approval_polling_interval_minutes", 5)),
+            approval_polling_max_hours=int(data.get("approval_polling_max_hours", 3)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -557,6 +569,9 @@ class AppSettings:
             "email": self.email.to_dict(),
             "teams": self.teams.to_dict(),
             "automation": self.automation.to_dict(),
+            "default_approval_templates": self.default_approval_templates,
+            "approval_polling_interval_minutes": self.approval_polling_interval_minutes,
+            "approval_polling_max_hours": self.approval_polling_max_hours,
         }
 
 @dataclass(slots=True)
