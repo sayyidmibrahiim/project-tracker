@@ -129,10 +129,13 @@ def test_approval_bridge_methods_delegate_and_guard():
 
         def get_status(self, project_path):
             self.calls.append(("status", str(project_path)))
-            return {"automation_enabled": True, "uat": {"eligible": False, "reasons": [], "job": None}, "lv": {"eligible": False, "reasons": [], "job": None}, "outlook_available": False}
+            return {"automation_enabled": True, "automation_locked": False, "uat": {"eligible": False, "reasons": [], "job": None, "auto_download": True}, "lv": {"eligible": False, "reasons": [], "job": None, "auto_download": True}, "outlook_available": False}
 
         def set_enabled(self, project_path, enabled):
             return {"ok": True, "data": {"automation_enabled": bool(enabled)}, "error": None}
+
+        def set_auto_download(self, project_path, kind, enabled):
+            return {"ok": True, "data": {"kind": kind, "auto_download": bool(enabled)}, "error": None}
 
         def send_request(self, project_path, kind):
             return {"ok": True, "data": {"status": "polling", "kind": kind}, "error": None}
@@ -154,6 +157,7 @@ def test_approval_bridge_methods_delegate_and_guard():
 
     assert api.get_approval_status("C:/p")["ok"] is True
     assert api.approval_set_enabled("C:/p", True)["data"]["automation_enabled"] is True
+    assert api.approval_set_auto_download("C:/p", "uat", False)["data"]["auto_download"] is False
     assert api.send_uat_approval_request("C:/p")["data"]["kind"] == "uat"
     assert api.send_lv_approval_request("C:/p")["data"]["kind"] == "lv"
     assert api.stop_approval_polling("C:/p", "uat")["data"]["status"] == "stopped"

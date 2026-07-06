@@ -496,6 +496,9 @@ class ApprovalServiceProtocol(Protocol):
     def set_enabled(self, project_path: Path, enabled: bool) -> dict[str, object]:
         """Persist the per-project automation toggle."""
 
+    def set_auto_download(self, project_path: Path, kind: str, enabled: bool) -> dict[str, object]:
+        """Persist the per-project auto-download-reply flag for one kind."""
+
     def send_request(self, project_path: Path, kind: str) -> dict[str, object]:
         """Send an approval request email and start polling."""
 
@@ -1184,6 +1187,16 @@ class JsApi:
             return guard
         try:
             return self._approval_service.set_enabled(Path(project_path), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def approval_set_auto_download(self, project_path: str, kind: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project auto-download-reply flag for one kind."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.set_auto_download(Path(project_path), str(kind), bool(enabled))
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
 

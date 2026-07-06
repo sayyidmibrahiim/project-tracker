@@ -45,6 +45,9 @@ REQUEST_KINDS: dict[str, dict[str, str]] = {
 
 TEMPLATE_FIELDS = ("to", "cc", "subject", "body", "mode")
 
+# CR states where automation is forced off (terminal lifecycle states).
+TERMINAL_CR_STATES = {CRState.FINISHED, CRState.POSTPONED, CRState.CANCELED}
+
 
 def _ok(data: Any = None) -> dict[str, Any]:
     return {"ok": True, "data": data, "error": None}
@@ -177,8 +180,17 @@ class ApprovalPollingService:
         path = Path(project_path)
         metadata = self._metadata_store.read(path) or ProjectMetadata(project_name=path.name)
         cr_number = extract_cr_number(metadata.cr_link) or ""
+        settings = self._settings_store.read()
+        locked = metadata.cr_state in TERMINAL_CR_STATES
+        enabled = (
+            metadata.automation_enabled
+            if metadata.automation_enabled is not None
+            else settings.automation_default_enabled
+        )
         status: dict[str, Any] = {
-            "automation_enabled": metadata.automation_enabled,
+            # Effective value: per-project override else global default, forced off when locked.
+            "automation_enabled": bool(enabled) and not locked,
+            "automation_locked": locked,
             "outlook_available": outlook_client.IS_WINDOWS,
         }
         for kind, config in REQUEST_KINDS.items():
@@ -187,7 +199,12 @@ class ApprovalPollingService:
             template_ok = self._resolve_template(metadata, kind) is not None
             if not template_ok:
                 reasons.append("template_missing")
-            status[kind] = {"eligible": not reasons, "reasons": reasons, "job": job}
+            status[kind] = {
+                "eligible": not reasons,
+                "reasons": reasons,
+                "job": job,
+                "auto_download": metadata.approval_auto_download.get(kind, True),
+            }
         return status
 
     def _condition_reasons(
@@ -225,6 +242,18 @@ class ApprovalPollingService:
         metadata.updated_at = local_now()
         self._metadata_store.write(path, metadata)
         return _ok({"automation_enabled": metadata.automation_enabled})
+
+    def set_auto_download(self, project_path: Path, kind: str, enabled: bool) -> dict[str, Any]:
+        if kind not in REQUEST_KINDS:
+            return _fail(f"Unknown request kind: {kind}", "APPROVAL_KIND_INVALID")
+        path = Path(project_path)
+        metadata = self._metadata_store.read(path)
+        if metadata is None:
+            return _fail(f"Project metadata not found: {path}", "APPROVAL_PROJECT_NOT_FOUND")
+        metadata.approval_auto_download[kind] = bool(enabled)
+        metadata.updated_at = local_now()
+        self._metadata_store.write(path, metadata)
+        return _ok({"kind": kind, "auto_download": metadata.approval_auto_download[kind]})
 
     # ── templates ──────────────────────────────────────────────────────
     def _resolve_template(self, metadata: ProjectMetadata, kind: str) -> dict[str, Any] | None:
@@ -325,6 +354,19 @@ class ApprovalPollingService:
         result = send(rendered.to, rendered.cc, rendered.subject, rendered.body, None)
         if not result.get("ok"):
             return result
+
+        if not metadata.approval_auto_download.get(kind, True):
+            # Auto-download reply is off: no polling job/worker, just record the send.
+            metadata.history.append(
+                HistoryEntry(
+                    timestamp=local_now(),
+                    action="APPROVAL_REQUEST_SENT",
+                    detail=f"{kind}: {rendered.subject}",
+                    user=current_user(self._settings_store.read()),
+                )
+            )
+            self._metadata_store.write(path, metadata)
+            return _ok({"status": "sent", "subject": rendered.subject})
 
         sent_at = local_now().replace(tzinfo=None)
         job = {

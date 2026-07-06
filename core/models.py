@@ -148,8 +148,9 @@ class ProjectMetadata:
     h10_notified_at: datetime | None = None
     project_type: ProjectType = ProjectType.CR
     non_cr_state: NonCrState | None = None
-    automation_enabled: bool = False
+    automation_enabled: bool | None = None
     approval_templates: dict[str, Any] = field(default_factory=dict)
+    approval_auto_download: dict[str, bool] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
@@ -170,8 +171,9 @@ class ProjectMetadata:
             h10_notified_at=datetime_from_json(data.get("h10_notified_at")),
             project_type=ProjectType(data.get("project_type", ProjectType.CR.value)),
             non_cr_state=NonCrState(data["non_cr_state"]) if data.get("non_cr_state") else None,
-            automation_enabled=bool(data.get("automation_enabled", False)),
+            automation_enabled=data["automation_enabled"] if isinstance(data.get("automation_enabled"), bool) else None,
             approval_templates=dict(data["approval_templates"]) if isinstance(data.get("approval_templates"), dict) else {},
+            approval_auto_download={str(k): bool(v) for k, v in data["approval_auto_download"].items()} if isinstance(data.get("approval_auto_download"), dict) else {},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -195,6 +197,7 @@ class ProjectMetadata:
             "non_cr_state": self.non_cr_state.value if self.non_cr_state else None,
             "automation_enabled": self.automation_enabled,
             "approval_templates": self.approval_templates,
+            "approval_auto_download": self.approval_auto_download,
         }
 
 
@@ -525,6 +528,7 @@ class AppSettings:
     default_approval_templates: dict[str, Any] = field(default_factory=dict)
     approval_polling_interval_minutes: int = 5
     approval_polling_max_hours: int = 3
+    automation_default_enabled: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AppSettings:
@@ -550,6 +554,7 @@ class AppSettings:
             default_approval_templates=dict(data["default_approval_templates"]) if isinstance(data.get("default_approval_templates"), dict) else {},
             approval_polling_interval_minutes=int(data.get("approval_polling_interval_minutes", 5)),
             approval_polling_max_hours=int(data.get("approval_polling_max_hours", 3)),
+            automation_default_enabled=bool(data.get("automation_default_enabled", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -572,6 +577,7 @@ class AppSettings:
             "default_approval_templates": self.default_approval_templates,
             "approval_polling_interval_minutes": self.approval_polling_interval_minutes,
             "approval_polling_max_hours": self.approval_polling_max_hours,
+            "automation_default_enabled": self.automation_default_enabled,
         }
 
 @dataclass(slots=True)

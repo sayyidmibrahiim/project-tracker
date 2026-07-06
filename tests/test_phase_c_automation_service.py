@@ -135,8 +135,13 @@ def test_piece_c_model_fields_round_trip():
     out = meta.to_dict()
     assert out["automation_enabled"] is True
     assert out["approval_templates"]["uat_approval"]["subject"] == "UAT {CR_NUMBER}"
-    assert ProjectMetadata.from_dict({}).automation_enabled is False
+    assert ProjectMetadata.from_dict({}).automation_enabled is None
     assert ProjectMetadata.from_dict({}).approval_templates == {}
+    assert ProjectMetadata.from_dict({}).approval_auto_download == {}
+    assert ProjectMetadata.from_dict({"automation_enabled": False}).automation_enabled is False
+    meta_dl = ProjectMetadata.from_dict({"approval_auto_download": {"uat": False}})
+    assert meta_dl.approval_auto_download == {"uat": False}
+    assert meta_dl.to_dict()["approval_auto_download"] == {"uat": False}
 
     settings = AppSettings.from_dict(
         {
@@ -155,6 +160,10 @@ def test_piece_c_model_fields_round_trip():
     assert defaults.approval_polling_interval_minutes == 5
     assert defaults.approval_polling_max_hours == 3
     assert defaults.default_approval_templates == {}
+    assert defaults.automation_default_enabled is False
+    enabled = AppSettings.from_dict({"automation_default_enabled": True})
+    assert enabled.automation_default_enabled is True
+    assert enabled.to_dict()["automation_default_enabled"] is True
 
 
 def _piece_c_service(tmp_path, monkeypatch=None):
@@ -192,7 +201,7 @@ def _piece_c_service(tmp_path, monkeypatch=None):
     )
 
 
-def _piece_c_project(tmp_path, *, drone_state="PENDING APPROVAL", cr_state="PENDING SUBMISSION", signoff=b"x", lv=b""):
+def _piece_c_project(tmp_path, *, drone_state="PENDING APPROVAL", cr_state="PENDING SUBMISSION", signoff=b"x", lv=b"", automation_enabled=True, extra=None):
     import json
 
     project = tmp_path / "CR-2026-001"
@@ -202,19 +211,18 @@ def _piece_c_project(tmp_path, *, drone_state="PENDING APPROVAL", cr_state="PEND
         (docs / "uat-signoff.docx").write_bytes(signoff)
     if lv is not None:
         (docs / "prod-lv.docx").write_bytes(lv)
-    (project / "project_data.json").write_text(
-        json.dumps(
-            {
-                "project_name": "CR-2026-001",
-                "project_type": "CR",
-                "cr_link": "https://itsm.corp/change?CRNumber=CR2026001",
-                "cr_state": cr_state,
-                "drone_tickets": [{"drone_link": "", "drone_state": drone_state}],
-                "automation_enabled": True,
-            }
-        ),
-        encoding="utf-8",
-    )
+    data = {
+        "project_name": "CR-2026-001",
+        "project_type": "CR",
+        "cr_link": "https://itsm.corp/change?CRNumber=CR2026001",
+        "cr_state": cr_state,
+        "drone_tickets": [{"drone_link": "", "drone_state": drone_state}],
+    }
+    if automation_enabled is not None:
+        data["automation_enabled"] = automation_enabled
+    if extra:
+        data.update(extra)
+    (project / "project_data.json").write_text(json.dumps(data), encoding="utf-8")
     return project
 
 
@@ -286,6 +294,76 @@ def test_piece_c_template_get_update_preview(tmp_path):
     service.update_template(project, "uat", {"to": "me@corp", "cc": "", "subject": "UAT {CR_NUMBER}", "body": "hi {PROJECT_NAME}", "mode": "send"})
     got = service.get_template(project, "uat")
     assert got["data"]["source"] == "project" and got["data"]["template"]["to"] == "me@corp"
+
+
+def test_piece_c_status_inherits_global_default(tmp_path):
+    service = _piece_c_service(tmp_path)
+
+    inheriting = _piece_c_project(tmp_path / "a", automation_enabled=None)
+    assert service.get_status(inheriting)["automation_enabled"] is False
+    service._settings_store.settings.automation_default_enabled = True
+    assert service.get_status(inheriting)["automation_enabled"] is True
+
+    explicit_off = _piece_c_project(tmp_path / "b", automation_enabled=False)
+    assert service.get_status(explicit_off)["automation_enabled"] is False  # explicit override wins
+
+
+def test_piece_c_status_locked_for_terminal_cr_state(tmp_path):
+    service = _piece_c_service(tmp_path)
+
+    active = _piece_c_project(tmp_path / "a")
+    status = service.get_status(active)
+    assert status["automation_locked"] is False
+    assert status["automation_enabled"] is True
+
+    for i, state in enumerate(("FINISHED", "POSTPONED", "CANCELED")):
+        locked = _piece_c_project(tmp_path / f"t{i}", cr_state=state)
+        status = service.get_status(locked)
+        assert status["automation_locked"] is True
+        assert status["automation_enabled"] is False  # forced off despite explicit True
+
+
+def test_piece_c_auto_download_flag(tmp_path):
+    service = _piece_c_service(tmp_path)
+    project = _piece_c_project(tmp_path / "a")
+
+    status = service.get_status(project)
+    assert status["uat"]["auto_download"] is True
+    assert status["lv"]["auto_download"] is True
+
+    result = service.set_auto_download(project, "uat", False)
+    assert result["ok"] is True and result["data"]["auto_download"] is False
+    assert service.get_status(project)["uat"]["auto_download"] is False
+    assert service.get_status(project)["lv"]["auto_download"] is True
+
+    invalid = service.set_auto_download(project, "nope", True)
+    assert invalid["ok"] is False and invalid["error"]["code"] == "APPROVAL_KIND_INVALID"
+
+
+def test_piece_c_send_without_auto_download_skips_polling(tmp_path, monkeypatch):
+    import services.approval_polling_service as aps
+
+    service = _piece_c_service(tmp_path)
+    project = _piece_c_project(tmp_path / "a", extra={"approval_auto_download": {"uat": False}})
+
+    started: list = []
+    monkeypatch.setattr(aps.outlook_client, "IS_WINDOWS", True)
+    monkeypatch.setattr(
+        aps.outlook_client,
+        "create_draft_email",
+        lambda to, cc, subject, body, attachment_path=None: {"ok": True, "data": {"status": "drafted"}, "error": None},
+    )
+    monkeypatch.setattr(aps.ApprovalPollingService, "_start_worker", lambda self, job: started.append(job))
+
+    result = service.send_request(project, "uat")
+    assert result["ok"] is True and result["data"]["status"] == "sent"
+    assert started == []
+    assert service._cache.latest_approval_job(str(project), "uat") is None
+
+    from infrastructure.metadata_store import MetadataStore
+
+    metadata = MetadataStore().read(project)
+    assert any(entry.action == "APPROVAL_REQUEST_SENT" for entry in metadata.history)
 
     preview = service.preview_template(project, "uat", None)
     assert preview["ok"] is True
