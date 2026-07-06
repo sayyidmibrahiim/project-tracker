@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, waitForPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
+  import { onDestroy, onMount } from "svelte";
+  import { approvalGetStatus, approvalSetEnabled, callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, sendLvApprovalRequest, sendUatApprovalRequest, stopApprovalPolling, waitForPywebviewReady } from "../bridge";
+  import type { ApprovalStatus, ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
@@ -24,6 +24,55 @@
   let selectedPath: string = $state("");
   let detail: ProjectDetail | null = $state(null);
   let isNonCr: boolean = $state(false);
+  // ── Piece C approval automation (spec 2026-07-02) ──
+  let approvalStatus: ApprovalStatus | null = $state(null);
+  let approvalBusy: "" | "uat" | "lv" | "toggle" = $state("");
+  let approvalError = $state("");
+  let approvalPollTimer: ReturnType<typeof setInterval> | undefined;
+
+  function stopApprovalStatusPoll() {
+    if (approvalPollTimer !== undefined) { clearInterval(approvalPollTimer); approvalPollTimer = undefined; }
+  }
+
+  async function loadApprovalStatus() {
+    if (!selectedPath || isNonCr || !isPywebviewReady()) { approvalStatus = null; stopApprovalStatusPoll(); return; }
+    const resp = await approvalGetStatus(selectedPath);
+    if (!resp.ok) { approvalError = resp.error.message; return; }
+    approvalStatus = resp.data ?? null;
+    const polling = approvalStatus?.uat.job?.status === "polling" || approvalStatus?.lv.job?.status === "polling";
+    if (polling && approvalPollTimer === undefined) {
+      approvalPollTimer = setInterval(() => void loadApprovalStatus(), 15000);
+    } else if (!polling) {
+      stopApprovalStatusPoll();
+    }
+  }
+
+  async function toggleApproval() {
+    if (!selectedPath || !approvalStatus) return;
+    approvalBusy = "toggle"; approvalError = "";
+    const resp = await approvalSetEnabled(selectedPath, !approvalStatus.automation_enabled);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  async function sendApproval(kind: "uat" | "lv") {
+    if (!selectedPath) return;
+    approvalBusy = kind; approvalError = "";
+    const resp = kind === "uat" ? await sendUatApprovalRequest(selectedPath) : await sendLvApprovalRequest(selectedPath);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  async function stopApproval(kind: "uat" | "lv") {
+    if (!selectedPath) return;
+    approvalBusy = kind; approvalError = "";
+    const resp = await stopApprovalPolling(selectedPath, kind);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
   let selectedSubproject: string = $state("all");
   let drones: string[] = $state([]);
   let files: FileRow[] = $state([]);
@@ -230,6 +279,7 @@
     await rteEditorFlush?.();
     selectedPath = path;
     detailState = "loading";
+    stopApprovalStatusPoll();
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
     crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocDocPayload = null; crDocsLoading = false; crDocsError = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
@@ -290,6 +340,7 @@
 
       if (detail && !isNonCr) {
         void loadCrDocs();
+        void loadApprovalStatus();
       }
     } catch (err) {
       errorCode = "PROJECT_DETAIL_LOAD_FAILED";
@@ -797,6 +848,7 @@
   }
 
   onMount(init);
+  onDestroy(() => stopApprovalStatusPoll());
 
   export function refresh() { loadProjects(); }
 
@@ -870,6 +922,31 @@
           {/each}
         </select>
       </label>
+      {#if detail && !isNonCr && mode !== "new" && approvalStatus}
+        <label class="pd-command-field" for="pd-approval-toggle" title={approvalStatus.outlook_available ? "Approval automation" : "Outlook not configured"}>
+          <span>Automation</span>
+          <button id="pd-approval-toggle" type="button" class="pd-control pd-approval-toggle" class:on={approvalStatus.automation_enabled} disabled={approvalBusy === "toggle" || !approvalStatus.outlook_available} onclick={toggleApproval}>
+            {approvalStatus.automation_enabled ? "ON" : "OFF"}
+          </button>
+        </label>
+        {#if approvalStatus.automation_enabled}
+          {#each [["uat", "Send UAT Approval"], ["lv", "Send LV"]] as [kind, label]}
+            {@const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv}
+            {#if ks.eligible || ks.job}
+              {#if ks.job?.status === "polling"}
+                <button class="pd-command-btn" type="button" disabled>Waiting for reply…</button>
+                <button class="pd-command-btn pd-command-danger" type="button" disabled={approvalBusy !== ""} onclick={() => stopApproval(kind as "uat" | "lv")}>Stop</button>
+              {:else if ks.job?.status === "completed"}
+                <button class="pd-command-btn" type="button" disabled>Approval received ✓</button>
+              {:else}
+                <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "" : ks.reasons.join(", ")} onclick={() => sendApproval(kind as "uat" | "lv")}>
+                  {ks.job?.status === "timeout" ? `${label} (retry)` : label}
+                </button>
+              {/if}
+            {/if}
+          {/each}
+        {/if}
+      {/if}
       <div class="pd-command-spacer"></div>
       <button class="pd-command-btn" type="button" onclick={openProjectFolder} disabled={!selectedPath || topActionState === "saving"}>Open</button>
       <button class="pd-command-btn pd-command-danger" type="button" onclick={requestTopDelete} disabled={!selectedPath || topActionState === "saving"}>Delete</button>
@@ -879,6 +956,9 @@
     <p class="cr-link-feedback cr-link-err">✗ {topActionError}</p>
   {:else if topActionState === "success"}
     <p class="cr-link-feedback cr-link-ok">✓ Done</p>
+  {/if}
+  {#if approvalError}
+    <p class="cr-link-feedback cr-link-err">✗ {approvalError}</p>
   {/if}
   <div class="pd-body">
     <div class="pd-detail-panel">
@@ -1223,6 +1303,8 @@
   .pd-command-field { display:flex; flex-direction:column; gap:4px; min-width:110px; }
   .pd-command-field span { font-size:9.5px; font-weight:700; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.05em; }
   .pd-command-project { min-width:180px; flex:0 1 240px; }
+  .pd-approval-toggle { min-width: 44px; font-weight: 800; }
+  .pd-approval-toggle.on { background: var(--soft-pink-surface); border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
   .pd-command-spacer { flex:1 1 auto; }
   .pd-control { height:28px; min-width:0; border:1px solid var(--color-input-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; padding:3px 9px; outline:none; }
   .pd-control:focus { border-color:var(--color-dbs-red); }

@@ -244,3 +244,15 @@ test("RTE interaction lock has local cleanup and a 10-second app watchdog", () =
   assert.match(APP, /console\.warn\("interaction-lock watchdog released"\)/);
   assert.match(APP, /clearTimeout\(interactionLockWatchdog\)/);
 });
+
+test("ProjectDetails wires Piece C approval automation controls", () => {
+  assert.match(PD, /approvalGetStatus|get_approval_status/);
+  assert.match(PD, /approvalSetEnabled/);
+  assert.match(PD, /sendUatApprovalRequest/);
+  assert.match(PD, /sendLvApprovalRequest/);
+  assert.match(PD, /stopApprovalPolling/);
+  assert.match(PD, /Send UAT Approval/);
+  assert.match(PD, /Send LV/);
+  assert.match(PD, /Waiting for reply/);
+  assert.match(PD, /clearInterval\(approvalPollTimer\)/);
+});
