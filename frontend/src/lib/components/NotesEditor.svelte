@@ -1192,6 +1192,11 @@
   :global(.ne-editor-host .ne-textarea th), :global(.ne-editor-host .ne-textarea td) { border:1px solid var(--input-border); padding:4px 6px; position:relative; }
   :global(.ne-editor-host .ne-textarea th) { background:var(--soft-pink-surface); font-weight:800; }
   :global(.ne-editor-host .ne-textarea img) { max-width:100%; }
+  :global(.ne-editor-host .ne-img-wrap) { position:relative; display:inline-block; max-width:100%; line-height:0; }
+  :global(.ne-editor-host .ne-img-wrap img) { display:block; max-width:100%; }
+  :global(.ne-editor-host .ne-img-handle) { position:absolute; right:-4px; bottom:-4px; width:8px; height:8px; background:var(--card-white); border:1px solid var(--color-dbs-red); border-radius:2px; box-shadow:0 1px 3px rgba(15,23,42,0.24); cursor:nwse-resize; opacity:0; }
+  :global(.ne-editor-host .ne-img-wrap:hover .ne-img-handle), :global(.ne-editor-host .ProseMirror-selectednode .ne-img-handle) { opacity:1; }
+  :global(.ne-editor-host .ne-textarea[contenteditable="false"] .ne-img-handle) { display:none; }
   /* Column-resize handle + cursor for resizable tables (bug 11). */
   :global(.ne-editor-host .ne-textarea .selectedCell) { background:var(--soft-pink-surface); }
   :global(.ne-editor-host .ne-textarea .column-resize-handle) { position:absolute; right:-2px; top:0; bottom:-2px; width:4px; background:var(--color-dbs-red); pointer-events:none; z-index:10; }

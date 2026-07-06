@@ -10,6 +10,7 @@ const NE = readFileSync(resolve(__dirname, "../src/lib/components/NotesEditor.sv
 const APP = readFileSync(resolve(__dirname, "../src/App.svelte"), "utf8");
 const TB = readFileSync(resolve(__dirname, "../src/lib/components/TitleBar.svelte"), "utf8");
 const DASHBOARD = readFileSync(resolve(__dirname, "../src/lib/components/Dashboard.svelte"), "utf8");
+const AI = readFileSync(resolve(__dirname, "../src/lib/extensions/AssetImage.ts"), "utf8");
 
 test("NotesEditor uses a Tiptap contenteditable editor (not a textarea) for WYSIWYG", () => {
   // D-0007: the editing core is Tiptap (ProseMirror). The contenteditable is
@@ -127,6 +128,25 @@ test("NotesEditor supports Word-like cross-format zoom", () => {
   assert.match(NE, /capability !== "unsupported"/);
   assert.match(NE, /--ne-zoom/);
   assert.match(NE, /zoom:var\(--ne-zoom, 1\)/);
+});
+
+test("AssetImage supports persisted drag-resize width", () => {
+  assert.match(AI, /import type \{ Node as PMNode \} from "@tiptap\/pm\/model"/);
+  assert.match(AI, /width:\s*\{[\s\S]*getAttribute\("width"\)[\s\S]*renderHTML:[\s\S]*width/);
+  assert.match(AI, /addNodeView\(\)/);
+  assert.match(AI, /className = "ne-img-wrap"/);
+  assert.match(AI, /className = "ne-img-handle"/);
+  assert.match(AI, /if \(!editor\.isEditable\) return/);
+  assert.match(AI, /Math\.max\(40/);
+  assert.match(AI, /setNodeMarkup\(pos, undefined, \{ \.\.\.current\.attrs, width: nextWidth \}\)/);
+});
+
+test("NotesEditor styles the image resize handle", () => {
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-img-wrap\)\s*\{[^}]*position:relative;[^}]*display:inline-block;[^}]*max-width:100%;[^}]*line-height:0;/);
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-img-wrap img\)\s*\{[^}]*display:block;[^}]*max-width:100%;/);
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-img-handle\)\s*\{[^}]*position:absolute;[^}]*right:-4px;[^}]*bottom:-4px;[^}]*width:8px;[^}]*height:8px;[^}]*border:1px solid var\(--color-dbs-red\);[^}]*border-radius:2px;[^}]*box-shadow:0 1px 3px rgba\(15,23,42,0\.24\);[^}]*cursor:nwse-resize;[^}]*opacity:0;/);
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-img-wrap:hover \.ne-img-handle\),\s*:global\(\.ne-editor-host \.ProseMirror-selectednode \.ne-img-handle\)\s*\{[^}]*opacity:1;/);
+  assert.match(NE, /:global\(\.ne-editor-host \.ne-textarea\[contenteditable="false"\] \.ne-img-handle\)\s*\{[^}]*display:none;/);
 });
 
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {

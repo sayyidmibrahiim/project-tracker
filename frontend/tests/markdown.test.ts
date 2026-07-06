@@ -158,6 +158,25 @@ test("asset image refs render with data-asset-src and round-trip to markdown", (
   assert.match(back, /!\[shot\]\(\.rte\/assets\/ab12cd34ef56ab78\.png\)/);
 });
 
+test("resized asset image refs serialize as inline HTML with width", () => {
+  const back = htmlToMarkdown(
+    '<img src="data:image/png;base64,AAAA" alt="shot" data-asset-src=".rte/assets/ab12cd34ef56ab78.png" width="240">',
+  );
+  assert.equal(back, '<img src=".rte/assets/ab12cd34ef56ab78.png" alt="shot" width="240" />');
+});
+
+test("resized asset image HTML renders with a sanitized width", () => {
+  const html = renderMarkdown('<img src=".rte/assets/ab12cd34ef56ab78.png" alt="shot" width="240" />');
+  assert.match(html, /<img src="\.rte\/assets\/ab12cd34ef56ab78\.png" alt="shot" width="240">/);
+});
+
+test("asset image refs without width keep markdown image serialization", () => {
+  const back = htmlToMarkdown(
+    '<img src="data:image/png;base64,AAAA" alt="shot" data-asset-src=".rte/assets/ab12cd34ef56ab78.png">',
+  );
+  assert.equal(back, "![shot](.rte/assets/ab12cd34ef56ab78.png)");
+});
+
 test("base64 embeds without asset refs pass through unchanged (legacy notes)", () => {
   const back = htmlToMarkdown('<img src="data:image/png;base64,AAAA" alt="old">');
   assert.match(back, /!\[old\]\(data:image\/png;base64,AAAA\)/);

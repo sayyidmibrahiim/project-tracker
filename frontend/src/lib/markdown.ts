@@ -100,7 +100,7 @@ const BLOCK_TAGS = new Set([
 /** Per-tag attribute allow-list. Unlisted tags get the default set. */
 const TAG_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href"]),
-  img: new Set(["src", "alt", "style", "data-asset-src", "data-asset-id"]),
+  img: new Set(["src", "alt", "style", "width", "data-asset-src", "data-asset-id"]),
   span: new Set(["style"]),
   div: new Set(["style", "align"]),
   p: new Set(["style", "align"]),
@@ -120,6 +120,7 @@ function sanitizeAttr(name: string, val: string): string {
   if (name === "href") return sanitizeHref(val);
   if (name === "src") return sanitizeImgSrc(val);
   if (name === "style") return sanitizeStyle(val);
+  if (name === "width") return positiveWidthAttr(val);
   // Plain attributes: keep, but neutralize quote/angle-break characters.
   return val.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -386,6 +387,16 @@ function stripHtmlTags(value: string): string {
   return decodeHtmlEntities(value.replace(/<[^>]+>/g, "")).trim();
 }
 
+function positiveWidthAttr(value: string | null): string {
+  const raw = (value || "").trim();
+  return /^[1-9]\d*$/.test(raw) ? raw : "";
+}
+
+function imageMarkdown(src: string, alt: string, width: string): string {
+  if (width) return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" width="${width}" />`;
+  return `![${alt}](${src})`;
+}
+
 function domNodeToMarkdown(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
@@ -425,7 +436,12 @@ function domNodeToMarkdown(node: Node): string {
     case "br": return "\n";
     // Asset-backed images serialize their stable relative ref, never the
     // (large, display-only) data-URI src (D-0012).
-    case "img": return `![${el.getAttribute("alt") || ""}](${el.getAttribute("data-asset-src") || el.getAttribute("src") || ""})`;
+    case "img": {
+      const src = el.getAttribute("data-asset-src") || el.getAttribute("src") || "";
+      const alt = el.getAttribute("alt") || "";
+      const width = positiveWidthAttr(el.getAttribute("width"));
+      return imageMarkdown(src, alt, width);
+    }
     case "table": {
       const rows = Array.from(el.querySelectorAll("tr"));
       if (rows.length === 0) return children;
@@ -463,6 +479,7 @@ function domNodeToMarkdown(node: Node): string {
 }
 
 function fallbackHtmlToMarkdown(html: string): string {
+  const keepImgs: string[] = [];
   return html
     .replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_m, code) => `\n\n\`\`\`\n${stripHtmlTags(code)}\n\`\`\`\n\n`)
     .replace(/<li[^>]*data-type=["']taskItem["'][^>]*data-checked=["'](true|false)["'][^>]*>([\s\S]*?)<\/li>/gi, (_m, checked, body) => `\n- [${checked === "true" ? "x" : " "}] ${stripHtmlTags(body)}\n`)
@@ -482,7 +499,11 @@ function fallbackHtmlToMarkdown(html: string): string {
       const assetSrc = attrs.match(/data-asset-src=["']([^"']*)["']/i)?.[1] || "";
       const src = assetSrc || attrs.match(/src=["']([^"']*)["']/i)?.[1] || "";
       const alt = attrs.match(/alt=["']([^"']*)["']/i)?.[1] || "";
-      return `![${alt}](${src})`;
+      const width = positiveWidthAttr(attrs.match(/width=["']([^"']*)["']/i)?.[1] || "");
+      const out = imageMarkdown(src, alt, width);
+      if (!width) return out;
+      keepImgs.push(out);
+      return `\u0000K${keepImgs.length - 1}\u0000`;
     })
     .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `[${stripHtmlTags(text)}](${href})`)
     .replace(/<ul(?![^>]*data-type=["']taskList["'])[^>]*>([\s\S]*?)<\/ul>/gi, (_m, list) =>
@@ -494,6 +515,7 @@ function fallbackHtmlToMarkdown(html: string): string {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>|<\/div>/gi, "\n\n")
     .replace(/<[^>]+>/g, "")
+    .replace(/\u0000K(\d+)\u0000/g, (_m, i) => keepImgs[Number(i)] ?? "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
