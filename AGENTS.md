@@ -1,4 +1,4 @@
-# Project Tracker
+﻿# Project Tracker
 
 Desktop productivity app. Svelte+TS+Vite+Tailwind frontend, Python 3.12+ backend, pywebview frameless shell, SQLite cache.
 
@@ -60,7 +60,7 @@ D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe scripts/package.py
 ## Repo-Root Guard
 
 All app/tests/build/runtime verification commands run from `D:/Ibrahim/Projects/project_tracker`, never worktrees.
-Write/Edit target repo-root paths, never `.Codex/worktrees/*/...`.
+Write/Edit target repo-root paths, never `.claude/worktrees/*/...`.
 PreToolUse hook enforces this — if it fires, switch to the command shown in error.
 
 ## Threading (Mandatory)
@@ -84,11 +84,11 @@ pip install "headroom-ai[proxy]"
 
 - **caveman:** response style only; ultra is session-level, not product behavior.
 - **context-mode:** owns tool/CLI output compression + in-session continuity; do not add duplicate compression hooks.
-- **Codex-mem:** active cross-session recall. Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
+- **claude-mem:** active cross-session recall. Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
 - **Headroom:** optional local proxy at `http://localhost:8787`; source code remains authority.
 - **RTK:** manual-only on native Windows (`rtk ...`); do not claim auto-rewrite outside WSL/Unix shell.
 
-Full routing → `.Codex/rules/integration-routing.md` and `_docs/SKILL_ROUTING.md`.
+Full routing → `.claude/rules/integration-routing.md` and `_docs/SKILL_ROUTING.md`.
 
 ## Session vs Turn
 
@@ -134,7 +134,7 @@ Examples:
 - Delete branch after merge. Keep `main` as the single source of truth.
 - **NEVER run two AI sessions on the same working tree** — parallel sessions can `git reset --hard` each other's uncommitted work. One branch per session, one session per branch.
 
-### Cross-provider rule (ALL AI agents — Codex, opencode, Cursor, etc.)
+### Cross-provider rule (ALL AI agents — Claude, opencode, Cursor, etc.)
 
 This branching rule is **binding for every AI agent regardless of provider/model**. It is recorded in: `AGENTS.md` (here), `_docs/WORKFLOW.md`, and `_docs/FILE_ROUTING.md`. If you are any AI agent starting work in this repo: read this section first, branch directly from `main` using `{menu}/{desc}`, and never touch another session's branch.
 
@@ -171,7 +171,7 @@ A 5-part RTE fix round (reactive toolbar token, 5s export countdown, hidden `.rt
 1. `NotesEditor.svelte`, `extensions/*.ts`, and `markdown.ts` have app-wide blast radius (every project's notes.md). Change them **one behavior per round**, user manual check between rounds. Never bundle 5 behavior changes.
 2. Never run `npm run build` (web/static) while the app may be open; the served bundle breaks live. After every build the user must restart the app before testing.
 3. `web/static` is gitignored — `git checkout` does NOT switch it. After any branch switch, rebuild before running, or the frontend calls bridge methods the backend doesn't have ("everything abnormal").
-4. Never write raw control characters (e.g. NUL) into source files; use escape sequences (` `).
+4. Never write raw control characters (e.g. NUL) into source files; use escape sequences (``).
 5. Automated green (svelte-check/tests/smoke) ≠ safe: none of them exercise real editor interaction. Treat RTE changes as unverified until the user tests.
 
 ## Documentation Sync
@@ -194,3 +194,27 @@ Read ONLY when task requires — do not load every session:
 | `_docs/ARCHITECTURE.md`  | Backend structure, layer rules, bridge, persistence model |
 | `_docs/WORKFLOW.md`      | Git ops, implementation checklist, testing strategy       |
 | `_docs/SKILL_ROUTING.md` | Choosing which skills/plugins to invoke                   |
+
+## Default Session Skills (user rule 2026-07-06)
+
+Every AI session in this repo activates these at start, all providers:
+
+1. **superpowers:using-superpowers** — skills-first discipline: invoke matching skill BEFORE any response/action.
+2. **ponytail (full)** — laziest working solution: YAGNI, reuse codebase > stdlib > native platform > installed dependency > new code; shortest diff; root-cause fixes.
+3. **caveman (full)** — terse response style (see rules below).
+
+Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+Rules:
+- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
+- Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
+- Pattern: [thing] [action] [reason]. [next step].
+- Not: "Sure! I'd be happy to help you with that."
+- Yes: "Bug in auth middleware. Fix:"
+
+Switch level: /caveman lite|full|ultra|wenyan
+Stop: "stop caveman" or "normal mode"
+
+Auto-Clarity: drop caveman for security warnings, irreversible actions, user confused. Resume after.
+
+Boundaries: code/commits/PRs written normal.
