@@ -78,6 +78,7 @@ def test_initialize_creates_expected_tables(tmp_path: Path) -> None:
         "scan_warnings",
         "notifications",
         "automation_rule_logs",
+        "approval_polling_jobs",
     }
 
 
@@ -264,6 +265,7 @@ def test_reset_recreates_corrupt_db(tmp_path: Path) -> None:
         "scan_warnings",
         "notifications",
         "automation_rule_logs",
+        "approval_polling_jobs",
     }
 
 
@@ -441,3 +443,33 @@ def test_notification_service_persists_and_reloads_dismissed_state(tmp_path: Pat
     assert len(all_notifications) == 1
     assert all_notifications[0].id == created.id
     assert all_notifications[0].dismissed is True
+
+
+def test_approval_polling_jobs_persist_and_resume(tmp_path):
+    from infrastructure.cache_db import CacheDb
+
+    cache = CacheDb(tmp_path / "cache.db")
+    cache.initialize()
+    assert cache.health_check() is True
+
+    row = {
+        "job_id": "j-1",
+        "project_path": "C:/root/APP/2026/CR/UAT_PREPARE/CR-2026-001",
+        "request_type": "uat",
+        "cr_number": "CR-2026-001",
+        "email_subject": "Request UAT Approval CR-2026-001",
+        "sent_at": "2026-07-06T10:00:00",
+        "status": "polling",
+        "reply_received_at": None,
+    }
+    cache.upsert_approval_job(row)
+    assert [j["job_id"] for j in cache.list_polling_approval_jobs()] == ["j-1"]
+
+    latest = cache.latest_approval_job(row["project_path"], "uat")
+    assert latest is not None and latest["status"] == "polling"
+
+    cache.update_approval_job("j-1", status="completed", reply_received_at="2026-07-06T11:00:00")
+    assert cache.list_polling_approval_jobs() == []
+    latest = cache.latest_approval_job(row["project_path"], "uat")
+    assert latest["status"] == "completed"
+    assert latest["reply_received_at"] == "2026-07-06T11:00:00"

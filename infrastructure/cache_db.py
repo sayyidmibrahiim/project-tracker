@@ -192,6 +192,7 @@ class CacheDb:
                 "scan_warnings",
                 "notifications",
                 "automation_rule_logs",
+                "approval_polling_jobs",
             }
             and invalid_project_states is None
             and invalid_cr_states is None
@@ -512,6 +513,58 @@ class CacheDb:
             ).fetchall()
         return [self._notification_from_row(row) for row in rows]
 
+    _APPROVAL_COLUMNS = (
+        "job_id",
+        "project_path",
+        "request_type",
+        "cr_number",
+        "email_subject",
+        "sent_at",
+        "status",
+        "reply_received_at",
+    )
+
+    def upsert_approval_job(self, row: dict[str, object]) -> None:
+        values = tuple(row.get(column) for column in self._APPROVAL_COLUMNS)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO approval_polling_jobs
+                    (job_id, project_path, request_type, cr_number, email_subject, sent_at, status, reply_received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    reply_received_at = excluded.reply_received_at
+                """,
+                values,
+            )
+
+    def update_approval_job(self, job_id: str, status: str, reply_received_at: str | None = None) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE approval_polling_jobs SET status = ?, reply_received_at = ? WHERE job_id = ?",
+                (status, reply_received_at, job_id),
+            )
+
+    def latest_approval_job(self, project_path: str, request_type: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                f"SELECT {', '.join(self._APPROVAL_COLUMNS)} FROM approval_polling_jobs"
+                " WHERE project_path = ? AND request_type = ?"
+                " ORDER BY created_at DESC, job_id DESC LIMIT 1",
+                (project_path, request_type),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(self._APPROVAL_COLUMNS, row))
+
+    def list_polling_approval_jobs(self) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {', '.join(self._APPROVAL_COLUMNS)} FROM approval_polling_jobs WHERE status = 'polling'",
+            ).fetchall()
+        return [dict(zip(self._APPROVAL_COLUMNS, row)) for row in rows]
+
     @contextmanager
     def _connect(self):
         connection = sqlite3.connect(self.db_path)
@@ -603,6 +656,21 @@ class CacheDb:
                 success INTEGER NOT NULL DEFAULT 0,
                 error_message TEXT,
                 timestamp TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS approval_polling_jobs (
+                job_id TEXT PRIMARY KEY,
+                project_path TEXT NOT NULL,
+                request_type TEXT NOT NULL,
+                cr_number TEXT NOT NULL DEFAULT '',
+                email_subject TEXT NOT NULL DEFAULT '',
+                sent_at TEXT,
+                status TEXT NOT NULL DEFAULT 'polling',
+                reply_received_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
             """
         )
