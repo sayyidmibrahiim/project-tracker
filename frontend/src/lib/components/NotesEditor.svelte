@@ -933,8 +933,8 @@
     <div class="ne-tools" aria-label="Visual formatting" class:ne-tools-disabled={!richToolbarEnabled}>
 
       <!-- Row: Undo/Redo | Font | Size -->
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Undo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().undo().run(); rev++; }}>↩</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Redo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().redo().run(); rev++; }}>↪</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Undo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().undo().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Redo" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().redo().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <span class="ne-sep"></span>
       <select id="ne-font-select" class="ne-tbtn ne-tselect" bind:value={fontSelVal} onchange={applyFont} onclick={(e) => e.stopPropagation()}>
         {#each FONTS as f}
@@ -985,29 +985,29 @@
       <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('heading',{level:3})} title="Heading 3" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleHeading({ level: 3 }).run(); rev++; }}>H3</button>
       <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('paragraph')} title="Paragraph" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setParagraph().run(); rev++; }}>¶</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('blockquote')} title="Blockquote" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBlockquote().run(); rev++; }}>❝</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('code')} title="Inline code" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCode().run(); rev++; }}>{@html '&lt;/&gt;'}</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('codeBlock')} title="Code block" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCodeBlock().run(); rev++; }}>{"</>"}</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('blockquote')} title="Blockquote" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBlockquote().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v6c0 2-1 3-3 4"/><path d="M19 11h-4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v6c0 2-1 3-3 4"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('code')} title="Inline code" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCode().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('codeBlock')} title="Code block" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleCodeBlock().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m10 9-2.5 3L10 15"/><path d="m14 9 2.5 3L14 15"/></svg></button>
       <span class="ne-sep"></span>
 
       <!-- Row: OL UL | Indent Outdent -->
       <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('orderedList')} title="Numbered list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleOrderedList().run(); rev++; }}>1.</button>
       <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('bulletList')} title="Bulleted list" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleBulletList().run(); rev++; }}>•</button>
       <span class="ne-sep"></span>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Indent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem('listItem').run(); rev++; }}>→</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Outdent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem('listItem').run(); rev++; }}>←</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Indent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem('listItem').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 3 16"/><line x1="21" y1="6" x2="11" y2="6"/><line x1="21" y1="12" x2="11" y2="12"/><line x1="21" y1="18" x2="11" y2="18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Outdent" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem('listItem').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 8 3 12 7 16"/><line x1="21" y1="6" x2="11" y2="6"/><line x1="21" y1="12" x2="11" y2="12"/><line x1="21" y1="18" x2="11" y2="18"/></svg></button>
       <span class="ne-sep"></span>
 
       <!-- Row: Align L C R J -->
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('left')} title="Align left" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('left').run(); rev++; }}>≡L</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('center')} title="Align center" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('center').run(); rev++; }}>≡C</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('right')} title="Align right" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('right').run(); rev++; }}>≡R</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('justify')} title="Justify" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('justify').run(); rev++; }}>≡J</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('left')} title="Align left" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('left').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="17" y2="18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('center')} title="Align center" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('center').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('right')} title="Align right" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('right').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="7" y1="18" x2="21" y2="18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={alignIs('justify')} title="Justify" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setTextAlign('justify').run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <span class="ne-sep"></span>
 
       <!-- Row: Link HR Table Image Emoji -->
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('link')} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}>🔗</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('link')} title="Link" onmousedown={(e) => { e.preventDefault(); formatLink(); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
         {#if linkOpen}
           <div class="ne-popover ne-link-pop">
             <label class="ne-field-label" for="ne-link-input">{linkEditing ? 'Edit URL' : 'Link URL'}</label>
@@ -1022,9 +1022,9 @@
           </div>
         {/if}
       </div>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); rev++; }}>HR</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Horizontal rule" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/></svg></button>
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}>⊞</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Table" onmousedown={(e) => { e.preventDefault(); tableOpen=!tableOpen; colorOpen=false; emojiOpen=false; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg></button>
         {#if tableOpen}
           <div class="ne-popover ne-table-pop">
               {#each Array(10) as _, r}
@@ -1039,7 +1039,7 @@
         {/if}
       </div>
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}>🖼</button>
+        <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Image" onmousedown={(e) => { e.preventDefault(); formatImage(); }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></button>
         {#if imgOpen}
           <div class="ne-popover ne-link-pop">
             {#if imgUrl.startsWith('data:image/')}
@@ -1058,7 +1058,7 @@
         {/if}
       </div>
       <div class="ne-popover-wrap">
-        <button type="button" class="ne-tbtn ne-emoji-trigger" title="Emoji" onmousedown={(e) => { e.preventDefault(); emojiOpen=!emojiOpen; colorOpen=false; tableOpen=false; }}>😊</button>
+        <button type="button" class="ne-tbtn ne-emoji-trigger" title="Emoji" onmousedown={(e) => { e.preventDefault(); emojiOpen=!emojiOpen; colorOpen=false; tableOpen=false; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
         {#if emojiOpen}
           <div class="ne-popover ne-emoji-pop">
             {#each EMOJIS as em}
@@ -1070,8 +1070,8 @@
       <span class="ne-sep"></span>
 
       <!-- Row: Todo ClearFormat -->
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('taskList')} title="Checklist" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleTaskList().run(); rev++; }}>☑</button>
-      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Clear formatting" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().clearNodes().run(); rev++; }}>↺</button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} class:active={isActive('taskList')} title="Checklist" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().toggleTaskList().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg></button>
+      <button type="button" class="ne-tbtn" disabled={!richToolbarEnabled} title="Clear formatting" onmousedown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().clearNodes().run(); rev++; }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4 8 20"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="21" y1="15" x2="15" y2="21"/></svg></button>
     </div>
 
     <div class="ne-actions">

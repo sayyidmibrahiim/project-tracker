@@ -149,6 +149,17 @@ test("NotesEditor styles the image resize handle", () => {
   assert.match(NE, /:global\(\.ne-editor-host \.ne-textarea\[contenteditable="false"\] \.ne-img-handle\)\s*\{[^}]*display:none;/);
 });
 
+test("NotesEditor toolbar uses inline SVG icons", () => {
+  const svgButtons = ["Undo", "Redo", "Blockquote", "Inline code", "Code block", "Indent", "Outdent", "Align left", "Align center", "Align right", "Justify", "Link", "Horizontal rule", "Table", "Image", "Emoji", "Checklist", "Clear formatting"];
+  for (const title of svgButtons) {
+    const re = new RegExp(`title="${title}"(?:(?!</button>)[\\s\\S])*?>\\s*<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`);
+    assert.match(NE, re, `toolbar button "${title}" must render an inline SVG icon`);
+  }
+  for (const glyph of [">↩<", ">↪<", ">❝<", ">→<", ">←<", ">≡L<", ">≡C<", ">≡R<", ">≡J<", ">🔗<", ">HR<", ">⊞<", ">🖼<", ">😊<", ">☑<", ">↺<"]) {
+    assert.ok(!NE.includes(glyph), `old toolbar glyph ${glyph} must be gone`);
+  }
+});
+
 test("ProjectDetails uses isNonCr to switch identity and hide CR/Drone for Non-CR", () => {
   assert.match(PD, /isNonCr/);
   assert.match(PD, /set_non_cr_state/);
