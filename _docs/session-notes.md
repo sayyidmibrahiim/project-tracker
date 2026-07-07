@@ -8,6 +8,24 @@
 
 ---
 
+## 2026-07-08 (Automation System epic — Slice 1: PD 3-group section)
+
+**Now:** New epic after user brainstorm (Grok chat) → Outlook + General Automation system, 5 slices, spec `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. Locked: PD-box-first; fold Piece C (backend kept, PD UI replaced); Logs = new top-level menu (Slice 5); `[Send]` confirmed, `[Draft]` not. Slice 1 implemented on `automations/approval-polling`:
+- Backend `services/approval_polling_service.py`: `send_request(kind, mode)` — draft opens Outlook draft + `APPROVAL_DRAFT_OPENED`, NO poll job; send delivers then polls when auto-download on; extracted `_match_and_save` + `_one_shot_check`; `force_check(kind)` one-shot inbox scan → `_on_found` on match; `set_auto_update_cr_state`; `get_status` gains `cr_number` + `auto_update_cr_state`.
+- `core/models.py`: `ProjectMetadata.auto_update_cr_state: bool` (flag only; email-pattern engine = Slice 4).
+- `web/js_api.py`: `send_uat/lv_approval_request(mode)`, `approval_force_check`, `approval_set_auto_update_cr_state` (+ protocol). `bridge.ts` `approvalSend/approvalForceCheck/approvalSetAutoUpdateCrState`; `types.ts` `ApprovalStatus` += `cr_number`,`auto_update_cr_state`.
+- `ProjectDetails.svelte`: 3-group markup (Automations Outlook / Automation CR / Automation Teams), status dots 🟢🟡🔴⚪ via `autoDot`/`autoLabel`, ConfirmModal `pendingSend` for `[Send]`, `[Draft]`/`[Force Check]`/`[Stop]`/auto-download toggle, `[Open Setting]`→`onNavigateAutomations`. CR+Teams groups = honest dev-stubs. `App.svelte` wires `onNavigateAutomations`.
+
+**Known limits (accepted):** draft never polls; auto-download-OFF send has no persistent job so PD dot can't show "sent" post-reload (toast covers it); force-check/worker `SaveAs` race is benign (idempotent); `auto_update_cr_state` engine deferred to Slice 4.
+
+**Next:** build (app closed) → user manual checklist Slice 1 → approve → Slice 2 (PlaceholderResolver + Template per-CR + editor popup + Test). No merge to main until user approves.
+
+**Verification:** svelte-check 0/0; frontend 182 pass; targeted pytest 27; full pytest 1828 pass + 6 known baseline fails.
+
+**active_menu:** automations / project-details
+
+---
+
 ## 2026-07-06 (Piece C UI rework — Branch 3, after first manual check)
 
 **Now:** User manual check rejected 2 things: (1) new Approval tab (Outlook tab already owns email templates), (2) approval controls squeezed into PD command bar. Rework committed in 3 slices: `ca6be1f1` backend (automation_enabled → `bool|None` inherit `settings.automation_default_enabled`; `approval_auto_download` dict per kind, OFF = send records history but no polling job; `TERMINAL_CR_STATES` FINISHED/POSTPONED/CANCELED force effective off + `automation_locked`; `set_auto_download` + `approval_set_auto_download` bridge), `226c9670` Automations page (Approval tab deleted; SEND AUTOMATION = 2 rows Email Ack (UAT)/Email LV (Prod) opening ApprovalTemplates as kind-preset dialog; SOP rows + EmailTemplateDialog.svelte deleted — `settings.email.categories` data kept, backend outlook_draft/send_email still consumes it; "New-CR automation default" toggle in panel title row), `3dd2c09c` PD (dedicated CR-only "Automations" section bottom-left pane: master toggle + lock hint, always-visible send rows, auto-download toggles, 6 dev-stubs → toast "masih tahap development"; body `inert` + dimmed when off).

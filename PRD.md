@@ -1864,13 +1864,16 @@ Actions:
 
 ---
 
-### 16.7 Project Approval Polling (Piece C)
+### 16.7 Project Details — Automations section (Automation System epic, Slice 1)
 
-Project Details shows a dedicated **Automations** section (bottom of the left pane, below Drone Tickets) for CR projects only:
+Project Details shows a dedicated **Automations** section (bottom of the left pane, below Drone Tickets) for CR projects only, as the per-CR operational control center. It is the first slice of the Automation System epic (spec: `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`). Structure = **three groups**, consistent status dots (🟢 Done / 🟡 Waiting / 🔴 Error / ⚪ Inactive-or-Ready):
 
 - Section header holds the master toggle (ON/OFF). Effective value = per-project `automation_enabled` if explicitly set, else `settings.automation_default_enabled`. CR State `FINISHED` / `POSTPONED` / `CANCELED` forces it OFF and disables the toggle (`automation_locked`, hint line shown). When effectively OFF the section body renders as a dimmed non-interactive preview (`inert`).
-- "Email approvals" group: per kind one row with the send button state machine (Send / Waiting for reply… + Stop / Approval received ✓ / retry after timeout; disabled Send shows eligibility reasons as tooltip) plus an "Auto download reply" toggle. The toggle persists per project in `approval_auto_download` (`{uat: bool, lv: bool}`, missing = ON); when OFF, sending records history but creates no polling job, and a toast confirms the send.
-- "In development" group: Auto update CR status, Auto update Drone status, Create Drone Ticket, Auto Followup Teams Ack / Teams LV / Request Approval Teams — visible dev-stubs; clicking shows a "masih tahap development" toast.
+- **Automations Outlook** group: two rows (Send Ack Email = kind `uat`, Send LV Email = kind `lv`). Each row: status dot + short label (derived from job/eligibility, e.g. `Ready · {cr}`, `Waiting for reply · {cr}`, `Reply received ✓`, `No reply (timeout) — retry`); `[Send]` (immediate send, gated by a ConfirmModal — irreversible outward action), `[Draft]` (opens an Outlook draft for manual send, no confirm, no polling job), `[Setting]` (navigates to Automations → Outlook); second line: `Auto-download reply` toggle (persists `approval_auto_download` `{uat,lv}`, missing = ON) + `[Force Check Now]` (one-shot inbox re-scan for the pending polling job) + `[Stop]` when polling. `[+ Add Email Automation]` (routes to Rules Engine — later slice).
+- **Automation CR** group: `Auto Update CR State` toggle (persists `auto_update_cr_state`; email-pattern engine is a later slice) + `[Setting]`; `Create Drone Ticket` `[Run]` `[Setting]` (Jenkins-dependent, dev-stub toast).
+- **Automation Teams** group: `Auto Followup Ack`, `Auto Followup Approval CR` each `[Send][Draft][Setting]` (dev-stub until the Template system slice) + `[+ Add Automation Teams]`.
+
+Send/draft semantics (Slice 1): `[Draft]` = `send_request(mode="draft")` opens an Outlook draft and records `APPROVAL_DRAFT_OPENED`, no polling job. `[Send]` = `send_request(mode="send")` sends immediately; then starts polling when auto-download is ON, else records `APPROVAL_REQUEST_SENT` with no job.
 
 Data model notes:
 

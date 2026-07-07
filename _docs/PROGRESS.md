@@ -8,7 +8,9 @@ Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` br
 
 Active branch: `automations/approval-polling`.
 
-Active slice: **Piece C approval automation (roadmap #3, D-0013)** — implemented + UI rework after first user manual check, awaiting build gate + user manual re-check. Rework 2026-07-06 (user feedback): Approval tab deleted — template editor merged into Outlook tab SEND AUTOMATION (2 rows: Email Ack (UAT)=uat, Email LV (Prod)=lv; ACK_SOP/APRVL_SOP UI rows deleted, EmailTemplateDialog.svelte deleted, `settings.email.categories` data kept for outlook_draft/send_email); Project Details approval controls moved from command bar into dedicated CR-only "Automations" section (master toggle + lock hint, always-visible UAT/LV send rows, auto-download reply toggles, 6 dev-stub controls with toast). New fields: `automation_enabled` tri-state (null = inherit new `settings.automation_default_enabled`, toggled in Outlook tab), `approval_auto_download` per kind (OFF = send without polling job), `automation_locked` when CR State is FINISHED/POSTPONED/CANCELED. Migration quirk: legacy `automation_enabled: false` = explicit OFF, no inherit-reset UI. Base features unchanged: Outlook draft/send, SQLite polling jobs with resume, CR-number subject matching, `.msg` save to `_cr-docs/`, Settings polling interval/max fields.
+Active work: **Automation System epic** (Outlook + General Automation). Spec: `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. 5 slices, PD-box-first; Piece C folded in (backend kept, PD UI replaced). Slices: 1 PD 3-group section · 2 PlaceholderResolver + Template per-CR + editor + Test · 3 Rules Engine goal-wizard + wire no-op actions + conflict detect + pre-seeded · 4 Auto Update CR State + Create Drone (Jenkins stub) + Teams followup · 5 Logs top-level menu + right-sidebar + retention.
+
+**Slice 1 — PD Automations section (3-group)**: implemented, awaiting build gate + user manual check. Replaces the Piece C PD box with three groups (status dots 🟢🟡🔴⚪): **Automations Outlook** (Send Ack/LV rows: `[Send]` confirm→send, `[Draft]`→Outlook draft no-poll, `[Setting]`→Automations, short status label; auto-download toggle + `[Force Check Now]` + `[Stop]`; `[+ Add Email Automation]` stub), **Automation CR** (Auto Update CR State toggle persists flag; Create Drone Ticket `[Run]` Jenkins dev-stub), **Automation Teams** (2 followup rows + `[+ Add]`, dev-stubs). Backend: `send_request(mode)` draft/send split (draft = no poll, records `APPROVAL_DRAFT_OPENED`), `force_check` one-shot inbox scan, `set_auto_update_cr_state`; `ProjectMetadata.auto_update_cr_state` field; `get_status` gains `cr_number`+`auto_update_cr_state`. `[Open Setting]` navigates PD→Automations (`onNavigateAutomations`). CR+Teams groups + Add buttons are honest stubs (backend in Slices 2–4). Prior Piece C rework (approval-tab-removed, Outlook-tab template merge, tri-state `automation_enabled` + `automation_default_enabled` + `approval_auto_download` + `automation_locked`) remains in place beneath this.
 
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
@@ -60,12 +62,12 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest — Piece C UI rework 2026-07-06)
+## Verification (latest — Automation System Slice 1, 2026-07-08)
 
 ```
 svelte-check: 0 errors, 0 warnings
 frontend tests: 182 pass / 0 fail
-targeted backend tests: 27 passed (phase_c automation/js_api + bridge contract)
-full pytest: 1825 passed, 20 skipped, 6 known baseline failures
-build: not run yet — waiting for user to close app before `npm run build`
+targeted backend tests: 27 passed (phase_c automation + js_api)
+full pytest: 1828 passed, 20 skipped, 6 known baseline failures
+build: run after user closes app; app smoke pending
 ```
