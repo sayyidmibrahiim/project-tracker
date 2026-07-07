@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+import re
+from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import Any
 
 from pathlib import Path
 
-from core.models import AppSettings, EmailCategorySettings, ProjectMetadata
+from core.models import AppSettings, DroneTicket, EmailCategorySettings, ProjectMetadata
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -20,6 +24,247 @@ class RenderedEmail:
     subject: str
     body: str
     attachment_path: Path | None = None
+
+
+# Token regex: {NAME} or {NESTED.0.FIELD} — uppercase letters, digits, dots.
+_TOKEN_RE = re.compile(r"\{([A-Z][A-Z0-9_]*(?:\.[A-Z0-9_]+)*)\}")
+
+
+class PlaceholderResolver:
+    """Reflective placeholder resolver over ProjectMetadata / DroneTicket / AppSettings.
+
+    Replaces the hard-coded ``_placeholder_values`` 11-token map with discovery
+    via :func:`dataclasses.fields`. Supports::
+
+        {PROJECT_NAME}          flat field on metadata / settings
+        {DRONE.LINK}            nested -> metadata.drone_tickets[0].drone_link
+        {DRONE.0.LINK}          indexed -> metadata.drone_tickets[0].drone_link
+        {SETTINGS.DISPLAY_NAME} explicit settings prefix
+
+    The 11 legacy ``REQUIRED_PLACEHOLDERS`` tokens are preserved as aliases so
+    existing configured templates keep rendering unchanged. ``resolve`` returns
+    ``(resolved_text, unresolved_tokens)``; :meth:`assert_required_resolved`
+    raises :class:`UnresolvedPlaceholderError` for required tokens referenced
+    but empty (Requirement 8.5 contract kept).
+    """
+
+    # Canonical required tokens (legacy aliases). Each maps to a dotted path or
+    # a resolver callable. Required = subject to the Resolution-8.5 abort.
+    LEGACY_ALIASES: dict[str, str] = {
+        "{PROJECT_NAME}": "project_name",
+        "{CR_NUMBER}": "@cr_number",
+        "{CR_LINK}": "cr_link",
+        "{CR_STATE}": "@cr_state_value",
+        "{DRONE_TICKET}": "@drone.subfolder_name",
+        "{DRONE_LINK}": "@drone.drone_link",
+        "{DRONE_STATE}": "@drone.drone_state_value",
+        "{START_DATETIME}": "@start_str",
+        "{END_DATETIME}": "@end_str",
+        "{IMPLEMENTATION_PLAN}": "implementation_plan",
+        "{DISPLAY_NAME}": "@display_name",
+    }
+    # Non-required legacy aliases (never abort, just substitute).
+    LEGACY_OPTIONAL: dict[str, str] = {
+        "{SUBPROJECT_NAME}": "@empty",
+        "{START}": "@start_str",
+        "{END}": "@end_str",
+        "{USER}": "@display_name",
+        "{YEAR}": "@year",
+    }
+    # Token-part -> DroneTicket field name (token parts are uppercased field
+    # names, but DroneTicket fields carry a ``drone_`` prefix for some attrs).
+    DRONE_FIELD_ALIASES: dict[str, str] = {
+        "LINK": "drone_link",
+        "STATE": "drone_state",
+        "STATE_UPDATED_AT": "drone_state_updated_at",
+        "TICKET": "subfolder_name",
+        "SUBFOLDER": "subfolder_name",
+        "SUBFOLDER_NAME": "subfolder_name",
+        "OWNER": "owner",
+    }
+
+    def __init__(
+        self,
+        metadata: ProjectMetadata,
+        settings: AppSettings,
+        extra_context: dict[str, object] | None = None,
+    ) -> None:
+        self._metadata = metadata
+        self._settings = settings
+        self._extra = dict(extra_context or {})
+        self._email_service = EmailService()  # reuse _format_datetime / _extract_*
+
+    # -- public API ---------------------------------------------------------
+
+    def resolve(self, template_text: str) -> tuple[str, list[str]]:
+        """Return ``(resolved_text, unresolved_tokens)`` for ``template_text``.
+
+        Unresolved tokens are ``{...}`` whose path is unknown (not just empty);
+        they are left in place in the text and reported in the list. An empty
+        but known value substitutes to "".
+        """
+        text = template_text or ""
+        unresolved: list[str] = []
+        out_parts: list[str] = []
+        last = 0
+        for m in _TOKEN_RE.finditer(text):
+            out_parts.append(text[last : m.start()])
+            token = m.group(0)
+            value, ok = self._lookup(token)
+            if ok:
+                out_parts.append(value)
+            else:
+                out_parts.append(token)  # leave marker, report unknown
+                unresolved.append(token)
+            last = m.end()
+        out_parts.append(text[last:])
+        return "".join(out_parts), unresolved
+
+    def assert_required_resolved(self, templates: Any) -> None:
+        """Raise :class:`UnresolvedPlaceholderError` if a required token is
+        referenced but resolves empty (Requirement 8.5)."""
+        combined = "".join(str(t or "") for t in templates)
+        unresolved = [
+            token
+            for token in self.LEGACY_ALIASES
+            if token in combined and not self._lookup(token)[0]
+        ]
+        if unresolved:
+            raise UnresolvedPlaceholderError(unresolved)
+
+    def available_tokens(self) -> list[tuple[str, str]]:
+        """Return ``[(token, preview_value)]`` for the autocomplete UI."""
+        tokens: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        # Legacy aliases first (the canonical set users see).
+        for token in list(self.LEGACY_ALIASES) + list(self.LEGACY_OPTIONAL):
+            value, _ = self._lookup(token)
+            tokens.append((token, value))
+            seen.add(token)
+        # Reflective discovery over ProjectMetadata scalar fields.
+        for f in fields(ProjectMetadata):
+            token = "{" + self._field_to_token(f.name) + "}"
+            if token in seen:
+                continue
+            value = self._format_value(getattr(self._metadata, f.name, ""))
+            tokens.append((token, value))
+            seen.add(token)
+        # Drone ticket fields (first ticket).
+        drone = self._metadata.drone_tickets[0] if self._metadata.drone_tickets else None
+        for f in fields(DroneTicket):
+            token = "{DRONE." + self._field_to_token(f.name) + "}"
+            if token in seen:
+                continue
+            value = self._format_value(getattr(drone, f.name, "")) if drone else ""
+            tokens.append((token, value))
+            seen.add(token)
+        return tokens
+
+    # -- internals ----------------------------------------------------------
+
+    def _lookup(self, token: str) -> tuple[str, bool]:
+        """Resolve a single token to ``(value, ok)``. ``ok=False`` = unknown path."""
+        if token in self._extra:
+            return self._format_value(self._extra[token]), True
+        if token in self.LEGACY_ALIASES:
+            return self._resolve_alias(self.LEGACY_ALIASES[token])
+        if token in self.LEGACY_OPTIONAL:
+            return self._resolve_alias(self.LEGACY_OPTIONAL[token])
+        return self._resolve_dotted(token[1:-1])  # strip braces
+
+    def _resolve_alias(self, spec: str) -> tuple[str, bool]:
+        """Resolve an alias spec. ``@``-prefixed = synthetic, else dotted path."""
+        if spec == "@empty":
+            return "", True
+        m = self._metadata
+        s = self._settings
+        if spec == "@cr_number":
+            return self._email_service._extract_cr_number(m.project_name), True
+        if spec == "@cr_state_value":
+            return m.cr_state.value, True
+        if spec == "@drone.subfolder_name":
+            drone = m.drone_tickets[0] if m.drone_tickets else None
+            return ((drone.subfolder_name or "") if drone else ""), True
+        if spec == "@drone.drone_link":
+            drone = m.drone_tickets[0] if m.drone_tickets else None
+            return ((drone.drone_link or "") if drone else ""), True
+        if spec == "@drone.drone_state_value":
+            drone = m.drone_tickets[0] if m.drone_tickets else None
+            return (drone.drone_state.value if drone else ""), True
+        if spec == "@start_str":
+            return self._email_service._format_datetime(m.start_datetime, s), True
+        if spec == "@end_str":
+            return self._email_service._format_datetime(m.end_datetime, s), True
+        if spec == "@display_name":
+            return s.display_name or "", True
+        if spec == "@year":
+            return self._email_service._extract_year(m.project_name), True
+        # dotted path fallback
+        return self._resolve_dotted(spec)
+
+    def _resolve_dotted(self, dotted: str) -> tuple[str, bool]:
+        """Resolve a dotted token like ``PROJECT.NAME`` or ``DRONE.0.LINK``.
+
+        Returns ``(value, ok)`` where ``ok=False`` marks an unknown path (so the
+        token is reported unresolved rather than silently dropped).
+        """
+        parts = dotted.split(".")
+        root = parts[0]
+        if root in ("SETTINGS", "APP"):
+            value: object = self._settings
+            for p in parts[1:]:
+                value = _attr_or_empty(value, self._token_to_field(p))
+            return self._format_value(value), True
+        if root == "DRONE":
+            idx = 0
+            rest = parts[1:]
+            if rest and rest[0].isdigit():
+                idx = int(rest[0])
+                rest = rest[1:]
+            drones = self._metadata.drone_tickets
+            if not rest:
+                return "", True
+            if idx >= len(drones):
+                return "", False
+            value: object = drones[idx]
+            for p in rest:
+                attr = self.DRONE_FIELD_ALIASES.get(p, self._token_to_field(p))
+                value = _attr_or_empty(value, attr)
+            return self._format_value(value), True
+        # default root = metadata; normalize token to field name
+        field_guess = self._token_to_field(root)
+        if not hasattr(self._metadata, field_guess):
+            return "", False
+        value: object = getattr(self._metadata, field_guess)
+        for p in parts[1:]:
+            value = _attr_or_empty(value, self._token_to_field(p))
+        return self._format_value(value), True
+
+    @staticmethod
+    def _field_to_token(name: str) -> str:
+        return name.upper()
+
+    @staticmethod
+    def _token_to_field(token: str) -> str:
+        return token.lower()
+
+    def _format_value(self, value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            return self._email_service._format_datetime(value, self._settings)
+        if hasattr(value, "value"):  # StrEnum
+            return str(value.value)
+        return str(value)
+
+
+def _attr_or_empty(obj: object, attr: str) -> object:
+    candidate = attr.lower()
+    if hasattr(obj, candidate):
+        return getattr(obj, candidate)
+    if hasattr(obj, attr):
+        return getattr(obj, attr)
+    return ""
 
 
 class UnresolvedPlaceholderError(Exception):
@@ -116,76 +361,42 @@ class EmailService:
             "subject": category.subject_template,
             "body": category.body_template,
         }
-        values = self._placeholder_values(metadata, settings)
+        resolver = PlaceholderResolver(metadata, settings)
 
         # 2. Required-placeholder resolution (Requirement 8.5).
-        self._assert_placeholders_resolved(templates.values(), values)
+        resolver.assert_required_resolved(templates.values())
 
         # 3. Substitute (Requirement 8.4).
-        rendered = {key: self._substitute(text, values) for key, text in templates.items()}
+        rendered = {key: resolver.resolve(text)[0] for key, text in templates.items()}
 
         return RenderedEmail(
             to=rendered["to"],
             cc=rendered["cc"],
             subject=rendered["subject"],
             body=rendered["body"],
-            attachment_path=None,
+            attachment_path=self._resolve_attachment_path(category, settings),
         )
 
-    def _placeholder_values(
+    def _resolve_attachment_path(
         self,
-        metadata: ProjectMetadata,
+        category: EmailCategorySettings,
         settings: AppSettings,
-    ) -> dict[str, str]:
-        """Resolve every placeholder token to its string value."""
-        drone = metadata.drone_tickets[0] if metadata.drone_tickets else None
-        start_str = self._format_datetime(metadata.start_datetime, settings)
-        end_str = self._format_datetime(metadata.end_datetime, settings)
-        display_name = settings.display_name or ""
+    ) -> Path | None:
+        """Resolve the attachment file from template_folder + attachment_template_file.
 
-        return {
-            # Canonical Requirement 8.4 placeholders.
-            "{PROJECT_NAME}": metadata.project_name or "",
-            "{CR_NUMBER}": self._extract_cr_number(metadata.project_name),
-            "{CR_LINK}": metadata.cr_link or "",
-            "{CR_STATE}": metadata.cr_state.value,
-            "{DRONE_TICKET}": (drone.subfolder_name or "") if drone else "",
-            "{DRONE_LINK}": (drone.drone_link or "") if drone else "",
-            "{DRONE_STATE}": drone.drone_state.value if drone else "",
-            "{START_DATETIME}": start_str,
-            "{END_DATETIME}": end_str,
-            "{IMPLEMENTATION_PLAN}": metadata.implementation_plan or "",
-            "{DISPLAY_NAME}": display_name,
-            # Legacy aliases retained for backward compatibility with existing
-            # configured templates; not part of the required-resolution check.
-            "{SUBPROJECT_NAME}": "",
-            "{START}": start_str,
-            "{END}": end_str,
-            "{USER}": display_name,
-            "{YEAR}": self._extract_year(metadata.project_name),
-        }
-
-    def _assert_placeholders_resolved(
-        self,
-        templates: Any,
-        values: dict[str, str],
-    ) -> None:
-        """Abort when a required placeholder used in a template resolves empty."""
-        combined = "".join(str(text or "") for text in templates)
-        unresolved = [
-            placeholder
-            for placeholder in REQUIRED_PLACEHOLDERS
-            if placeholder in combined and not values.get(placeholder, "")
-        ]
-        if unresolved:
-            raise UnresolvedPlaceholderError(unresolved)
-
-    def _substitute(self, template: str, values: dict[str, str]) -> str:
-        """Replace every placeholder token in a single template string."""
-        result = template or ""
-        for placeholder, value in values.items():
-            result = result.replace(placeholder, value)
-        return result
+        Returns None (with a warning log) when either piece is missing or the
+        resolved path does not exist on disk — render must never fail on a
+        missing attachment.
+        """
+        file_name = (category.attachment_template_file or "").strip()
+        folder = settings.email.template_folder_path if settings and settings.email else None
+        if not file_name or not folder:
+            return None
+        path = Path(folder) / file_name
+        if not path.exists():
+            _log.warning("Attachment template file not found, skipping: %s", path)
+            return None
+        return path
 
     def _evaluate_conditions(
         self,

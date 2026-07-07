@@ -12,6 +12,8 @@ Active work: **Automation System epic** (Outlook + General Automation). Spec: `_
 
 **Slice 1 — PD Automations section (3-group)**: implemented, awaiting build gate + user manual check. Replaces the Piece C PD box with three groups (status dots 🟢🟡🔴⚪): **Automations Outlook** (Send Ack/LV rows: `[Send]` confirm→send, `[Draft]`→Outlook draft no-poll, `[Setting]`→Automations, short status label; auto-download toggle + `[Force Check Now]` + `[Stop]`; `[+ Add Email Automation]` stub), **Automation CR** (Auto Update CR State toggle persists flag; Create Drone Ticket `[Run]` Jenkins dev-stub), **Automation Teams** (2 followup rows + `[+ Add]`, dev-stubs). Backend: `send_request(mode)` draft/send split (draft = no poll, records `APPROVAL_DRAFT_OPENED`), `force_check` one-shot inbox scan, `set_auto_update_cr_state`; `ProjectMetadata.auto_update_cr_state` field; `get_status` gains `cr_number`+`auto_update_cr_state`. `[Open Setting]` navigates PD→Automations (`onNavigateAutomations`). CR+Teams groups + Add buttons are honest stubs (backend in Slices 2–4). Prior Piece C rework (approval-tab-removed, Outlook-tab template merge, tri-state `automation_enabled` + `automation_default_enabled` + `approval_auto_download` + `automation_locked`) remains in place beneath this.
 
+**Slice 2 — PlaceholderResolver + per-CR templates + editor popup + Test**: implemented, awaiting user manual check. New `PlaceholderResolver` (reflective over `ProjectMetadata`/`DroneTicket`/`AppSettings` via `dataclasses.fields`) replaces hard-coded 11-token `_placeholder_values`; supports `{FIELD}`, `{NESTED.FIELD}`, `{DRONE.0.LINK}`; 11 required + 5 optional legacy aliases preserved so existing templates render unchanged; `available_tokens()` feeds the `{`-autocomplete with REAL preview values. Attachment resolution: `RenderedEmail.attachment_path` now computed from `EmailCategorySettings.attachment_template_file` + `EmailSettings.template_folder_path` (missing file → None + warn, render never fails). New `services/template_service.py` (pure merge/list/reset helpers). ApprovalPollingService gains `reset_template`, `list_templates`, `test_template` (opens real Outlook draft + records `APPROVAL_TEST_DRAFT_OPENED`), `autocomplete_tokens`. Bridge: `approval_reset_template`/`approval_list_templates`/`approval_test_template`/`approval_autocomplete_tokens` + bridge.ts wrappers. Frontend: `ApprovalTemplates.svelte` extended — `{` autocomplete dropdown (keyboard nav Arrow/Enter/Tab/Escape, filter-as-you-type), **Test** (open Outlook draft), **Reset to default** buttons; `AutomationsOutlook.svelte` accepts `openTemplateKind` deep-link prop; PD `[Setting]` (Outlook) passes kind → App.svelte `pendingTemplateKind` → Automations → Outlook editor popup. Decision: one project == one CR here, so per-project ≈ per-CR (no separate CR dimension — YAGNI).
+
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
 Fix round v2 (steps 0–7, one behavior per round, user manual verify each): **complete 2026-07-06**. Step 0 watchdog `c94e387`, step 1 toolbar active states `65202cf`, steps 2–5b (5s idle countdown, hidden `.rte`, help popover, Narrow margins + clamp, WYSIWYG page + zoom) committed earlier, step 5c image drag-resize `4ca0abd`, step 6 SVG toolbar icons `b1cf0dc`, step 7 default TNR 18px↔13.5pt + per-file toolbar font/size memory `37d8ca7`. PRD §12.12 synced. **Branch merged to `main` 2026-07-06** (user approved; branch kept per user rule).
@@ -62,12 +64,22 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest — Automation System Slice 1, 2026-07-08)
+## Verification (latest — Automation System Slice 2, 2026-07-08)
 
 ```
-svelte-check: 0 errors, 0 warnings
+svelte-check: 0 errors, 4 warnings (a11y non-interactive <li> onclick on autocomplete items — cosmetic)
 frontend tests: 182 pass / 0 fail
-targeted backend tests: 27 passed (phase_c automation + js_api)
-full pytest: 1828 passed, 20 skipped, 6 known baseline failures
-build: run after user closes app; app smoke pending
+targeted backend tests: 45 passed (phase_c automation + js_api + email render + placeholder resolver)
+full pytest: 1838 passed, 20 skipped, 6 known baseline failures (no new fails)
+build: ✓ (app was closed)
+app smoke: ✓ clean (only benign browser unregister-class message on close)
 ```
+
+Slice 2 manual checklist (for user):
+- [ ] Pick a project in ApprovalTemplates → type `{` in Subject/Body → dropdown shows tokens with REAL preview values; Arrow/Enter/Tab inserts; Escape closes.
+- [ ] Save per-project template → reload page → still there.
+- [ ] **Test** button opens Outlook draft with resolved data (off-Windows = dev_skipped toast).
+- [ ] **Reset to default** removes per-project override (disabled when editing global default).
+- [ ] PD Outlook group `[Setting]` on UAT/LV row → deep-links to Automations → Outlook → editor popup for that kind.
+- [ ] Existing pre-Slice-2 templates still render (legacy alias compat).
+- [ ] Configure `attachment_template_file` + `template_folder_path` → rendered email attaches file.

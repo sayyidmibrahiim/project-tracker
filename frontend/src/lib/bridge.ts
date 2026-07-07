@@ -1,6 +1,7 @@
 import type {
   ApprovalStatus,
   ApprovalTemplate,
+  ApprovalTemplateSummary,
   BridgeResponse,
   DocxExportResult,
   GlobalPlan,
@@ -360,6 +361,26 @@ export function updateApprovalTemplate(projectPath: string, kind: "uat" | "lv", 
 
 export function previewApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate | null): Promise<BridgeResponse<{ to: string; cc: string; subject: string; body: string }>> {
   return callBridge("preview_approval_template", projectPath, kind, template);
+}
+
+/** Slice 2: remove a per-project template override. */
+export function resetApprovalTemplate(projectPath: string, kind: "uat" | "lv"): Promise<BridgeResponse<{ removed: boolean; source: string }>> {
+  return callBridge("approval_reset_template", projectPath, kind);
+}
+
+/** Slice 2: list all known template kinds + summary. */
+export function listApprovalTemplates(): Promise<BridgeResponse<{ templates: ApprovalTemplateSummary[] }>> {
+  return callBridge("approval_list_templates");
+}
+
+/** Slice 2: open a real Outlook draft with resolved data. */
+export function testApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate | null): Promise<BridgeResponse<{ status: string; subject?: string }>> {
+  return callBridge("approval_test_template", projectPath, kind, template);
+}
+
+/** Slice 2: autocomplete tokens with real preview values for a project. */
+export function approvalAutocompleteTokens(projectPath: string): Promise<BridgeResponse<{ tokens: [string, string][] }>> {
+  return callBridge("approval_autocomplete_tokens", projectPath);
 }
 
 // ── DOCX pipeline (D-0012): source.json = truth, .docx = derived export ──

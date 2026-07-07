@@ -520,6 +520,18 @@ class ApprovalServiceProtocol(Protocol):
     def preview_template(self, project_path: Path, kind: str, template: dict[str, object] | None) -> dict[str, object]:
         """Render a template with real project data."""
 
+    def reset_template(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Remove the per-project override so the default takes effect."""
+
+    def list_templates(self) -> dict[str, object]:
+        """Return all known template kinds + summary metadata."""
+
+    def test_template(self, project_path: Path, kind: str, template: dict[str, object] | None) -> dict[str, object]:
+        """Open a real Outlook draft with resolved data; return ok + subject."""
+
+    def autocomplete_tokens(self, project_path: Path) -> dict[str, object]:
+        """Return ``[(token, preview_value), ...]`` for the { autocomplete UI."""
+
 
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
@@ -1283,6 +1295,46 @@ class JsApi:
             return guard
         try:
             return self._approval_service.preview_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_reset_template(self, project_path: str, kind: str) -> dict[str, object]:
+        """Slice 2: remove a per-project template override."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.reset_template(Path(project_path), str(kind))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_list_templates(self) -> dict[str, object]:
+        """Slice 2: list all known template kinds + summary."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.list_templates()
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_test_template(self, project_path: str, kind: str, template: dict[str, object] | None = None) -> dict[str, object]:
+        """Slice 2: open a real Outlook draft with resolved data."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.test_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_autocomplete_tokens(self, project_path: str) -> dict[str, object]:
+        """Slice 2: return [(token, preview_value), ...] for the { autocomplete UI."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.autocomplete_tokens(Path(project_path))
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
 

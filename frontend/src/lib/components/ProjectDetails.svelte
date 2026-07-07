@@ -12,7 +12,7 @@
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: () => void } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv") => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -116,8 +116,8 @@
     approvalBusy = "";
   }
 
-  function openAutomations() {
-    onNavigateAutomations?.();
+  function openAutomations(kind?: "uat" | "lv") {
+    onNavigateAutomations?.(kind);
   }
 
   function devStub(message: string) {
@@ -1253,7 +1253,7 @@
                           <div class="pd-auto-item-actions">
                             <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "Send now" : ks.reasons.join(", ")} onclick={() => requestSend(kind as "uat" | "lv", title)}>Send</button>
                             <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "Open Outlook draft to review" : ks.reasons.join(", ")} onclick={() => draftApproval(kind as "uat" | "lv")}>Draft</button>
-                            <button class="pd-command-btn" type="button" title="Open template settings" onclick={openAutomations}>Setting</button>
+                            <button class="pd-command-btn" type="button" title="Open template settings" onclick={() => openAutomations(kind as "uat" | "lv")}>Setting</button>
                           </div>
                         </div>
                         <div class="pd-auto-item-sub">
@@ -1277,7 +1277,7 @@
                         <span class="pd-auto-item-title">Auto Update CR State</span>
                         <div class="pd-auto-item-actions">
                           <button class="pd-control pd-auto-mini-toggle" type="button" class:on={approvalStatus.auto_update_cr_state} disabled={approvalBusy !== ""} onclick={toggleAutoUpdateCrState}>{approvalStatus.auto_update_cr_state ? "ON" : "OFF"}</button>
-                          <button class="pd-command-btn" type="button" title="Open pattern settings" onclick={openAutomations}>Setting</button>
+                          <button class="pd-command-btn" type="button" title="Open pattern settings" onclick={() => openAutomations()}>Setting</button>
                         </div>
                       </div>
                       <div class="pd-auto-item-sub"><span class="pd-auto-status-label">{approvalStatus.auto_update_cr_state ? "Watching inbox for state-change emails (engine pending)" : "Inactive"}</span></div>

@@ -26,6 +26,7 @@
   let refreshKey = $state(0);
   let pendingProjectPath: string | null = $state(null);
   let startNewProject: boolean = $state(false);
+  let pendingTemplateKind: "uat" | "lv" | null = $state(null);
 
   // Notification state
   let notifications: NotificationItem[] = $state([]);
@@ -260,9 +261,9 @@
         {:else if currentPage === "second-brain"}
           <SecondBrain />
         {:else if currentPage === "project-detail"}
-          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={() => navigate("automations")} />
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={(kind) => { pendingTemplateKind = kind ?? null; navigate("automations"); }} />
         {:else if currentPage === "automations"}
-          <Automations />
+          <Automations initialTemplateKind={pendingTemplateKind} onConsumedTemplateKind={() => { pendingTemplateKind = null; }} />
         {:else if currentPage === "global-plan"}
           <GlobalPlan />
         {/if}

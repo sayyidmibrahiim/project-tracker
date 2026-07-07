@@ -8,6 +8,23 @@
 
 ---
 
+## 2026-07-08 (Automation System epic — Slice 2: PlaceholderResolver + per-CR templates + editor + Test)
+
+**Now:** Slice 2 implemented + verified on `automations/approval-polling`. Continuing autonomous loop (Slices 2→5 per approved mega-plan).
+- `services/email_service.py`: new `PlaceholderResolver` class (reflective over `ProjectMetadata`/`DroneTicket`/`AppSettings` via `dataclasses.fields`); `{FIELD}`, `{NESTED.FIELD}`, `{DRONE.0.LINK}` formats; 11 required + 5 optional legacy aliases preserved; `available_tokens()` → `[(token, preview_value)]` for autocomplete; `resolve(text)->(resolved, unresolved[])`; `assert_required_resolved()` keeps Requirement 8.5 contract. Removed `_placeholder_values`/`_assert_placeholders_resolved`/`_substitute` (no external callers). Attachment: `_resolve_attachment_path()` from `category.attachment_template_file` + `settings.email.template_folder_path` (missing → None + warn).
+- `services/template_service.py` (new): pure helpers `get_effective_template`/`save_project_template`/`save_default_template`/`reset_project_template`/`list_templates` (no I/O; caller persists).
+- `services/approval_polling_service.py`: + `reset_template`, `list_templates`, `test_template` (real Outlook draft + `APPROVAL_TEST_DRAFT_OPENED` history), `autocomplete_tokens`. Protocol `ApprovalServiceProtocol` extended.
+- `web/js_api.py`: + `approval_reset_template`/`approval_list_templates`/`approval_test_template`/`approval_autocomplete_tokens`.
+- `frontend/src/lib/bridge.ts` + `types.ts`: + `resetApprovalTemplate`/`listApprovalTemplates`/`testApprovalTemplate`/`approvalAutocompleteTokens` + `ApprovalTemplateSummary` type.
+- `ApprovalTemplates.svelte`: `{` autocomplete (keyboard nav Arrow/Enter/Tab/Escape, filter-as-you-type, real preview values), **Test** + **Reset to default** buttons; `AutomationsOutlook.svelte` accepts `openTemplateKind` deep-link + `$effect` opens editor.
+- Deep-link: PD Outlook `[Setting]`(kind) → `onNavigateAutomations(kind)` → App.svelte `pendingTemplateKind` → `<Automations initialTemplateKind>` → `<AutomationsOutlook openTemplateKind>` → editor popup.
+- **Decision (DEFAULT AMAN):** legacy token aliases preserved (no template breakage); attachment missing file → None + warn (no render fail); one project == one CR here so per-project ≈ per-CR (YAGNI — no separate CR dimension).
+- **Verify:** svelte-check 0 errors/4 warnings (a11y cosmetic); frontend 182 pass; targeted pytest 45 pass (incl. 10 new `test_placeholder_resolver.py`); full pytest 1838 pass + 6 baseline fails (no new); build ✓; app smoke ✓ clean.
+- **Next:** Slice 3 (Rules Engine goal-wizard + wire 5 no-op actions + scope + conflict + pre-seeded + auto-reply dedup).
+- **active_menu:** automations / project-details
+
+---
+
 ## 2026-07-08 (Automation System epic — Slice 1: PD 3-group section)
 
 **Now:** New epic after user brainstorm (Grok chat) → Outlook + General Automation system, 5 slices, spec `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. Locked: PD-box-first; fold Piece C (backend kept, PD UI replaced); Logs = new top-level menu (Slice 5); `[Send]` confirmed, `[Draft]` not. Slice 1 implemented on `automations/approval-polling`:

@@ -25,9 +25,20 @@
   let editingKind: "uat" | "lv" | null = $state(null);
   let defaultEnabled: boolean = $state(false);
 
+  let { openTemplateKind = null, onCloseTemplate }: { openTemplateKind?: "uat" | "lv" | null; onCloseTemplate?: () => void } = $props();
+
   function openTemplate(kind: "uat" | "lv") { feedback = { kind: "none" }; editingKind = kind; }
-  function closeTemplate() { editingKind = null; }
+  function closeTemplate() {
+    editingKind = null;
+    onCloseTemplate?.();
+  }
   function onDialogKey(event: KeyboardEvent) { if (editingKind !== null && event.key === "Escape") closeTemplate(); }
+
+  // Deep-link: when parent passes a kind (PD "Setting" button), open the editor.
+  $effect(() => {
+    void openTemplateKind;
+    if (openTemplateKind) openTemplate(openTemplateKind);
+  });
 
   async function loadDefaultEnabled() {
     if (!isPywebviewReady()) return;

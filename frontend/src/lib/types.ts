@@ -379,3 +379,12 @@ export interface ApprovalTemplate {
   mode: "draft" | "send";
 }
 
+/** Slice 2: template summary row for the Automations template list. */
+export interface ApprovalTemplateSummary {
+  kind: string;
+  key: string;
+  name: string;
+  type: string;
+  has_default: boolean;
+}
+

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
   import AutomationsOutlook from "./AutomationsOutlook.svelte";
   import TeamsActions from "./TeamsActions.svelte";
@@ -14,9 +14,17 @@
     { id: "rules", label: "Rules Engine" },
   ];
 
+  let { initialTemplateKind = null, onConsumedTemplateKind }: { initialTemplateKind?: "uat" | "lv" | null; onConsumedTemplateKind?: () => void } = $props();
+
   let activeTab: TabId = $state("outlook");
+  let openTemplateKind: "uat" | "lv" | null = $state(untrack(() => initialTemplateKind));
   function onTabSwitch(tab: TabId) { activeTab = tab; }
   export function refresh() {}
+
+  function onTemplateClosed() {
+    openTemplateKind = null;
+    onConsumedTemplateKind?.();
+  }
 
   type SchedulerEntry = {
     id: string; name: string; schedule_type: string; channels: string[];
@@ -62,7 +70,7 @@
 
   <div class="page-stack active">
     {#if activeTab === "outlook"}
-      <AutomationsOutlook />
+      <AutomationsOutlook {openTemplateKind} onCloseTemplate={onTemplateClosed} />
     {:else if activeTab === "teams"}
       <div class="split">
         <div class="panel-card accent" style="flex:7"><div class="panel-title-row"><span class="panel-title-icon">💬</span><span class="panel-title">Teams Message Automation</span><span class="panel-subtitle">deep link + clipboard + confirmation gate</span></div><TeamsActions /></div>

@@ -344,6 +344,89 @@ class ApprovalPollingService:
             return _fail(str(exc), "APPROVAL_TEMPLATE_INVALID")
         return _ok({"to": rendered.to, "cc": rendered.cc, "subject": rendered.subject, "body": rendered.body})
 
+    def reset_template(self, project_path: Path, kind: str) -> dict[str, Any]:
+        """Remove a per-project override so the default takes effect."""
+        if kind not in REQUEST_KINDS:
+            return _fail(f"Unknown request kind: {kind}", "APPROVAL_KIND_INVALID")
+        path = Path(project_path)
+        metadata = self._metadata_store.read(path)
+        if metadata is None:
+            return _fail(f"Project metadata not found: {path}", "APPROVAL_PROJECT_NOT_FOUND")
+        key = REQUEST_KINDS[kind]["template_key"]
+        if key not in metadata.approval_templates:
+            return _ok({"removed": False, "source": "default"})
+        del metadata.approval_templates[key]
+        metadata.updated_at = local_now()
+        self._metadata_store.write(path, metadata)
+        return _ok({"removed": True, "source": "default"})
+
+    def list_templates(self) -> dict[str, Any]:
+        """Return all known template kinds + summary metadata."""
+        settings = self._settings_store.read()
+        rows = []
+        for kind, meta in REQUEST_KINDS.items():
+            key = meta["template_key"]
+            default = settings.default_approval_templates.get(key)
+            rows.append(
+                {
+                    "kind": kind,
+                    "key": key,
+                    "name": meta["label"],
+                    "type": "email",
+                    "has_default": isinstance(default, dict) and bool(default),
+                }
+            )
+        return _ok({"templates": rows})
+
+    def test_template(self, project_path: Path, kind: str, template: dict[str, Any] | None) -> dict[str, Any]:
+        """Open a real Outlook draft with resolved data; record "Test Draft Opened".
+
+        Returns dev_skipped off-Windows so the UI still confirms intent.
+        """
+        if kind not in REQUEST_KINDS:
+            return _fail(f"Unknown request kind: {kind}", "APPROVAL_KIND_INVALID")
+        path = Path(project_path)
+        metadata = self._metadata_store.read(path)
+        if metadata is None:
+            return _fail(f"Project metadata not found: {path}", "APPROVAL_PROJECT_NOT_FOUND")
+        resolved = dict(template) if isinstance(template, dict) and template else self._resolve_template(metadata, kind)
+        if resolved is None:
+            return _fail("No template configured", "APPROVAL_TEMPLATE_MISSING")
+        cr_number = extract_cr_number(metadata.cr_link) or ""
+        try:
+            rendered = self._render(metadata, resolved, cr_number)
+        except (UnresolvedPlaceholderError, TemplateConditionsNotMetError) as exc:
+            return _fail(str(exc), "APPROVAL_TEMPLATE_INVALID")
+        if not outlook_client.IS_WINDOWS:
+            return _ok({"status": "dev_skipped", "subject": rendered.subject})
+        result = outlook_client.create_draft_email(
+            rendered.to, rendered.cc, rendered.subject, rendered.body, rendered.attachment_path
+        )
+        if not result.get("ok"):
+            return result
+        metadata.history.append(
+            HistoryEntry(
+                timestamp=local_now(),
+                action="APPROVAL_TEST_DRAFT_OPENED",
+                detail=f"{kind}: {rendered.subject}",
+                user=current_user(self._settings_store.read()),
+            )
+        )
+        self._metadata_store.write(path, metadata)
+        return _ok({"status": "drafted", "subject": rendered.subject})
+
+    def autocomplete_tokens(self, project_path: Path) -> dict[str, Any]:
+        """Return ``[(token, preview_value), ...]`` for the { autocomplete UI."""
+        from services.email_service import PlaceholderResolver
+
+        path = Path(project_path)
+        metadata = self._metadata_store.read(path)
+        if metadata is None:
+            return _fail(f"Project metadata not found: {path}", "APPROVAL_PROJECT_NOT_FOUND")
+        resolver = PlaceholderResolver(metadata, self._settings_store.read())
+        tokens = resolver.available_tokens()
+        return _ok({"tokens": tokens})
+
     def _render(self, metadata: ProjectMetadata, template: dict[str, Any], cr_number: str):
         category = EmailCategorySettings(
             to=str(template.get("to", "")),
