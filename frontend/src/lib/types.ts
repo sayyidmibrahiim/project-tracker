@@ -365,6 +365,8 @@ export interface ApprovalStatus {
   automation_enabled: boolean;
   automation_locked: boolean;
   outlook_available: boolean;
+  cr_number: string;
+  auto_update_cr_state: boolean;
   uat: ApprovalKindStatus;
   lv: ApprovalKindStatus;
 }

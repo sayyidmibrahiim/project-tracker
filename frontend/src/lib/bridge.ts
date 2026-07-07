@@ -325,16 +325,29 @@ export function approvalSetAutoDownload(projectPath: string, kind: "uat" | "lv",
   return callBridge("approval_set_auto_download", projectPath, kind, enabled);
 }
 
-export function sendUatApprovalRequest(projectPath: string): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
-  return callBridge("send_uat_approval_request", projectPath);
+export function sendUatApprovalRequest(projectPath: string, mode: "draft" | "send" | "" = ""): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_uat_approval_request", projectPath, mode);
 }
 
-export function sendLvApprovalRequest(projectPath: string): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
-  return callBridge("send_lv_approval_request", projectPath);
+export function sendLvApprovalRequest(projectPath: string, mode: "draft" | "send" | "" = ""): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_lv_approval_request", projectPath, mode);
+}
+
+/** Send or draft an approval request for either kind (mode picks send vs open-draft). */
+export function approvalSend(projectPath: string, kind: "uat" | "lv", mode: "draft" | "send"): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return kind === "uat" ? sendUatApprovalRequest(projectPath, mode) : sendLvApprovalRequest(projectPath, mode);
 }
 
 export function stopApprovalPolling(projectPath: string, requestType: "uat" | "lv"): Promise<BridgeResponse<{ status: string }>> {
   return callBridge("stop_approval_polling", projectPath, requestType);
+}
+
+export function approvalForceCheck(projectPath: string, requestType: "uat" | "lv"): Promise<BridgeResponse<{ status: string; subject?: string }>> {
+  return callBridge("approval_force_check", projectPath, requestType);
+}
+
+export function approvalSetAutoUpdateCrState(projectPath: string, enabled: boolean): Promise<BridgeResponse<{ auto_update_cr_state: boolean }>> {
+  return callBridge("approval_set_auto_update_cr_state", projectPath, enabled);
 }
 
 export function getApprovalTemplate(projectPath: string, kind: "uat" | "lv"): Promise<BridgeResponse<{ source: string; template: ApprovalTemplate }>> {

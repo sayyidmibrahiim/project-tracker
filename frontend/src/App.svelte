@@ -260,7 +260,7 @@
         {:else if currentPage === "second-brain"}
           <SecondBrain />
         {:else if currentPage === "project-detail"}
-          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={() => navigate("automations")} />
         {:else if currentPage === "automations"}
           <Automations />
         {:else if currentPage === "global-plan"}
