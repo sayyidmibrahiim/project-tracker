@@ -499,11 +499,17 @@ class ApprovalServiceProtocol(Protocol):
     def set_auto_download(self, project_path: Path, kind: str, enabled: bool) -> dict[str, object]:
         """Persist the per-project auto-download-reply flag for one kind."""
 
-    def send_request(self, project_path: Path, kind: str) -> dict[str, object]:
-        """Send an approval request email and start polling."""
+    def set_auto_update_cr_state(self, project_path: Path, enabled: bool) -> dict[str, object]:
+        """Persist the per-project auto-update-CR-state flag."""
+
+    def send_request(self, project_path: Path, kind: str, mode: str | None = None) -> dict[str, object]:
+        """Send an approval request email (mode='send') or open a draft (mode='draft')."""
 
     def stop(self, project_path: Path, kind: str) -> dict[str, object]:
         """Stop polling for a request kind."""
+
+    def force_check(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Scan the inbox once now for the latest polling job's reply."""
 
     def get_template(self, project_path: Path, kind: str) -> dict[str, object]:
         """Return the effective template + its source."""
@@ -1200,23 +1206,33 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
 
-    def send_uat_approval_request(self, project_path: str) -> dict[str, object]:
-        """Piece C: send the UAT approval request and start polling."""
+    def approval_set_auto_update_cr_state(self, project_path: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project auto-update-CR-state flag (engine wired later)."""
         guard = self._approval_guard()
         if guard is not None:
             return guard
         try:
-            return self._approval_service.send_request(Path(project_path), "uat")
+            return self._approval_service.set_auto_update_cr_state(Path(project_path), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def send_uat_approval_request(self, project_path: str, mode: str = "") -> dict[str, object]:
+        """Piece C: send the UAT approval request (mode='send') or open a draft (mode='draft')."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.send_request(Path(project_path), "uat", mode or None)
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_SEND_FAILED")
 
-    def send_lv_approval_request(self, project_path: str) -> dict[str, object]:
-        """Piece C: send the LV approval request and start polling."""
+    def send_lv_approval_request(self, project_path: str, mode: str = "") -> dict[str, object]:
+        """Piece C: send the LV approval request (mode='send') or open a draft (mode='draft')."""
         guard = self._approval_guard()
         if guard is not None:
             return guard
         try:
-            return self._approval_service.send_request(Path(project_path), "lv")
+            return self._approval_service.send_request(Path(project_path), "lv", mode or None)
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_SEND_FAILED")
 
@@ -1229,6 +1245,16 @@ class JsApi:
             return self._approval_service.stop(Path(project_path), str(request_type))
         except Exception as exc:
             return fail(str(exc), code="APPROVAL_STOP_FAILED")
+
+    def approval_force_check(self, project_path: str, request_type: str) -> dict[str, object]:
+        """Piece C: scan the inbox once now for the latest polling job's reply."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.force_check(Path(project_path), str(request_type))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_FORCE_CHECK_FAILED")
 
     def get_approval_template(self, project_path: str, kind: str) -> dict[str, object]:
         """Piece C: effective approval template + source."""

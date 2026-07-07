@@ -64,6 +64,40 @@ def _file_size(path: Path) -> int:
         return 0
 
 
+def _match_and_save(inbox: Any, cr_number: str, sent_at: datetime, target_msg: Path) -> str | None:
+    """Scan an Outlook inbox once; save the first CR-matching reply as .msg. Return its subject."""
+    for item in inbox.Items:
+        try:
+            received = item.ReceivedTime
+            received_naive = datetime(
+                received.year, received.month, received.day, received.hour, received.minute, received.second
+            )
+            if received_naive <= sent_at:
+                continue
+            subject = str(item.Subject)
+            if cr_number and cr_number in subject.upper():
+                target_msg.parent.mkdir(parents=True, exist_ok=True)
+                item.SaveAs(str(target_msg), 3)  # 3 = olMSG
+                return subject
+        except Exception:  # noqa: BLE001 - skip unreadable items
+            continue
+    return None
+
+
+def _one_shot_check(cr_number: str, sent_at: datetime, target_msg: Path) -> str | None:
+    """Single inbox scan on the calling thread with its own COM lifecycle (force-check)."""
+    import pythoncom
+    import win32com.client
+
+    pythoncom.CoInitialize()
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        inbox = outlook.GetNamespace("MAPI").GetDefaultFolder(6)  # 6 = olFolderInbox
+        return _match_and_save(inbox, cr_number, sent_at, target_msg)
+    finally:
+        pythoncom.CoUninitialize()
+
+
 class ApprovalPollingWorker:
     """Background reply poller for one approval request (COM on this thread)."""
 
@@ -136,25 +170,8 @@ class ApprovalPollingWorker:
     def _check_and_save_reply(self) -> str | None:
         """Return the reply subject after saving it as .msg, else None."""
         self._ensure_outlook()
-        namespace = self._outlook.GetNamespace("MAPI")
-        inbox = namespace.GetDefaultFolder(6)  # 6 = olFolderInbox
-        cr_number = str(self.job["cr_number"]).upper()
-        for item in inbox.Items:
-            try:
-                received = item.ReceivedTime
-                received_naive = datetime(
-                    received.year, received.month, received.day, received.hour, received.minute, received.second
-                )
-                if received_naive <= self.sent_at:
-                    continue
-                subject = str(item.Subject)
-                if cr_number and cr_number in subject.upper():
-                    self.target_msg.parent.mkdir(parents=True, exist_ok=True)
-                    item.SaveAs(str(self.target_msg), 3)  # 3 = olMSG
-                    return subject
-            except Exception:  # noqa: BLE001 - skip unreadable items
-                continue
-        return None
+        inbox = self._outlook.GetNamespace("MAPI").GetDefaultFolder(6)  # 6 = olFolderInbox
+        return _match_and_save(inbox, str(self.job["cr_number"]).upper(), self.sent_at, self.target_msg)
 
 
 class ApprovalPollingService:
@@ -192,6 +209,8 @@ class ApprovalPollingService:
             "automation_enabled": bool(enabled) and not locked,
             "automation_locked": locked,
             "outlook_available": outlook_client.IS_WINDOWS,
+            "cr_number": cr_number,
+            "auto_update_cr_state": metadata.auto_update_cr_state,
         }
         for kind, config in REQUEST_KINDS.items():
             reasons = self._condition_reasons(metadata, path, cr_number, kind)
@@ -254,6 +273,17 @@ class ApprovalPollingService:
         metadata.updated_at = local_now()
         self._metadata_store.write(path, metadata)
         return _ok({"kind": kind, "auto_download": metadata.approval_auto_download[kind]})
+
+    def set_auto_update_cr_state(self, project_path: Path, enabled: bool) -> dict[str, Any]:
+        """Persist the per-project auto-update-CR-state flag (engine wired in a later slice)."""
+        path = Path(project_path)
+        metadata = self._metadata_store.read(path)
+        if metadata is None:
+            return _fail(f"Project metadata not found: {path}", "APPROVAL_PROJECT_NOT_FOUND")
+        metadata.auto_update_cr_state = bool(enabled)
+        metadata.updated_at = local_now()
+        self._metadata_store.write(path, metadata)
+        return _ok({"auto_update_cr_state": metadata.auto_update_cr_state})
 
     # ── templates ──────────────────────────────────────────────────────
     def _resolve_template(self, metadata: ProjectMetadata, kind: str) -> dict[str, Any] | None:
@@ -324,7 +354,13 @@ class ApprovalPollingService:
         return self._email_service.render_email_template(metadata, category, self._settings_store.read())
 
     # ── send + polling ─────────────────────────────────────────────────
-    def send_request(self, project_path: Path, kind: str) -> dict[str, Any]:
+    def send_request(self, project_path: Path, kind: str, mode: str | None = None) -> dict[str, Any]:
+        """Send (mode='send') or open an Outlook draft (mode='draft') for a request kind.
+
+        Draft only opens the composed mail for manual review — no polling job.
+        Send delivers immediately and starts reply polling when auto-download is on.
+        mode=None falls back to the template's own mode.
+        """
         if kind not in REQUEST_KINDS:
             return _fail(f"Unknown request kind: {kind}", "APPROVAL_KIND_INVALID")
         path = Path(project_path)
@@ -348,10 +384,26 @@ class ApprovalPollingService:
             return _fail(str(exc), "APPROVAL_TEMPLATE_INVALID")
 
         if not outlook_client.IS_WINDOWS:
-            return _ok({"status": "dev_skipped", "message": f"[DEV] Would send {kind} approval request: {rendered.subject}"})
+            return _ok({"status": "dev_skipped", "message": f"[DEV] Would {mode or 'send'} {kind} approval request: {rendered.subject}"})
 
-        send = outlook_client.send_email if template.get("mode") == "send" else outlook_client.create_draft_email
-        result = send(rendered.to, rendered.cc, rendered.subject, rendered.body, None)
+        effective_mode = mode if mode in ("draft", "send") else str(template.get("mode") or "draft")
+
+        if effective_mode == "draft":
+            result = outlook_client.create_draft_email(rendered.to, rendered.cc, rendered.subject, rendered.body, None)
+            if not result.get("ok"):
+                return result
+            metadata.history.append(
+                HistoryEntry(
+                    timestamp=local_now(),
+                    action="APPROVAL_DRAFT_OPENED",
+                    detail=f"{kind}: {rendered.subject}",
+                    user=current_user(self._settings_store.read()),
+                )
+            )
+            self._metadata_store.write(path, metadata)
+            return _ok({"status": "drafted", "subject": rendered.subject})
+
+        result = outlook_client.send_email(rendered.to, rendered.cc, rendered.subject, rendered.body, None)
         if not result.get("ok"):
             return result
 
@@ -402,6 +454,31 @@ class ApprovalPollingService:
             worker.stop()
         self._cache.update_approval_job(str(job["job_id"]), status="stopped")
         return _ok({"status": "stopped"})
+
+    def force_check(self, project_path: Path, kind: str) -> dict[str, Any]:
+        """Scan the inbox once now for the latest polling job's reply (manual re-check)."""
+        if kind not in REQUEST_KINDS:
+            return _fail(f"Unknown request kind: {kind}", "APPROVAL_KIND_INVALID")
+        path = Path(project_path)
+        job = self._cache.latest_approval_job(str(path), kind)
+        if job is None or job["status"] != "polling":
+            return _ok({"status": job["status"] if job else "no_job"})
+        if not outlook_client.IS_WINDOWS:
+            return _ok({"status": "dev_skipped"})
+        target = path / "_cr-docs" / REQUEST_KINDS[kind]["msg_file"]
+        sent_at = datetime.fromisoformat(str(job["sent_at"]))
+        try:
+            subject = _one_shot_check(str(job["cr_number"]).upper(), sent_at, target)
+        except Exception as exc:  # noqa: BLE001 - report to caller
+            return _fail(str(exc) or exc.__class__.__name__, "APPROVAL_FORCE_CHECK_FAILED")
+        if subject is not None:
+            # ponytail: benign SaveAs double-write race with the running worker; overwrite is idempotent.
+            worker = self._workers.get(str(job["job_id"]))
+            if worker is not None:
+                worker.stop()
+            self._on_found(job, subject)
+            return _ok({"status": "completed", "subject": subject})
+        return _ok({"status": "polling"})
 
     def resume_pending(self) -> None:
         """Restart workers for jobs still 'polling' after an app restart."""

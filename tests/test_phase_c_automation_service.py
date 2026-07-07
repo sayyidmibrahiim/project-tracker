@@ -142,6 +142,9 @@ def test_piece_c_model_fields_round_trip():
     meta_dl = ProjectMetadata.from_dict({"approval_auto_download": {"uat": False}})
     assert meta_dl.approval_auto_download == {"uat": False}
     assert meta_dl.to_dict()["approval_auto_download"] == {"uat": False}
+    assert ProjectMetadata.from_dict({}).auto_update_cr_state is False
+    assert ProjectMetadata.from_dict({"auto_update_cr_state": True}).auto_update_cr_state is True
+    assert ProjectMetadata.from_dict({"auto_update_cr_state": True}).to_dict()["auto_update_cr_state"] is True
 
     settings = AppSettings.from_dict(
         {
@@ -255,12 +258,12 @@ def test_piece_c_send_validates_template_and_records_job(tmp_path, monkeypatch):
     monkeypatch.setattr(aps.outlook_client, "IS_WINDOWS", True)
     monkeypatch.setattr(
         aps.outlook_client,
-        "create_draft_email",
-        lambda to, cc, subject, body, attachment_path=None: (sent.append((to, subject)) or {"ok": True, "data": {"status": "drafted"}, "error": None}),
+        "send_email",
+        lambda to, cc, subject, body, attachment_path=None: (sent.append((to, subject)) or {"ok": True, "data": {"status": "sent"}, "error": None}),
     )
     monkeypatch.setattr(aps.ApprovalPollingService, "_start_worker", lambda self, job: None)
 
-    result = service.send_request(project, "uat")
+    result = service.send_request(project, "uat", mode="send")
     assert result["ok"] is True
     assert sent and "CR2026001" in sent[0][1]
 
@@ -350,12 +353,12 @@ def test_piece_c_send_without_auto_download_skips_polling(tmp_path, monkeypatch)
     monkeypatch.setattr(aps.outlook_client, "IS_WINDOWS", True)
     monkeypatch.setattr(
         aps.outlook_client,
-        "create_draft_email",
-        lambda to, cc, subject, body, attachment_path=None: {"ok": True, "data": {"status": "drafted"}, "error": None},
+        "send_email",
+        lambda to, cc, subject, body, attachment_path=None: {"ok": True, "data": {"status": "sent"}, "error": None},
     )
     monkeypatch.setattr(aps.ApprovalPollingService, "_start_worker", lambda self, job: started.append(job))
 
-    result = service.send_request(project, "uat")
+    result = service.send_request(project, "uat", mode="send")
     assert result["ok"] is True and result["data"]["status"] == "sent"
     assert started == []
     assert service._cache.latest_approval_job(str(project), "uat") is None
@@ -368,3 +371,74 @@ def test_piece_c_send_without_auto_download_skips_polling(tmp_path, monkeypatch)
     preview = service.preview_template(project, "uat", None)
     assert preview["ok"] is True
     assert "CR-2026-001" in preview["data"]["body"] or "2026-001" in preview["data"]["subject"]
+
+
+def test_piece_c_draft_mode_opens_without_polling(tmp_path, monkeypatch):
+    import services.approval_polling_service as aps
+
+    service = _piece_c_service(tmp_path)
+    project = _piece_c_project(tmp_path / "a")
+
+    drafted: list = []
+    monkeypatch.setattr(aps.outlook_client, "IS_WINDOWS", True)
+    monkeypatch.setattr(
+        aps.outlook_client,
+        "create_draft_email",
+        lambda to, cc, subject, body, attachment_path=None: (drafted.append(subject) or {"ok": True, "data": {"status": "drafted"}, "error": None}),
+    )
+
+    def _boom(self, job):  # draft must never start polling
+        raise AssertionError("draft mode must not start a worker")
+
+    monkeypatch.setattr(aps.ApprovalPollingService, "_start_worker", _boom)
+
+    result = service.send_request(project, "uat", mode="draft")
+    assert result["ok"] is True and result["data"]["status"] == "drafted"
+    assert drafted
+    assert service._cache.latest_approval_job(str(project), "uat") is None
+
+    from infrastructure.metadata_store import MetadataStore
+
+    metadata = MetadataStore().read(project)
+    assert any(entry.action == "APPROVAL_DRAFT_OPENED" for entry in metadata.history)
+
+
+def test_piece_c_force_check(tmp_path, monkeypatch):
+    import services.approval_polling_service as aps
+
+    service = _piece_c_service(tmp_path)
+    project = _piece_c_project(tmp_path / "a")
+    monkeypatch.setattr(aps.outlook_client, "IS_WINDOWS", True)
+
+    assert service.force_check(project, "uat")["data"]["status"] == "no_job"
+    assert service.force_check(project, "nope")["error"]["code"] == "APPROVAL_KIND_INVALID"
+
+    service._cache.upsert_approval_job(
+        {
+            "job_id": "j1",
+            "project_path": str(project),
+            "request_type": "uat",
+            "cr_number": "CR2026001",
+            "email_subject": "Request UAT Approval CR2026001",
+            "sent_at": "2026-01-01T00:00:00",
+            "status": "polling",
+            "reply_received_at": None,
+        }
+    )
+
+    monkeypatch.setattr(aps, "_one_shot_check", lambda cr, sent_at, target: None)
+    assert service.force_check(project, "uat")["data"]["status"] == "polling"
+
+    monkeypatch.setattr(aps, "_one_shot_check", lambda cr, sent_at, target: "RE: CR2026001 approved")
+    assert service.force_check(project, "uat")["data"]["status"] == "completed"
+    assert service._cache.latest_approval_job(str(project), "uat")["status"] == "completed"
+
+
+def test_piece_c_auto_update_cr_state_flag(tmp_path):
+    service = _piece_c_service(tmp_path)
+    project = _piece_c_project(tmp_path / "a")
+
+    assert service.get_status(project)["auto_update_cr_state"] is False
+    resp = service.set_auto_update_cr_state(project, True)
+    assert resp["ok"] is True and resp["data"]["auto_update_cr_state"] is True
+    assert service.get_status(project)["auto_update_cr_state"] is True

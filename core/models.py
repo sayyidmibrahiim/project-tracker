@@ -151,6 +151,7 @@ class ProjectMetadata:
     automation_enabled: bool | None = None
     approval_templates: dict[str, Any] = field(default_factory=dict)
     approval_auto_download: dict[str, bool] = field(default_factory=dict)
+    auto_update_cr_state: bool = False
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectMetadata:
@@ -174,6 +175,7 @@ class ProjectMetadata:
             automation_enabled=data["automation_enabled"] if isinstance(data.get("automation_enabled"), bool) else None,
             approval_templates=dict(data["approval_templates"]) if isinstance(data.get("approval_templates"), dict) else {},
             approval_auto_download={str(k): bool(v) for k, v in data["approval_auto_download"].items()} if isinstance(data.get("approval_auto_download"), dict) else {},
+            auto_update_cr_state=bool(data.get("auto_update_cr_state", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -198,6 +200,7 @@ class ProjectMetadata:
             "automation_enabled": self.automation_enabled,
             "approval_templates": self.approval_templates,
             "approval_auto_download": self.approval_auto_download,
+            "auto_update_cr_state": self.auto_update_cr_state,
         }
 
 
