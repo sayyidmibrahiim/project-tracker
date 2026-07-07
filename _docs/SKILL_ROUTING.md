@@ -17,7 +17,7 @@ Use skills intentionally. Max 2–3 per task. Do not invoke unrelated skills.
 | **Code review**                  | `review`           | `ponytail-review` | Before merge                                                     |
 | **Simplify**                     | `ponytail-review`  | `ponytail-audit`  | After working implementation                                     |
 | **Git ops / commit**             | `caveman`          | —                 | Response style only; `ultra` is session-level                    |
-| **Memory (cross-session)**       | `claude-mem`       | —                 | Session start + stable decisions; not every turn                 |
+| **Memory (cross-session)**       | `claude-mem`       | —                 | MANDATORY: recall at session start (saves tokens) + update on every important change; not a full dump |
 | **Large output / resume**        | `context-mode`     | —                 | Tool output compression + in-session continuity                  |
 | **Manual CLI compress**          | `RTK`              | —                 | Explicit `rtk ...` on native Windows only; no auto-rewrite       |
 
@@ -29,7 +29,7 @@ Each integration is **auto-relevant only when its trigger matches**. Do not load
 | ---------------- | ------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **caveman**      | Response style compression           | Operational summaries, reviews, bug triage                    | `ultra` is session-level; normal for stakeholder text               |
 | **context-mode** | Tool output compression + continuity | Large command output, `/compact`, `/resume`, ctx search/stats | Enabled plugin path only; don't add duplicate hooks                 |
-| **claude-mem**   | Cross-session recall                 | Session start, prior decisions/preferences, stable decisions  | Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua |
+| **claude-mem**   | Cross-session recall                 | MANDATORY every session: recall at start (saves tokens); update on every important change (decisions, architecture, conventions, state) | Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua |
 | **Headroom**     | Optional local proxy                 | User asks to configure/start Headroom or use proxy             | Proxy URL `http://localhost:8787`; install `pip install "headroom-ai[proxy]"` |
 | **RTK**          | Manual CLI compression               | Explicit `rtk ...` commands                                   | Manual-only; auto-rewrite only in WSL/Unix shell                    |
 
