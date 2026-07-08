@@ -34,8 +34,28 @@ const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
 const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
 const PROJECT_DETAILS_SRC = "../src/lib/components/ProjectDetails.svelte";
+const CICD_SRC = "../src/lib/components/CICDBrowser.svelte";
 
 const noop = () => {};
+
+test("CICDBrowser wires git-detection, clone poll, tree, and file open", () => {
+  const src = readFileSync(fileURLToPath(new URL(CICD_SRC, import.meta.url)), "utf8");
+  assert.match(src, /cicd_git_status/);
+  assert.match(src, /cicd_clone_status/); // poll loop
+  assert.match(src, /cicd_list_files/);
+  assert.match(src, /file_open/); // reuse existing open, not open_repo_file
+  assert.match(src, /Recheck Git Status/); // git-not-installed empty state
+  assert.match(src, /snippet fileTree/); // recursive tree
+});
+
+test("App + TitleBar register the CICD page", () => {
+  const app = readFileSync(fileURLToPath(new URL("../src/App.svelte", import.meta.url)), "utf8");
+  assert.match(app, /currentPage === "cicd"/);
+  assert.match(app, /import CICDBrowser/);
+  const bar = readFileSync(fileURLToPath(new URL("../src/lib/components/TitleBar.svelte", import.meta.url)), "utf8");
+  assert.match(bar, /id: "cicd"/);
+  assert.match(bar, /cicd: `<svg/);
+});
 
 after(() => cleanup());
 
