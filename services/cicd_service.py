@@ -7,16 +7,28 @@ Domain rule: never crash on missing git or non-git folders (DEFAULT AMAN).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+from core.rules import validate_windows_folder_name
 
 # First subprocess in the app: suppress the console window on Windows so git
 # calls don't flash a black box. 0 elsewhere (flag is Windows-only).
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
 _CLONE_TIMEOUT_SECONDS = 600
+
+
+@dataclass(frozen=True)
+class CloneUrlInfo:
+    clone_url: str
+    repo_name: str
+    appcode_candidate: str
+    host: str
 
 
 def _git() -> str:
@@ -44,20 +56,37 @@ def check_git() -> dict[str, object]:
 
 
 def parse_repo_name(clone_url: str) -> str:
-    """Extract a folder-safe repo name from a Bitbucket HTTP clone URL.
+    """Extract a folder-safe repo name from a clone URL."""
+    return parse_clone_url(clone_url).repo_name
 
-    Strips a trailing '.git' and slashes. `.../myapp.git` -> `myapp`.
-    """
+
+def parse_clone_url(clone_url: str) -> CloneUrlInfo:
+    """Parse a HTTP(S) Bitbucket clone URL into repo/appcode candidates."""
     url = str(clone_url or "").strip().rstrip("/")
     if not url:
         raise ValueError("Clone URL is required")
-    name = url.rsplit("/", 1)[-1]
-    if name.endswith(".git"):
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Clone URL must use http or https")
+    if parsed.username or parsed.password:
+        raise ValueError("Clone URL must not include username or password")
+    if not parsed.netloc:
+        raise ValueError("Clone URL host is required")
+    parts = [unquote(part) for part in parsed.path.split("/") if part]
+    if len(parts) >= 4 and parts[-4].casefold() == "projects" and parts[-2].casefold() == "repos":
+        name = parts[-1]
+    else:
+        name = parts[-1] if parts else ""
+    if name.casefold().endswith(".git"):
         name = name[:-4]
     name = name.strip()
     if not name:
         raise ValueError("Could not parse a repository name from the URL")
-    return name
+    try:
+        validate_windows_folder_name(name)
+    except Exception as exc:
+        raise ValueError(str(exc)) from exc
+    return CloneUrlInfo(clone_url=url, repo_name=name, appcode_candidate=name, host=parsed.netloc)
 
 
 def _classify(code: str) -> str:

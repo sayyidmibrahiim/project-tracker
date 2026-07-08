@@ -253,6 +253,9 @@ class CicdServiceProtocol(Protocol):
     def git_status(self) -> object:
         """Return {installed, version}."""
 
+    def preview_link(self, clone_url: str) -> object:
+        """Return clone URL preview with inferred appcode target."""
+
     def clone(self, appcode: str, clone_url: str) -> object:
         """Start a background clone of branch 'cicd' into the appcode CICD dir."""
 
@@ -1021,6 +1024,15 @@ class JsApi:
             return ok(_to_frontend_safe(self._cicd_service.git_status()))
         except Exception as exc:
             return fail(str(exc), code="CICD_GIT_STATUS_FAILED")
+
+    def cicd_preview_link(self, clone_url: str) -> dict[str, object]:
+        """Preview repo/appcode target from a Bitbucket clone URL."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.preview_link(clone_url)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_PREVIEW_LINK_FAILED")
 
     def cicd_clone(self, appcode: str, clone_url: str) -> dict[str, object]:
         """Start a background clone of branch 'cicd' into the appcode CICD folder."""

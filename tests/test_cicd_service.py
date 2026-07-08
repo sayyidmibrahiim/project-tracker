@@ -7,6 +7,9 @@ import time
 
 import pytest
 
+from app_web import create_js_api
+from core.models import AppSettings
+from infrastructure.settings_store import SettingsStore
 import services.cicd_service as cicd
 from web.js_api import JsApi
 
@@ -27,6 +30,81 @@ def test_parse_repo_name(url, expected):
 def test_parse_repo_name_empty_raises():
     with pytest.raises(ValueError):
         cicd.parse_repo_name("   ")
+
+
+# ── parse_clone_url ─────────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    "url, expected_repo",
+    [
+        ("https://bitbucket.sgp.dbs.com:8443/scm/dcifbinary/myapp.git", "myapp"),
+        ("https://bitbucket.sgp.dbs.com:8443/projects/dcif/repos/anotherapp", "anotherapp"),
+        ("https://host/team/final-repo.git", "final-repo"),
+        ("https://host/scm/team/My%20App.git", "My App"),
+    ],
+)
+def test_parse_clone_url_accepts_bitbucket_shapes(url, expected_repo):
+    info = cicd.parse_clone_url(url)
+    assert info.repo_name == expected_repo
+    assert info.appcode_candidate == expected_repo
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ssh://host/scm/team/repo.git",
+        "https://user:secret@host/scm/team/repo.git",
+        "https:///scm/team/repo.git",
+        "https://host/scm/team/.git",
+        "https://host/scm/team/CON.git",
+    ],
+)
+def test_parse_clone_url_rejects_unsafe_urls(url):
+    with pytest.raises(ValueError):
+        cicd.parse_clone_url(url)
+
+
+# ── CICD preview adapter ────────────────────────────────────────────────
+def _api_with_root(tmp_path):
+    store = SettingsStore(tmp_path / "config")
+    store.write(AppSettings(root_folder=tmp_path / "root"))
+    return create_js_api(db_path=tmp_path / "cache.sqlite", settings_store=store)
+
+
+def test_cicd_preview_link_matches_existing_appcode_exact(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    resp = api.cicd_preview_link("https://host/scm/team/myapp.git")
+    data = resp["data"]
+    assert resp["ok"] is True
+    assert data["repo_name"] == "myapp"
+    assert data["matched_appcode"] == "myapp"
+    assert data["appcode_exists"] is True
+    assert data["needs_confirmation"] is False
+    assert data["target_repo_path"].endswith("myapp\\CICD\\myapp") or data["target_repo_path"].endswith("myapp/CICD/myapp")
+
+
+def test_cicd_preview_link_matches_existing_appcode_case_insensitive(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("WGID")["ok"] is True
+    resp = api.cicd_preview_link("https://host/scm/team/wgid.git")
+    assert resp["data"]["matched_appcode"] == "WGID"
+    assert resp["data"]["appcode_candidate"] == "wgid"
+
+
+def test_cicd_preview_link_missing_appcode_requires_confirmation(tmp_path):
+    api = _api_with_root(tmp_path)
+    resp = api.cicd_preview_link("https://host/scm/team/newapp.git")
+    data = resp["data"]
+    assert data["matched_appcode"] == ""
+    assert data["appcode_exists"] is False
+    assert data["needs_confirmation"] is True
+    assert data["target_repo_path"].endswith("newapp\\CICD\\newapp") or data["target_repo_path"].endswith("newapp/CICD/newapp")
+
+
+def test_cicd_preview_link_warns_when_candidate_has_separators(tmp_path):
+    api = _api_with_root(tmp_path)
+    resp = api.cicd_preview_link("https://host/scm/team/wgid-cicd.git")
+    assert any("separator" in warning.lower() for warning in resp["data"]["warnings"])
 
 
 # ── parse_porcelain ────────────────────────────────────────────────────
@@ -155,6 +233,9 @@ class _CicdAdapterStub:
     def git_status(self):
         return self._service.git_status()
 
+    def preview_link(self, clone_url):
+        return {"repo_name": "myapp", "appcode_candidate": "myapp"}
+
     def clone(self, appcode, clone_url):
         return self._service.start_clone(clone_url, "/tmp/cicd")
 
@@ -172,6 +253,12 @@ def test_bridge_git_status_ok():
     api = JsApi(dashboard_service=None, cicd_service=_CicdAdapterStub(FakeCicdService()))
     resp = api.cicd_git_status()
     assert resp["ok"] is True and resp["data"]["installed"] is True
+
+
+def test_bridge_preview_link_ok():
+    api = JsApi(dashboard_service=None, cicd_service=_CicdAdapterStub(FakeCicdService()))
+    resp = api.cicd_preview_link("https://host/scm/team/myapp.git")
+    assert resp["ok"] is True and resp["data"]["repo_name"] == "myapp"
 
 
 def test_bridge_service_unavailable():

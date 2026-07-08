@@ -1282,15 +1282,48 @@ def create_js_api(
 
         def _cicd_dir(self, appcode: str) -> Path:
             config = self._appcode.get_appcode_config(appcode)
+            return self._cicd_dir_from_config(config)
+
+        @staticmethod
+        def _cicd_dir_from_config(config: dict[str, object]) -> Path:
             if config.get("cicd_location") == "shared_root":
                 shared = config.get("cicd_shared_path")
                 if not shared:
                     raise ValueError("Shared CICD path is not configured for this appcode")
-                cicd_dir = Path(shared)
+                cicd_dir = Path(str(shared))
             else:
-                cicd_dir = Path(config["path"]) / "CICD"
+                cicd_dir = Path(str(config["path"])) / "CICD"
             cicd_dir.mkdir(parents=True, exist_ok=True)
             return cicd_dir
+
+        def preview_link(self, clone_url: str) -> object:
+            from services.cicd_service import parse_clone_url
+
+            info = parse_clone_url(clone_url)
+            appcodes = list(self._appcode.list_appcodes())
+            matches = [item for item in appcodes if str(item["name"]).casefold() == info.appcode_candidate.casefold()]
+            if len(matches) > 1:
+                raise ValueError(f"Multiple appcodes match: {info.appcode_candidate}")
+            matched = matches[0] if matches else None
+            appcode = str(matched["name"] if matched else info.appcode_candidate)
+            if not matched:
+                from core.rules import validate_windows_folder_name
+
+                validate_windows_folder_name(appcode)
+            cicd_dir = self._cicd_dir_from_config(matched) if matched else (self._appcode._root() / appcode / "CICD")
+            warnings = []
+            if any(separator in info.appcode_candidate for separator in ("-", "_", ".", " ")):
+                warnings.append("Appcode candidate contains a separator; confirm or correct it before clone.")
+            return {
+                "repo_name": info.repo_name,
+                "appcode_candidate": info.appcode_candidate,
+                "matched_appcode": appcode if matched else "",
+                "appcode_exists": matched is not None,
+                "needs_confirmation": matched is None,
+                "target_dir": str(cicd_dir),
+                "target_repo_path": str(cicd_dir / info.repo_name),
+                "warnings": warnings,
+            }
 
         def git_status(self) -> object:
             return self._service.git_status()
