@@ -247,6 +247,25 @@ class AppCodeServiceProtocol(Protocol):
         """Update appcode config."""
 
 
+class CicdServiceProtocol(Protocol):
+    """CICD service surface used by JsApi."""
+
+    def git_status(self) -> object:
+        """Return {installed, version}."""
+
+    def clone(self, appcode: str, clone_url: str) -> object:
+        """Start a background clone of branch 'cicd' into the appcode CICD dir."""
+
+    def clone_status(self, repo_name: str) -> object:
+        """Return {status, error} for a clone job."""
+
+    def list_repos(self, appcode: str) -> object:
+        """Return cloned repos with git status summary."""
+
+    def list_files(self, repo_path: str) -> object:
+        """Return recursive file tree with per-file git status."""
+
+
 class FileServiceProtocol(Protocol):
     """File service surface used by JsApi."""
 
@@ -591,6 +610,7 @@ class JsApi:
         global_plan_service: GlobalPlanServiceProtocol | None = None,
         appcode_service: AppCodeServiceProtocol | None = None,
         approval_service: ApprovalServiceProtocol | None = None,
+        cicd_service: CicdServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -612,6 +632,7 @@ class JsApi:
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
         self._approval_service = approval_service
+        self._cicd_service = cicd_service
 
     def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
         """Persist a frontend activity/debug event to the AppData frontend log."""
@@ -991,6 +1012,51 @@ class JsApi:
             return ok(_to_frontend_safe(self._appcode_service.update_appcode_config(appcode, data)))
         except Exception as exc:
             return fail(str(exc), code="APPCODE_UPDATE_CONFIG_FAILED")
+
+    def cicd_git_status(self) -> dict[str, object]:
+        """Return git CLI install status {installed, version}."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.git_status()))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_GIT_STATUS_FAILED")
+
+    def cicd_clone(self, appcode: str, clone_url: str) -> dict[str, object]:
+        """Start a background clone of branch 'cicd' into the appcode CICD folder."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone(appcode, clone_url)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_FAILED")
+
+    def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
+        """Poll a clone job {status, error}."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone_status(repo_name)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_STATUS_FAILED")
+
+    def cicd_list_repos(self, appcode: str) -> dict[str, object]:
+        """List cloned repos in the appcode CICD folder with status summary."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.list_repos(appcode)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_LIST_REPOS_FAILED")
+
+    def cicd_list_files(self, repo_path: str) -> dict[str, object]:
+        """Return the recursive file tree with git status for a cloned repo."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.list_files(repo_path)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_LIST_FILES_FAILED")
 
     def dashboard_list_projects(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""

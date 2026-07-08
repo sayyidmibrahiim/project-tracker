@@ -1270,6 +1270,43 @@ def create_js_api(
             config_path.write_text(json.dumps(current.to_dict(), indent=2), encoding="utf-8")
             return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=current))
 
+    # ── cicd service adapter (git clone + repo browse) ────────────────
+    class _CicdServiceAdapter:
+        """Resolve each appcode's CICD dir (reusing appcode config) then
+        delegate git work to CicdService. per_appcode -> {appcode}/CICD;
+        shared_root -> AppCodeConfig.cicd_shared_path."""
+
+        def __init__(self, appcode_adapter, service) -> None:
+            self._appcode = appcode_adapter
+            self._service = service
+
+        def _cicd_dir(self, appcode: str) -> Path:
+            config = self._appcode.get_appcode_config(appcode)
+            if config.get("cicd_location") == "shared_root":
+                shared = config.get("cicd_shared_path")
+                if not shared:
+                    raise ValueError("Shared CICD path is not configured for this appcode")
+                cicd_dir = Path(shared)
+            else:
+                cicd_dir = Path(config["path"]) / "CICD"
+            cicd_dir.mkdir(parents=True, exist_ok=True)
+            return cicd_dir
+
+        def git_status(self) -> object:
+            return self._service.git_status()
+
+        def clone(self, appcode: str, clone_url: str) -> object:
+            return self._service.start_clone(clone_url, self._cicd_dir(appcode))
+
+        def clone_status(self, repo_name: str) -> object:
+            return self._service.clone_status(repo_name)
+
+        def list_repos(self, appcode: str) -> object:
+            return self._service.list_repos(self._cicd_dir(appcode))
+
+        def list_files(self, repo_path: str) -> object:
+            return self._service.list_files(Path(repo_path))
+
     # ── year service adapter (SettingsStore → year list) ──────────────
     class _YearServiceAdapter:
         """Read-only year discovery from SettingsStore root_folder."""
@@ -2001,6 +2038,10 @@ def create_js_api(
     )
 
     # ── JsApi ─────────────────────────────────────────────────────────
+    from services.cicd_service import CicdService
+
+    _appcode_adapter = _AppCodeServiceAdapter(_settings_store)
+    _cicd_adapter = _CicdServiceAdapter(_appcode_adapter, CicdService())
     return JsApi(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
@@ -2020,7 +2061,7 @@ def create_js_api(
         second_brain_service=second_brain_svc,
         scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
-        appcode_service=_AppCodeServiceAdapter(_settings_store),
+        appcode_service=_appcode_adapter,
         file_service=_FileServiceAdapter(_settings_store),
         notes_service=_NotesServiceAdapter(),
         rte_document_service=_get_rte_document_service_lazy(),
@@ -2036,6 +2077,7 @@ def create_js_api(
         ),
         global_plan_service=global_plan_svc,
         approval_service=approval_svc,
+        cicd_service=_cicd_adapter,
     )
 
 
