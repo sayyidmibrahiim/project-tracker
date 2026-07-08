@@ -34,6 +34,7 @@ from infrastructure.link_bank_store import LinkBankStore
 from infrastructure.metadata_store import MetadataStore
 from infrastructure.settings_store import SettingsStore, app_config_dir
 from services.automation_service import AutomationService
+from services.approval_polling_service import ApprovalPollingService, register_approval_polling_service
 from services.dashboard_service import DashboardService
 from services.global_plan_service import GlobalPlanService
 from services.download_email_service import DownloadEmailService
@@ -120,6 +121,30 @@ def _appcode_from_project_path(path: Path) -> str:
             index = parts.index(marker)
             return parts[index - 2] if index >= 2 else ""
     return ""
+
+
+# Slice 3: pre-seeded rules (DISABLED by default — user must enable).
+_PRESEEDED_RULES: list[dict[str, object]] = [
+    {
+        "name": "Send UAT Acknowledgement",
+        "goal": "send_email",
+        "trigger": {"type": "manual"},
+        "actions": [{"type": "send_outlook_email", "params": {"template_id": "uat_approval"}}],
+    },
+    {
+        "name": "Send LV Acknowledgement",
+        "goal": "send_email",
+        "trigger": {"type": "manual"},
+        "actions": [{"type": "send_outlook_email", "params": {"template_id": "lv_approval"}}],
+    },
+    {
+        "name": "Auto Update CR State",
+        "goal": "auto_update_status",
+        # DEFAULT AMAN: no patterns configured → engine no-ops (Slice 4).
+        "trigger": {"type": "email_received"},
+        "actions": [{"type": "update_cr_state"}],
+    },
+]
 
 
 def create_js_api(
@@ -236,6 +261,16 @@ def create_js_api(
         folder_provider=lambda: _settings_store.read().second_brain_folder,
     )
     global_plan_svc = GlobalPlanService()
+    email_svc = EmailService()
+    approval_svc = ApprovalPollingService(
+        settings_store=_settings_store,
+        metadata_store=_metadata_store,
+        email_service=email_svc,
+        cache=cache_db,
+        notification_service=notification_svc,
+    )
+    approval_svc.resume_pending()
+    register_approval_polling_service(approval_svc)
 
     # ── settings adapter (SettingsStore.read() → get_settings()) ──────
     class _SettingsAdapter:
@@ -897,6 +932,20 @@ def create_js_api(
             moved_path = Path(str(result))
             self._rebuild_cache_for(moved_path)
             project_state = _folder_state_for_path(moved_path) or ProjectState.UAT_PREPARE
+            # Slice 5: retention — purge automation_logs when CR reaches a
+            # terminal state (FINISHED/CANCELED). POSTPONED is reversible so we
+            # keep its logs. Swallow errors: retention must never block a move.
+            try:
+                metadata_after = self._metadata_store.read(moved_path)
+                if metadata_after is not None and metadata_after.cr_state in (
+                    CRState.FINISHED,
+                    CRState.CANCELED,
+                ):
+                    cr_id = extract_cr_number(metadata_after.cr_link) or metadata_after.project_name
+                    if cr_id:
+                        self._cache_db.purge_logs_for_cr(cr_id)
+            except Exception:  # noqa: BLE001
+                pass
             return {
                 "project_path": str(moved_path),
                 "project_state": project_state.value,
@@ -1838,12 +1887,117 @@ def create_js_api(
                 for r in matched
             ]
 
+        def clear_rule_logs(self, rule_id: str) -> dict[str, object]:
+            return {"deleted": self._cache.clear_rule_logs(rule_id)}
+
+        # -- Slice 3: conflict detection + pre-seeded rules ----------------
+        def detect_conflicts(self) -> list[dict[str, object]]:
+            """Return conflict warnings for enabled rules sharing trigger+goal+scope.
+
+            A conflict is a WARNING, never a block. Each entry names the two
+            colliding rule ids + the shared key so the UI can badge them.
+            """
+            _, rules = self._read()
+            enabled = [r for r in rules if r.get("enabled", True)]
+            conflicts: list[dict[str, object]] = []
+            for i, a in enumerate(enabled):
+                for b in enabled[i + 1 :]:
+                    key_a = self._conflict_key(a)
+                    if key_a and key_a == self._conflict_key(b):
+                        conflicts.append(
+                            {
+                                "rule_ids": [str(a.get("id", "")), str(b.get("id", ""))],
+                                "rule_names": [str(a.get("name", "")), str(b.get("name", ""))],
+                                "key": key_a,
+                            }
+                        )
+            return conflicts
+
+        @staticmethod
+        def _conflict_key(rule: dict[str, object]) -> str:
+            """Build the trigger+goal+scope signature for conflict detection."""
+            from services.automation_service import rules_conflict_key  # noqa: PLC0415
+
+            return rules_conflict_key(rule)
+
+        def seed_defaults(self) -> list[dict[str, object]]:
+            """Seed pre-seeded rules DISABLED by default. Idempotent.
+
+            Returns the list of pre-seeded rules (existing or newly seeded).
+            User must explicitly enable them.
+            """
+            settings, rules = self._read()
+            existing_names = {
+                str(r.get("name", ""))
+                for r in rules
+                if r.get("is_pre_seeded")
+            }
+            seeded: list[dict[str, object]] = []
+            added = False
+            for preset in _PRESEEDED_RULES:
+                if preset["name"] in existing_names:
+                    continue
+                import uuid
+
+                rule = {
+                    "id": str(uuid.uuid4()),
+                    "name": preset["name"],
+                    "enabled": False,  # DEFAULT AMAN: disabled, user enables
+                    "goal": preset["goal"],
+                    "scope": {"type": "all"},
+                    "trigger": preset["trigger"],
+                    "actions": preset["actions"],
+                    "conditions": [],
+                    "is_pre_seeded": True,
+                }
+                rules.append(rule)
+                seeded.append(rule)
+                added = True
+            if added:
+                self._persist(settings, rules)
+            return seeded
+
+        # -- Slice 5: cross-module automation_logs ------------------------
+        def list_logs(
+            self,
+            *,
+            module: str = "all",
+            cr_id: str = "",
+            rule_id: str = "",
+            limit: int = 200,
+        ) -> list[dict[str, object]]:
+            rows = self._cache.list_logs(
+                module=module, cr_id=cr_id, rule_id=rule_id, limit=limit
+            )
+            return [
+                {
+                    "id": r.id,
+                    "module": r.module,
+                    "rule_id": r.rule_id,
+                    "cr_id": r.cr_id,
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                    "event_type": r.event_type,
+                    "detail": r.detail,
+                }
+                for r in rows
+            ]
+
+        def clear_logs(self, *, cr_id: str = "") -> dict[str, object]:
+            if cr_id:
+                deleted = self._cache.purge_logs_for_cr(cr_id)
+            else:
+                deleted = self._cache.clear_all_logs()
+            return {"deleted": deleted}
+
     rules_adapter = _RulesAdapter(_settings_store, cache_db)
     # Re-build automation service so rules CRUD + evaluation share one rule list.
+    # Slice 3: inject metadata_store so update_cr_state / update_drone_state /
+    # append_history mutate real project metadata.
     automation_svc = AutomationService(
         rules_provider=rules_adapter.list_rules,
         cache=cache_db,
         notification_service=notification_svc,
+        metadata_store=_metadata_store,
     )
 
     # ── JsApi ─────────────────────────────────────────────────────────
@@ -1873,7 +2027,7 @@ def create_js_api(
         outlook_service=_OutlookServiceAdapter(
             _settings_store,
             _metadata_store,
-            EmailService(),
+            email_svc,
             DownloadEmailService(notification_service=notification_svc),
         ),
         teams_service=_TeamsServiceAdapter(
@@ -1881,6 +2035,7 @@ def create_js_api(
             TeamsService(),
         ),
         global_plan_service=global_plan_svc,
+        approval_service=approval_svc,
     )
 
 
@@ -1924,10 +2079,16 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
             }
         },
     )
+    js_api = create_js_api(db_path=app_config_dir() / "project_tracker_cache.db")
+    # Slice 3: seed pre-seeded rules (DISABLED) idempotently at real app start.
+    try:
+        js_api.rules_seed_defaults()
+    except Exception:  # noqa: BLE001 — seeding must never block startup
+        logger.warning("rules_seed_defaults failed; continuing without seeding")
     window = webview.create_window(
         "Project Tracker DBS",
         url=resolve_frontend_url(dev=dev),
-        js_api=create_js_api(db_path=app_config_dir() / "project_tracker_cache.db"),
+        js_api=js_api,
         width=1200,
         height=760,
         min_size=(960, 640),
@@ -1946,6 +2107,10 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
         from services.rte_document_service import shutdown_rte_document_service  # noqa: PLC0415
 
         shutdown_rte_document_service(timeout_s=10.0)
+
+        from services.approval_polling_service import shutdown_approval_polling_service  # noqa: PLC0415
+
+        shutdown_approval_polling_service()
 
 
 if __name__ == "__main__":

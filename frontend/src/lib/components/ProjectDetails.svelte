@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, waitForPywebviewReady } from "../bridge";
-  import type { ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
+  import { onDestroy, onMount } from "svelte";
+  import { approvalForceCheck, approvalGetStatus, approvalSend, approvalSetAutoDownload, approvalSetAutoUpdateCrState, approvalSetEnabled, callBridge, getRteFile, isPywebviewReady, rteDocumentOpen, stopApprovalPolling, waitForPywebviewReady } from "../bridge";
+  import type { ApprovalStatus, ProjectRow, ProjectDetail, FileRow, RteDocumentPayload, RteFile, RteFileContent } from "../types";
   import { BridgeErrorCode } from "../types";
   import FileActions from "./FileActions.svelte";
   import NotesEditor from "./NotesEditor.svelte";
@@ -12,7 +12,7 @@
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, onNavigateDashboard }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations, onNavigateLogs }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv", goal?: string) => void; onNavigateLogs?: (crId?: string) => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -24,6 +24,168 @@
   let selectedPath: string = $state("");
   let detail: ProjectDetail | null = $state(null);
   let isNonCr: boolean = $state(false);
+  // ── Piece C approval automation (spec 2026-07-02) ──
+  let approvalStatus: ApprovalStatus | null = $state(null);
+  let approvalBusy: "" | "uat" | "lv" | "toggle" = $state("");
+  let approvalError = $state("");
+  let approvalPollTimer: ReturnType<typeof setInterval> | undefined;
+  // Armed by the Send button (irreversible outward action → ConfirmModal gate).
+  let pendingSend: { kind: "uat" | "lv"; label: string } | null = $state(null);
+  // Slice 4: Teams followup pending send (irreversible outward → ConfirmModal).
+  let pendingTeamsSend: { label: string; message: string } | null = $state(null);
+  let teamsFeedback: string = $state("");
+
+  function stopApprovalStatusPoll() {
+    if (approvalPollTimer !== undefined) { clearInterval(approvalPollTimer); approvalPollTimer = undefined; }
+  }
+
+  async function loadApprovalStatus() {
+    if (!selectedPath || isNonCr || !isPywebviewReady()) { approvalStatus = null; stopApprovalStatusPoll(); return; }
+    const resp = await approvalGetStatus(selectedPath);
+    if (!resp.ok) { approvalError = resp.error.message; return; }
+    approvalStatus = resp.data ?? null;
+    const polling = approvalStatus?.uat.job?.status === "polling" || approvalStatus?.lv.job?.status === "polling";
+    if (polling && approvalPollTimer === undefined) {
+      approvalPollTimer = setInterval(() => void loadApprovalStatus(), 15000);
+    } else if (!polling) {
+      stopApprovalStatusPoll();
+    }
+  }
+
+  async function toggleApproval() {
+    if (!selectedPath || !approvalStatus) return;
+    approvalBusy = "toggle"; approvalError = "";
+    const resp = await approvalSetEnabled(selectedPath, !approvalStatus.automation_enabled);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  function requestSend(kind: "uat" | "lv", label: string) {
+    approvalError = "";
+    pendingSend = { kind, label };
+  }
+
+  async function confirmSend() {
+    const p = pendingSend;
+    pendingSend = null;
+    if (!p || !selectedPath) return;
+    approvalBusy = p.kind; approvalError = "";
+    const resp = await approvalSend(selectedPath, p.kind, "send");
+    if (!resp.ok) approvalError = resp.error.message;
+    else if (resp.data?.status === "sent") addToast("Sent — auto-download reply is OFF for this request", "info");
+    else if (resp.data?.status === "polling") addToast("Sent — now waiting for the reply", "info");
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  async function draftApproval(kind: "uat" | "lv") {
+    if (!selectedPath) return;
+    approvalBusy = kind; approvalError = "";
+    const resp = await approvalSend(selectedPath, kind, "draft");
+    if (!resp.ok) approvalError = resp.error.message;
+    else addToast("Draft opened in Outlook — review then send", "info");
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  // Slice 4: Teams followup — build message from project data, preview or confirm-send.
+  function teamsFollowupMessage(label: string): string {
+    const cr = approvalStatus?.cr_number ?? "";
+    const name = detail?.project_name ?? "";
+    return `Reminder: ${label} pending for ${cr ? "CR-" + cr : name}. Please follow up.`;
+  }
+  async function teamsFollowupPreview(label: string) {
+    if (!selectedPath) return;
+    teamsFeedback = "";
+    const message = teamsFollowupMessage(label);
+    const resp = await callBridge<{ status?: string; message?: string }>("teams_preview_message", message);
+    teamsFeedback = resp.ok
+      ? (resp.data?.status === "dev_skipped" ? "Teams preview (dev-skipped off-Windows)" : "Teams preview opened — message copied")
+      : resp.error.message;
+  }
+  function teamsFollowupSend(label: string) {
+    if (!selectedPath) return;
+    pendingTeamsSend = { label, message: teamsFollowupMessage(label) };
+  }
+  async function confirmTeamsSend() {
+    const p = pendingTeamsSend;
+    pendingTeamsSend = null;
+    if (!p) return;
+    const resp = await callBridge<{ status?: string; message?: string }>("teams_send_message", p.message);
+    teamsFeedback = resp.ok
+      ? (resp.data?.status === "dev_skipped" ? "Teams send (dev-skipped off-Windows)" : "Teams message sent")
+      : resp.error.message;
+  }
+
+  async function forceCheck(kind: "uat" | "lv") {
+    if (!selectedPath) return;
+    approvalBusy = kind; approvalError = "";
+    const resp = await approvalForceCheck(selectedPath, kind);
+    if (!resp.ok) approvalError = resp.error.message;
+    else if (resp.data?.status === "completed") addToast("Reply found and downloaded to _cr-docs", "info");
+    else if (resp.data?.status === "polling") addToast("No reply yet — still waiting", "info");
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  async function toggleAutoDownload(kind: "uat" | "lv") {
+    if (!selectedPath || !approvalStatus) return;
+    const current = kind === "uat" ? approvalStatus.uat.auto_download : approvalStatus.lv.auto_download;
+    approvalBusy = kind; approvalError = "";
+    const resp = await approvalSetAutoDownload(selectedPath, kind, !current);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  async function toggleAutoUpdateCrState() {
+    if (!selectedPath || !approvalStatus) return;
+    approvalBusy = "toggle"; approvalError = "";
+    const resp = await approvalSetAutoUpdateCrState(selectedPath, !approvalStatus.auto_update_cr_state);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
+
+  function openAutomations(kind?: "uat" | "lv", goal?: string) {
+    onNavigateAutomations?.(kind, goal);
+  }
+
+  function devStub(message: string) {
+    addToast(message, "info");
+  }
+
+  // Status dot class + short label per Outlook kind (🟢 Done, 🟡 Waiting, 🔴 Error, ⚪ Inactive/Ready).
+  function autoDot(kind: "uat" | "lv"): string {
+    if (!approvalStatus) return "dot-inactive";
+    const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv;
+    const s = ks.job?.status ?? "";
+    if (s === "completed") return "dot-done";
+    if (s === "polling") return "dot-waiting";
+    if (s === "timeout") return "dot-error";
+    return ks.eligible ? "dot-ready" : "dot-inactive";
+  }
+
+  function autoLabel(kind: "uat" | "lv"): string {
+    if (!approvalStatus) return "";
+    const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv;
+    const s = ks.job?.status ?? "";
+    const cr = approvalStatus.cr_number || "—";
+    if (s === "completed") return "Reply received ✓";
+    if (s === "polling") return `Waiting for reply · ${cr}`;
+    if (s === "timeout") return "No reply (timeout) — retry";
+    return ks.eligible ? `Ready · ${cr}` : `Not ready: ${ks.reasons.join(", ")}`;
+  }
+
+  async function stopApproval(kind: "uat" | "lv") {
+    if (!selectedPath) return;
+    approvalBusy = kind; approvalError = "";
+    const resp = await stopApprovalPolling(selectedPath, kind);
+    if (!resp.ok) approvalError = resp.error.message;
+    await loadApprovalStatus();
+    approvalBusy = "";
+  }
   let selectedSubproject: string = $state("all");
   let drones: string[] = $state([]);
   let files: FileRow[] = $state([]);
@@ -230,6 +392,7 @@
     await rteEditorFlush?.();
     selectedPath = path;
     detailState = "loading";
+    stopApprovalStatusPoll();
     detail = null; isNonCr = false; selectedSubproject = "all"; drones = []; files = []; notes = "";
     crDocsFiles = []; selectedCrDocPath = ""; crDocContent = null; crDocContentPath = ""; crDocDocPayload = null; crDocsLoading = false; crDocsError = "";
     topActionState = "idle"; topActionError = ""; topDeletePending = false;
@@ -290,6 +453,7 @@
 
       if (detail && !isNonCr) {
         void loadCrDocs();
+        void loadApprovalStatus();
       }
     } catch (err) {
       errorCode = "PROJECT_DETAIL_LOAD_FAILED";
@@ -797,6 +961,7 @@
   }
 
   onMount(init);
+  onDestroy(() => stopApprovalStatusPoll());
 
   export function refresh() { loadProjects(); }
 
@@ -1082,6 +1247,106 @@
                 {/if}
               </div>
             {/if}
+
+            {#if !isNonCr && approvalStatus}
+              <div class="pd-section">
+                <div class="pd-section-head">
+                  <h4 class="pd-section-title">Automations</h4>
+                  <button
+                    id="pd-approval-toggle"
+                    type="button"
+                    class="pd-control pd-approval-toggle"
+                    class:on={approvalStatus.automation_enabled}
+                    disabled={approvalBusy === "toggle" || approvalStatus.automation_locked || !approvalStatus.outlook_available}
+                    title={approvalStatus.automation_locked
+                      ? "Automation is unavailable: CR is FINISHED/POSTPONED/CANCELED"
+                      : !approvalStatus.outlook_available
+                        ? "Outlook not configured"
+                        : "CR automation master toggle"}
+                    onclick={toggleApproval}
+                  >{approvalStatus.automation_enabled ? "ON" : "OFF"}</button>
+                  <button class="pd-command-btn" type="button" title="View automation logs for this CR" onclick={() => onNavigateLogs?.(approvalStatus?.cr_number)}>Logs</button>
+                </div>
+                {#if approvalStatus.automation_locked}
+                  <p class="pd-auto-hint">Automation is forced OFF because the CR is finished, postponed, or canceled.</p>
+                {/if}
+                {#if approvalError}
+                  <p class="cr-link-feedback cr-link-err">✗ {approvalError}</p>
+                {/if}
+                <div class="pd-auto-body" class:pd-auto-off={!approvalStatus.automation_enabled} inert={!approvalStatus.automation_enabled}>
+                  <div class="pd-auto-group">
+                    <span class="pd-auto-group-title">Automations Outlook</span>
+                    {#each [["uat", "Send Ack Email"], ["lv", "Send LV Email"]] as [kind, title]}
+                      {@const ks = kind === "uat" ? approvalStatus.uat : approvalStatus.lv}
+                      {@const polling = ks.job?.status === "polling"}
+                      <div class="pd-auto-item">
+                        <div class="pd-auto-item-head">
+                          <span class="pd-status-dot {autoDot(kind as 'uat' | 'lv')}"></span>
+                          <span class="pd-auto-item-title">{title}</span>
+                          <div class="pd-auto-item-actions">
+                            <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "Send now" : ks.reasons.join(", ")} onclick={() => requestSend(kind as "uat" | "lv", title)}>Send</button>
+                            <button class="pd-command-btn" type="button" disabled={!ks.eligible || approvalBusy !== ""} title={ks.eligible ? "Open Outlook draft to review" : ks.reasons.join(", ")} onclick={() => draftApproval(kind as "uat" | "lv")}>Draft</button>
+                            <button class="pd-command-btn" type="button" title="Open template settings" onclick={() => openAutomations(kind as "uat" | "lv")}>Setting</button>
+                          </div>
+                        </div>
+                        <div class="pd-auto-item-sub">
+                          <span class="pd-auto-status-label">{autoLabel(kind as "uat" | "lv")}</span>
+                          <div class="pd-auto-item-actions">
+                            <button class="pd-control pd-auto-mini-toggle" type="button" class:on={ks.auto_download} disabled={approvalBusy !== ""} onclick={() => toggleAutoDownload(kind as "uat" | "lv")}>Auto-download reply: {ks.auto_download ? "ON" : "OFF"}</button>
+                            <button class="pd-command-btn" type="button" disabled={!polling || approvalBusy !== ""} title={polling ? "Check the inbox now" : "No pending reply to check"} onclick={() => forceCheck(kind as "uat" | "lv")}>Force Check Now</button>
+                            {#if polling}<button class="pd-command-btn pd-command-danger" type="button" disabled={approvalBusy !== ""} onclick={() => stopApproval(kind as "uat" | "lv")}>Stop</button>{/if}
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                    <button class="pd-auto-add" type="button" onclick={() => openAutomations(undefined, "send_email")}>+ Add Email Automation</button>
+                  </div>
+
+                  <div class="pd-auto-group">
+                    <span class="pd-auto-group-title">Automation CR</span>
+                    <div class="pd-auto-item">
+                      <div class="pd-auto-item-head">
+                        <span class="pd-status-dot {approvalStatus.auto_update_cr_state ? 'dot-done' : 'dot-inactive'}"></span>
+                        <span class="pd-auto-item-title">Auto Update CR State</span>
+                        <div class="pd-auto-item-actions">
+                          <button class="pd-control pd-auto-mini-toggle" type="button" class:on={approvalStatus.auto_update_cr_state} disabled={approvalBusy !== ""} onclick={toggleAutoUpdateCrState}>{approvalStatus.auto_update_cr_state ? "ON" : "OFF"}</button>
+                          <button class="pd-command-btn" type="button" title="Open pattern settings" onclick={() => openAutomations(undefined, "auto_update_status")}>Setting</button>
+                        </div>
+                      </div>
+                      <div class="pd-auto-item-sub"><span class="pd-auto-status-label">{approvalStatus.auto_update_cr_state ? "Watching inbox for state-change emails (engine pending)" : "Inactive"}</span></div>
+                    </div>
+                    <div class="pd-auto-item">
+                      <div class="pd-auto-item-head">
+                        <span class="pd-status-dot dot-inactive"></span>
+                        <span class="pd-auto-item-title">Create Drone Ticket</span>
+                        <div class="pd-auto-item-actions">
+                          <button class="pd-command-btn" type="button" onclick={() => devStub("Create Drone Ticket butuh Jenkins API — tahap development.")}>Run</button>
+                          <button class="pd-command-btn" type="button" onclick={() => devStub("Create Drone Ticket butuh Jenkins API — tahap development.")}>Setting</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pd-auto-group">
+                    <span class="pd-auto-group-title">Automation Teams</span>
+                    {#each ["Auto Followup Ack", "Auto Followup Approval CR"] as label}
+                      <div class="pd-auto-item">
+                        <div class="pd-auto-item-head">
+                          <span class="pd-status-dot dot-inactive"></span>
+                          <span class="pd-auto-item-title">{label}</span>
+                          <div class="pd-auto-item-actions">
+                            <button class="pd-command-btn" type="button" onclick={() => teamsFollowupSend(label)}>Send</button>
+                            <button class="pd-command-btn" type="button" onclick={() => teamsFollowupPreview(label)}>Draft</button>
+                            <button class="pd-command-btn" type="button" title="Open Teams template settings" onclick={() => openAutomations(undefined, "send_teams")}>Setting</button>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                    <button class="pd-auto-add" type="button" onclick={() => openAutomations(undefined, "send_teams")}>+ Add Automation Teams</button>
+                  </div>
+                </div>
+              </div>
+            {/if}
           </div>
 
           <div class="pane">
@@ -1217,12 +1482,40 @@
   <ConfirmModal title="Delete project" actionLabel="Delete project" targetName={detail.project_name} reversible={false} onConfirm={confirmTopDelete} onCancel={cancelTopDelete} />
 {:else if pendingReopen}
   <ConfirmModal title="Reopen project?" actionLabel="Reopen to UAT_PREPARE" targetName={pendingReopen.name} reversible={true} onConfirm={confirmReopen} onCancel={cancelReopen} />
+{:else if pendingSend}
+  <ConfirmModal title="Send approval email?" actionLabel="Send now" targetName={`${pendingSend.label}${approvalStatus?.cr_number ? " · " + approvalStatus.cr_number : ""}`} reversible={false} onConfirm={confirmSend} onCancel={() => (pendingSend = null)} />
+{:else if pendingTeamsSend}
+  <ConfirmModal title="Send Teams followup?" actionLabel="Send now" targetName={pendingTeamsSend.label} reversible={false} onConfirm={confirmTeamsSend} onCancel={() => (pendingTeamsSend = null)} />
 {/if}
 
 <style>
   .pd-command-field { display:flex; flex-direction:column; gap:4px; min-width:110px; }
   .pd-command-field span { font-size:9.5px; font-weight:700; color:var(--color-muted); text-transform:uppercase; letter-spacing:0.05em; }
   .pd-command-project { min-width:180px; flex:0 1 240px; }
+  .pd-approval-toggle { min-width: 44px; font-weight: 800; }
+  .pd-approval-toggle.on { background: var(--soft-pink-surface); border-color: var(--color-dbs-red); color: var(--color-dbs-red); }
+  .pd-auto-body { display:flex; flex-direction:column; gap:10px; }
+  .pd-auto-body.pd-auto-off { opacity:.45; }
+  .pd-auto-group { display:flex; flex-direction:column; gap:6px; }
+  .pd-auto-group-title { font-size:9.5px; font-weight:800; color:var(--color-muted); text-transform:uppercase; letter-spacing:.05em; }
+  .pd-auto-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .pd-auto-mini-toggle { font-weight:800; }
+  .pd-auto-mini-toggle.on { background:var(--soft-pink-surface); border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
+  .pd-auto-hint { font-size:10.5px; color:var(--color-muted); margin:0 0 6px; }
+  .pd-auto-item { border:1px solid var(--color-input-border); border-radius:7px; padding:7px 9px; display:flex; flex-direction:column; gap:6px; background:#fff; }
+  .pd-auto-item-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .pd-auto-item-title { font-size:11.5px; font-weight:800; color:var(--color-ink); }
+  .pd-auto-item-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-left:auto; }
+  .pd-auto-item-sub { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .pd-auto-status-label { font-size:10px; color:var(--color-muted); font-weight:700; }
+  .pd-status-dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-shadow:0 0 0 2px rgba(0,0,0,0.04); }
+  .pd-status-dot.dot-done { background:var(--tag-green-ink, #17803d); }
+  .pd-status-dot.dot-waiting { background:#C77700; }
+  .pd-status-dot.dot-error { background:var(--color-dbs-red); }
+  .pd-status-dot.dot-ready { background:#2563EB; }
+  .pd-status-dot.dot-inactive { background:#B7BEC7; }
+  .pd-auto-add { align-self:flex-start; background:transparent; border:1px dashed var(--color-input-border); border-radius:6px; color:var(--color-muted); font-size:10.5px; font-weight:800; padding:4px 9px; cursor:pointer; }
+  .pd-auto-add:hover { border-color:var(--color-dbs-red); color:var(--color-dbs-red); }
   .pd-command-spacer { flex:1 1 auto; }
   .pd-control { height:28px; min-width:0; border:1px solid var(--color-input-border); border-radius:6px; background:#fff; color:var(--color-ink); font-size:11.5px; font-weight:700; padding:3px 9px; outline:none; }
   .pd-control:focus { border-color:var(--color-dbs-red); }

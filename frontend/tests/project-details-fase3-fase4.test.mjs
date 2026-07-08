@@ -244,3 +244,38 @@ test("RTE interaction lock has local cleanup and a 10-second app watchdog", () =
   assert.match(APP, /console\.warn\("interaction-lock watchdog released"\)/);
   assert.match(APP, /clearTimeout\(interactionLockWatchdog\)/);
 });
+
+test("ProjectDetails wires the 3-group automations section", () => {
+  assert.match(PD, /approvalGetStatus|get_approval_status/);
+  assert.match(PD, /approvalSetEnabled/);
+  assert.match(PD, /approvalSetAutoDownload/);
+  assert.match(PD, /approvalSend/);
+  assert.match(PD, /approvalForceCheck/);
+  assert.match(PD, /approvalSetAutoUpdateCrState/);
+  assert.match(PD, /stopApprovalPolling/);
+  // Three groups.
+  assert.match(PD, /Automations Outlook/);
+  assert.match(PD, /Automation CR/);
+  assert.match(PD, /Automation Teams/);
+  // Outlook group controls.
+  assert.match(PD, /Send Ack Email/);
+  assert.match(PD, /Send LV Email/);
+  assert.match(PD, /Force Check Now/);
+  assert.match(PD, /pd-status-dot/);
+  assert.match(PD, /Waiting for reply/);
+  // CR group.
+  assert.match(PD, /Auto Update CR State/);
+  assert.match(PD, /Create Drone Ticket/);
+  assert.match(PD, /Jenkins API/);
+  // Teams group + add buttons.
+  assert.match(PD, /Auto Followup Ack/);
+  assert.match(PD, /Auto Followup Approval CR/);
+  assert.match(PD, /\+ Add Email Automation/);
+  assert.match(PD, /\+ Add Automation Teams/);
+  // Section shell: lock hint state + dimmed preview when off + send confirm.
+  assert.match(PD, />Automations</);
+  assert.match(PD, /automation_locked/);
+  assert.match(PD, /pd-auto-off/);
+  assert.match(PD, /pendingSend/);
+  assert.match(PD, /clearInterval\(approvalPollTimer\)/);
+});

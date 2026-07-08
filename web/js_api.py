@@ -401,6 +401,21 @@ class RulesServiceProtocol(Protocol):
     def get_logs(self, rule_id: str, limit: int) -> object:
         """Return up to ``limit`` recent execution logs for ``rule_id``."""
 
+    def clear_rule_logs(self, rule_id: str) -> object:
+        """Slice 5: clear execution logs for one rule."""
+
+    def detect_conflicts(self) -> object:
+        """Slice 3: return conflict warnings for colliding enabled rules."""
+
+    def seed_defaults(self) -> object:
+        """Slice 3: seed pre-seeded rules DISABLED (idempotent)."""
+
+    def list_logs(self, *, module: str = "all", cr_id: str = "", rule_id: str = "", limit: int = 200) -> object:
+        """Slice 5: cross-module automation logs (filtered, newest-first)."""
+
+    def clear_logs(self, *, cr_id: str = "") -> object:
+        """Slice 5: clear automation logs (per CR if cr_id given, else all)."""
+
 
 class SecondBrainServiceProtocol(Protocol):
     """Second Brain service surface used by JsApi."""
@@ -487,6 +502,52 @@ class TeamsServiceProtocol(Protocol):
         """Send a Teams message (auto-send only when enabled and confirmed)."""
 
 
+class ApprovalServiceProtocol(Protocol):
+    """Piece C approval automation surface used by JsApi."""
+
+    def get_status(self, project_path: Path) -> dict[str, object]:
+        """Conditions + latest job per request kind."""
+
+    def set_enabled(self, project_path: Path, enabled: bool) -> dict[str, object]:
+        """Persist the per-project automation toggle."""
+
+    def set_auto_download(self, project_path: Path, kind: str, enabled: bool) -> dict[str, object]:
+        """Persist the per-project auto-download-reply flag for one kind."""
+
+    def set_auto_update_cr_state(self, project_path: Path, enabled: bool) -> dict[str, object]:
+        """Persist the per-project auto-update-CR-state flag."""
+
+    def send_request(self, project_path: Path, kind: str, mode: str | None = None) -> dict[str, object]:
+        """Send an approval request email (mode='send') or open a draft (mode='draft')."""
+
+    def stop(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Stop polling for a request kind."""
+
+    def force_check(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Scan the inbox once now for the latest polling job's reply."""
+
+    def get_template(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Return the effective template + its source."""
+
+    def update_template(self, project_path: Path, kind: str, template: dict[str, object]) -> dict[str, object]:
+        """Persist a per-project template override."""
+
+    def preview_template(self, project_path: Path, kind: str, template: dict[str, object] | None) -> dict[str, object]:
+        """Render a template with real project data."""
+
+    def reset_template(self, project_path: Path, kind: str) -> dict[str, object]:
+        """Remove the per-project override so the default takes effect."""
+
+    def list_templates(self) -> dict[str, object]:
+        """Return all known template kinds + summary metadata."""
+
+    def test_template(self, project_path: Path, kind: str, template: dict[str, object] | None) -> dict[str, object]:
+        """Open a real Outlook draft with resolved data; return ok + subject."""
+
+    def autocomplete_tokens(self, project_path: Path) -> dict[str, object]:
+        """Return ``[(token, preview_value), ...]`` for the { autocomplete UI."""
+
+
 class ReportServiceProtocol(Protocol):
     """Report service surface used by JsApi."""
 
@@ -529,6 +590,7 @@ class JsApi:
         teams_service: TeamsServiceProtocol | None = None,
         global_plan_service: GlobalPlanServiceProtocol | None = None,
         appcode_service: AppCodeServiceProtocol | None = None,
+        approval_service: ApprovalServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -549,6 +611,7 @@ class JsApi:
         self._teams_service = teams_service
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
+        self._approval_service = approval_service
 
     def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
         """Persist a frontend activity/debug event to the AppData frontend log."""
@@ -1134,6 +1197,161 @@ class JsApi:
             return ok(_to_frontend_safe(self._scheduler_service.trigger_entry(entry_id)))
         except Exception as exc:
             return fail(str(exc), code="SCHEDULER_ENTRY_TRIGGER_FAILED")
+
+    def _approval_guard(self):
+        if self._approval_service is None:
+            return fail("approval_service is not configured", code="SERVICE_UNAVAILABLE")
+        return None
+
+    def get_approval_status(self, project_path: str) -> dict[str, object]:
+        """Piece C: conditions + job status for both request kinds."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return ok(_to_frontend_safe(self._approval_service.get_status(Path(project_path))))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_STATUS_FAILED")
+
+    def approval_set_enabled(self, project_path: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project automation toggle."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.set_enabled(Path(project_path), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def approval_set_auto_download(self, project_path: str, kind: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project auto-download-reply flag for one kind."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.set_auto_download(Path(project_path), str(kind), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def approval_set_auto_update_cr_state(self, project_path: str, enabled: bool) -> dict[str, object]:
+        """Piece C: persist the per-project auto-update-CR-state flag (engine wired later)."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.set_auto_update_cr_state(Path(project_path), bool(enabled))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TOGGLE_FAILED")
+
+    def send_uat_approval_request(self, project_path: str, mode: str = "") -> dict[str, object]:
+        """Piece C: send the UAT approval request (mode='send') or open a draft (mode='draft')."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.send_request(Path(project_path), "uat", mode or None)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_SEND_FAILED")
+
+    def send_lv_approval_request(self, project_path: str, mode: str = "") -> dict[str, object]:
+        """Piece C: send the LV approval request (mode='send') or open a draft (mode='draft')."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.send_request(Path(project_path), "lv", mode or None)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_SEND_FAILED")
+
+    def stop_approval_polling(self, project_path: str, request_type: str) -> dict[str, object]:
+        """Piece C: stop polling for one request kind."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.stop(Path(project_path), str(request_type))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_STOP_FAILED")
+
+    def approval_force_check(self, project_path: str, request_type: str) -> dict[str, object]:
+        """Piece C: scan the inbox once now for the latest polling job's reply."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.force_check(Path(project_path), str(request_type))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_FORCE_CHECK_FAILED")
+
+    def get_approval_template(self, project_path: str, kind: str) -> dict[str, object]:
+        """Piece C: effective approval template + source."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.get_template(Path(project_path), str(kind))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def update_approval_template(self, project_path: str, kind: str, template: dict[str, object]) -> dict[str, object]:
+        """Piece C: persist a per-project approval template."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.update_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def preview_approval_template(self, project_path: str, kind: str, template: dict[str, object] | None = None) -> dict[str, object]:
+        """Piece C: render a template with real project data."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.preview_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_reset_template(self, project_path: str, kind: str) -> dict[str, object]:
+        """Slice 2: remove a per-project template override."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.reset_template(Path(project_path), str(kind))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_list_templates(self) -> dict[str, object]:
+        """Slice 2: list all known template kinds + summary."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.list_templates()
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_test_template(self, project_path: str, kind: str, template: dict[str, object] | None = None) -> dict[str, object]:
+        """Slice 2: open a real Outlook draft with resolved data."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.test_template(Path(project_path), str(kind), template)
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
+
+    def approval_autocomplete_tokens(self, project_path: str) -> dict[str, object]:
+        """Slice 2: return [(token, preview_value), ...] for the { autocomplete UI."""
+        guard = self._approval_guard()
+        if guard is not None:
+            return guard
+        try:
+            return self._approval_service.autocomplete_tokens(Path(project_path))
+        except Exception as exc:
+            return fail(str(exc), code="APPROVAL_TEMPLATE_FAILED")
 
     def project_get(self, project_path: str) -> dict[str, object]:
         """Return full project detail."""
@@ -1960,6 +2178,66 @@ class JsApi:
             return ok(_to_frontend_safe(self._rules_service.get_logs(rule_id, int(limit or 50))))
         except Exception as exc:
             return fail(str(exc), code="RULES_GET_LOGS_FAILED")
+
+    def rules_clear_logs(self, rule_id: str) -> dict[str, object]:
+        """Slice 5: clear execution logs for one rule."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.clear_rule_logs(rule_id)))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_CLEAR_LOGS_FAILED")
+
+    def rules_detect_conflicts(self) -> dict[str, object]:
+        """Slice 3: return conflict warnings for colliding enabled rules."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.detect_conflicts()))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_DETECT_CONFLICTS_FAILED")
+
+    def rules_seed_defaults(self) -> dict[str, object]:
+        """Slice 3: seed pre-seeded rules DISABLED (idempotent)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.seed_defaults()))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_SEED_DEFAULTS_FAILED")
+
+    def logs_list(
+        self,
+        module: str = "all",
+        cr_id: str = "",
+        rule_id: str = "",
+        limit: int = 200,
+    ) -> dict[str, object]:
+        """Slice 5: cross-module automation logs, filtered + newest-first."""
+        try:
+            if self._rules_service is None:
+                return ok([])
+            return ok(
+                _to_frontend_safe(
+                    self._rules_service.list_logs(
+                        module=str(module or "all"),
+                        cr_id=str(cr_id or ""),
+                        rule_id=str(rule_id or ""),
+                        limit=int(limit or 200),
+                    )
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="LOGS_LIST_FAILED")
+
+    def logs_clear(self, cr_id: str = "", module: str = "") -> dict[str, object]:
+        """Slice 5: clear logs. If cr_id given, purge only that CR's logs."""
+        try:
+            if self._rules_service is None:
+                return ok({"deleted": 0})
+            return ok(_to_frontend_safe(self._rules_service.clear_logs(cr_id=str(cr_id or ""))))
+        except Exception as exc:
+            return fail(str(exc), code="LOGS_CLEAR_FAILED")
 
     def second_brain_list(self) -> dict[str, object]:
         """Return Second Brain items."""

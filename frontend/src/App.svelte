@@ -8,6 +8,7 @@
   import ProjectDetails from "./lib/components/ProjectDetails.svelte";
   import Automations from "./lib/components/Automations.svelte";
   import GlobalPlan from "./lib/components/GlobalPlan.svelte";
+  import Logs from "./lib/components/Logs.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
   import Toast from "./lib/components/Toast.svelte";
@@ -15,7 +16,7 @@
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
   import type { NotificationItem } from "./lib/types";
 
-  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "settings";
+  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "logs" | "settings";
 
   // All pages have real components — no placeholder needed.
 
@@ -26,6 +27,9 @@
   let refreshKey = $state(0);
   let pendingProjectPath: string | null = $state(null);
   let startNewProject: boolean = $state(false);
+  let pendingTemplateKind: "uat" | "lv" | null = $state(null);
+  let pendingRuleGoal: string | null = $state(null);
+  let pendingLogCrId: string = $state("");
 
   // Notification state
   let notifications: NotificationItem[] = $state([]);
@@ -75,7 +79,7 @@
   }
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan"];
+    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan", "logs"];
     logActivity({ source: "App.navigate", kind: "navigation", event: "start", from: currentPage, to: id, valid: validPages.includes(id) });
     if (validPages.includes(id)) {
       if (id !== "project-detail") {
@@ -260,11 +264,13 @@
         {:else if currentPage === "second-brain"}
           <SecondBrain />
         {:else if currentPage === "project-detail"}
-          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} />
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={(kind, goal) => { pendingTemplateKind = kind ?? null; pendingRuleGoal = goal ?? null; navigate("automations"); }} onNavigateLogs={(crId) => { pendingLogCrId = crId ?? ""; navigate("logs"); }} />
         {:else if currentPage === "automations"}
-          <Automations />
+          <Automations initialTemplateKind={pendingTemplateKind} initialRuleGoal={pendingRuleGoal} onConsumedTemplateKind={() => { pendingTemplateKind = null; }} onConsumedRuleGoal={() => { pendingRuleGoal = null; }} />
         {:else if currentPage === "global-plan"}
           <GlobalPlan />
+        {:else if currentPage === "logs"}
+          <Logs initialCrId={pendingLogCrId} />
         {/if}
       {/key}
     </div>

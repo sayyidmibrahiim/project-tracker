@@ -84,7 +84,7 @@ pip install "headroom-ai[proxy]"
 
 - **caveman:** response style only; ultra is session-level, not product behavior.
 - **context-mode:** owns tool/CLI output compression + in-session continuity; do not add duplicate compression hooks.
-- **claude-mem:** active cross-session recall. Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
+- **claude-mem:** MANDATORY every session, all providers — recall at session start (saves tokens by reusing prior context) and update whenever an important change lands (decisions, architecture, conventions, task/branch state). Memory untuk DECISIONS & context lintas sesi saja, bukan dump semua.
 - **Headroom:** optional local proxy at `http://localhost:8787`; source code remains authority.
 - **RTK:** manual-only on native Windows (`rtk ...`); do not claim auto-rewrite outside WSL/Unix shell.
 
@@ -98,10 +98,10 @@ Read `_docs/PROGRESS.md` + `git status` = **once per session**, not every turn.
 
 | Phase           | Actions                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Start**       | Once per session: read cold-start docs in truth order → git status                                           |
+| **Start**       | Once per session: recall claude-mem (cross-session context) → read cold-start docs in truth order → git status |
 | **Before code** | Use native search/read tools before code changes; keep lookup scoped to the files needed                    |
 | **After code**  | Run app for simple verification → fix surfaced errors → update docs → generate manual checklist for user    |
-| **End**         | Report: changed files, verification run, not tested, next task. Save stable decisions to memory.            |
+| **End**         | Report: changed files, verification run, not tested, next task. Update claude-mem with any important change (decisions, architecture, conventions, state). |
 
 ## Branch Workflow
 
@@ -177,7 +177,7 @@ A 5-part RTE fix round (reactive toolbar token, 5s export countdown, hidden `.rt
 ## Documentation Sync
 
 Product behavior change → PRD.md + \_docs/PROGRESS.md. Progress change → \_docs/PROGRESS.md.
-Workflow/tooling change → CLAUDE.md. Stable decision → save memory.
+Workflow/tooling change → CLAUDE.md. Important change (decision, architecture, convention, state) → update claude-mem (mandatory, not optional).
 
 ## Do Not Touch Without Approval
 
@@ -202,6 +202,7 @@ Every AI session in this repo activates these at start, all providers:
 1. **superpowers:using-superpowers** — skills-first discipline: invoke matching skill BEFORE any response/action.
 2. **ponytail (full)** — laziest working solution: YAGNI, reuse codebase > stdlib > native platform > installed dependency > new code; shortest diff; root-cause fixes.
 3. **caveman (full)** — terse response style (see §Caveman Mode below).
+4. **claude-mem** — MANDATORY: recall cross-session memory at session start (saves tokens), and update it on every important change (decisions, architecture, conventions, task/branch state). DECISIONS & cross-session context only — not a full dump.
 
 ## Caveman Mode (default: full — user rule 2026-07-05)
 

@@ -69,6 +69,19 @@ class AutomationRuleLogRow:
 
 
 @dataclass(frozen=True, slots=True)
+class AutomationLogRow:
+    """Slice 5: cross-module automation log entry (LogEntry logical model)."""
+
+    id: int = 0
+    module: str = ""  # outlook / teams / cr_automation / rules_engine / all
+    rule_id: str = ""
+    cr_id: str = ""
+    timestamp: datetime | None = None
+    event_type: str = ""  # e.g. APPROVAL_TEST_DRAFT_OPENED, AUTO_UPDATE_CR_STATE
+    detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CachedDroneTicketRow:
     project_path: Path
     subfolder_name: str | None = None
@@ -192,6 +205,8 @@ class CacheDb:
                 "scan_warnings",
                 "notifications",
                 "automation_rule_logs",
+                "approval_polling_jobs",
+                "automation_logs",
             }
             and invalid_project_states is None
             and invalid_cr_states is None
@@ -457,6 +472,100 @@ class CacheDb:
             ).fetchall()
         return [self._rule_log_from_row(row) for row in rows]
 
+    def clear_rule_logs(self, rule_id: str) -> int:
+        """Delete automation_rule_logs for one rule; returns count deleted."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM automation_rule_logs WHERE rule_id = ?",
+                (rule_id,),
+            )
+        return int(cursor.rowcount or 0)
+
+    # ── Slice 5: cross-module automation_logs ─────────────────────────────
+    def append_log(self, row: AutomationLogRow) -> int:
+        """Append a cross-module log entry; return its row id."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO automation_logs (module, rule_id, cr_id, timestamp, event_type, detail)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.module,
+                    row.rule_id,
+                    row.cr_id,
+                    datetime_to_json(row.timestamp),
+                    row.event_type,
+                    row.detail,
+                ),
+            )
+        return int(cursor.lastrowid or 0)
+
+    def list_logs(
+        self,
+        *,
+        module: str = "",
+        cr_id: str = "",
+        rule_id: str = "",
+        limit: int = 200,
+    ) -> list[AutomationLogRow]:
+        """Return automation_logs filtered by module/cr_id/rule_id, newest first."""
+        clauses: list[str] = []
+        params: list[object] = []
+        if module and module != "all":
+            clauses.append("module = ?")
+            params.append(module)
+        if cr_id:
+            clauses.append("cr_id = ?")
+            params.append(cr_id)
+        if rule_id:
+            clauses.append("rule_id = ?")
+            params.append(rule_id)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(int(limit))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, module, rule_id, cr_id, timestamp, event_type, detail
+                FROM automation_logs
+                {where}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [
+            AutomationLogRow(
+                id=int(r[0]),
+                module=str(r[1]),
+                rule_id=str(r[2]),
+                cr_id=str(r[3]),
+                timestamp=datetime_from_json(r[4]),
+                event_type=str(r[5]),
+                detail=str(r[6]),
+            )
+            for r in rows
+        ]
+
+    def purge_logs_for_cr(self, cr_id: str) -> int:
+        """Delete all automation_logs rows for a CR (retention on terminal state).
+
+        Returns the number of rows deleted. ``automation_rule_logs`` is NOT
+        touched (rules-only backward-compat table).
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM automation_logs WHERE cr_id = ?",
+                (cr_id,),
+            )
+        return int(cursor.rowcount or 0)
+
+    def clear_all_logs(self) -> int:
+        """Delete all automation_logs rows. Returns count deleted."""
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM automation_logs")
+        return int(cursor.rowcount or 0)
+
     def insert_notification(self, notification: Notification) -> None:
         """Persist a notification keyed by its id.
 
@@ -511,6 +620,58 @@ class CacheDb:
                 """
             ).fetchall()
         return [self._notification_from_row(row) for row in rows]
+
+    _APPROVAL_COLUMNS = (
+        "job_id",
+        "project_path",
+        "request_type",
+        "cr_number",
+        "email_subject",
+        "sent_at",
+        "status",
+        "reply_received_at",
+    )
+
+    def upsert_approval_job(self, row: dict[str, object]) -> None:
+        values = tuple(row.get(column) for column in self._APPROVAL_COLUMNS)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO approval_polling_jobs
+                    (job_id, project_path, request_type, cr_number, email_subject, sent_at, status, reply_received_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    reply_received_at = excluded.reply_received_at
+                """,
+                values,
+            )
+
+    def update_approval_job(self, job_id: str, status: str, reply_received_at: str | None = None) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE approval_polling_jobs SET status = ?, reply_received_at = ? WHERE job_id = ?",
+                (status, reply_received_at, job_id),
+            )
+
+    def latest_approval_job(self, project_path: str, request_type: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                f"SELECT {', '.join(self._APPROVAL_COLUMNS)} FROM approval_polling_jobs"
+                " WHERE project_path = ? AND request_type = ?"
+                " ORDER BY created_at DESC, job_id DESC LIMIT 1",
+                (project_path, request_type),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(self._APPROVAL_COLUMNS, row))
+
+    def list_polling_approval_jobs(self) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT {', '.join(self._APPROVAL_COLUMNS)} FROM approval_polling_jobs WHERE status = 'polling'",
+            ).fetchall()
+        return [dict(zip(self._APPROVAL_COLUMNS, row)) for row in rows]
 
     @contextmanager
     def _connect(self):
@@ -603,6 +764,34 @@ class CacheDb:
                 success INTEGER NOT NULL DEFAULT 0,
                 error_message TEXT,
                 timestamp TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS automation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                module TEXT NOT NULL DEFAULT '',
+                rule_id TEXT NOT NULL DEFAULT '',
+                cr_id TEXT NOT NULL DEFAULT '',
+                timestamp TEXT,
+                event_type TEXT NOT NULL DEFAULT '',
+                detail TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS approval_polling_jobs (
+                job_id TEXT PRIMARY KEY,
+                project_path TEXT NOT NULL,
+                request_type TEXT NOT NULL,
+                cr_number TEXT NOT NULL DEFAULT '',
+                email_subject TEXT NOT NULL DEFAULT '',
+                sent_at TEXT,
+                status TEXT NOT NULL DEFAULT 'polling',
+                reply_received_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
             """
         )

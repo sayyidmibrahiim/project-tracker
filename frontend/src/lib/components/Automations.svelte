@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { callBridge, isPywebviewReady } from "../bridge";
   import AutomationsOutlook from "./AutomationsOutlook.svelte";
   import TeamsActions from "./TeamsActions.svelte";
@@ -14,9 +14,22 @@
     { id: "rules", label: "Rules Engine" },
   ];
 
-  let activeTab: TabId = $state("outlook");
+  let { initialTemplateKind = null, initialRuleGoal = null, onConsumedTemplateKind, onConsumedRuleGoal }: { initialTemplateKind?: "uat" | "lv" | null; initialRuleGoal?: string | null; onConsumedTemplateKind?: () => void; onConsumedRuleGoal?: () => void } = $props();
+
+  let activeTab: TabId = $state(untrack(() => (initialRuleGoal ? "rules" : "outlook")));
+  let openTemplateKind: "uat" | "lv" | null = $state(untrack(() => initialTemplateKind));
+  let presetRuleGoal: string | null = $state(untrack(() => initialRuleGoal));
   function onTabSwitch(tab: TabId) { activeTab = tab; }
   export function refresh() {}
+
+  function onTemplateClosed() {
+    openTemplateKind = null;
+    onConsumedTemplateKind?.();
+  }
+  function onPresetGoalConsumed() {
+    presetRuleGoal = null;
+    onConsumedRuleGoal?.();
+  }
 
   type SchedulerEntry = {
     id: string; name: string; schedule_type: string; channels: string[];
@@ -62,7 +75,7 @@
 
   <div class="page-stack active">
     {#if activeTab === "outlook"}
-      <AutomationsOutlook />
+      <AutomationsOutlook {openTemplateKind} onCloseTemplate={onTemplateClosed} />
     {:else if activeTab === "teams"}
       <div class="split">
         <div class="panel-card accent" style="flex:7"><div class="panel-title-row"><span class="panel-title-icon">💬</span><span class="panel-title">Teams Message Automation</span><span class="panel-subtitle">deep link + clipboard + confirmation gate</span></div><TeamsActions /></div>
@@ -71,8 +84,8 @@
     {:else if activeTab === "reminder"}
       <div class="metric-row"><div class="metric-card"><div class="metric-icon">{schedulerMetrics.total}</div><div><div class="metric-label">Total Entries</div><div class="metric-helper">Persisted scheduler entries</div></div></div><div class="metric-card"><div class="metric-icon">{schedulerMetrics.enabled}</div><div><div class="metric-label">Active</div><div class="metric-helper">Enabled entries</div></div></div><div class="metric-card"><div class="metric-icon">{schedulerMetrics.disabled}</div><div><div class="metric-label">Paused</div><div class="metric-helper">Disabled entries</div></div></div><div class="metric-card"><div class="metric-icon">{schedulerMetrics.confirmRequired}</div><div><div class="metric-label">Confirm Required</div><div class="metric-helper">Outlook/Teams channels</div></div></div><div class="metric-card"><div class="metric-icon">{ruleCount}</div><div><div class="metric-label">Rules</div><div class="metric-helper">Trigger→condition→action</div></div></div></div>
       <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">🔔</span><span class="panel-title">Reminder Rules</span><span class="panel-subtitle">scheduler control surface</span></div><SchedulerActions /></div>
-    {:else}
-      <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">▣</span><span class="panel-title">Rules Engine</span><span class="panel-subtitle">trigger / condition / action</span></div><RulesActions /></div>
+    {:else if activeTab === "rules"}
+      <div class="panel-card accent" style="flex:1"><div class="panel-title-row"><span class="panel-title-icon">▣</span><span class="panel-title">Rules Engine</span><span class="panel-subtitle">trigger / condition / action</span></div><RulesActions presetGoal={presetRuleGoal} onPresetGoalConsumed={onPresetGoalConsumed} /></div>
     {/if}
   </div>
 </section>

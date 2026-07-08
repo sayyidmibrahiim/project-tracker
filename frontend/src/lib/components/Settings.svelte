@@ -26,6 +26,8 @@
     { key: "language", card: "general" },
     { key: "datetime_format", card: "general" },
     { key: "t10_threshold_days", card: "behavior" },
+    { key: "approval_polling_interval_minutes", card: "behavior" },
+    { key: "approval_polling_max_hours", card: "behavior" },
     { key: "auto_refresh_interval", card: "behavior" },
     { key: "startup_behavior", card: "behavior" },
     { key: "second_brain_folder", card: "paths" },
@@ -119,6 +121,20 @@
       addToast(saveError, "error", 5000);
       return;
     }
+    const pollMin = Number(form["approval_polling_interval_minutes"]);
+    if (!Number.isInteger(pollMin) || pollMin < 1 || pollMin > 60) {
+      saveState = "error";
+      saveError = "Approval polling interval must be 1–60 minutes.";
+      addToast(saveError, "error", 5000);
+      return;
+    }
+    const pollMax = Number(form["approval_polling_max_hours"]);
+    if (!Number.isInteger(pollMax) || pollMax < 1 || pollMax > 24) {
+      saveState = "error";
+      saveError = "Approval polling max duration must be 1–24 hours.";
+      addToast(saveError, "error", 5000);
+      return;
+    }
     if (form["root_folder"] && typeof form["root_folder"] === "string" && form["root_folder"].trim()) {
       const trimmed = form["root_folder"].trim();
       if (/[/\\]$/.test(trimmed)) {
@@ -200,6 +216,8 @@
           <div class="panel-title-row"><span class="panel-title-icon">◷</span><span class="panel-title">Behavior</span></div>
           <div class="form-grid">
             <label class="field"><span>T-10 Threshold Days</span><input class="input" type="number" min="1" max="30" value={String(form["t10_threshold_days"] ?? 10)} oninput={(e) => handleFieldChange("t10_threshold_days", (e.target as HTMLInputElement).value)} /></label>
+            <label class="field"><span>Approval polling interval (minutes)</span><input class="input" type="number" min="1" max="60" value={String(form["approval_polling_interval_minutes"] ?? 5)} oninput={(e) => handleFieldChange("approval_polling_interval_minutes", (e.target as HTMLInputElement).value)} /></label>
+            <label class="field"><span>Approval polling max duration (hours)</span><input class="input" type="number" min="1" max="24" value={String(form["approval_polling_max_hours"] ?? 3)} oninput={(e) => handleFieldChange("approval_polling_max_hours", (e.target as HTMLInputElement).value)} /></label>
             <label class="field"><span>Auto Refresh</span><select class="combo" value={String(form["auto_refresh_interval"] ?? "off")} onchange={(e) => handleFieldChange("auto_refresh_interval", (e.target as HTMLSelectElement).value)}><option value="off">Off</option><option value="15s">15 seconds</option><option value="30s">30 seconds</option><option value="1min">1 minute</option></select></label>
             <label class="field"><span>Startup Behavior</span><select class="combo" value={String(form["startup_behavior"] ?? "current_year_dashboard")} onchange={(e) => handleFieldChange("startup_behavior", (e.target as HTMLSelectElement).value)}><option value="current_year_dashboard">Current Year Dashboard</option><option value="project_details">Project Details</option><option value="second_brain">Second Brain</option></select></label>
           </div>

@@ -18,6 +18,18 @@
   import { BridgeErrorCode } from "../types";
   import ConfirmModal from "./ConfirmModal.svelte";
 
+  let { presetGoal = null, onPresetGoalConsumed }: { presetGoal?: string | null; onPresetGoalConsumed?: () => void } = $props();
+
+  // Deep-link from PD: open the create form with a preset goal.
+  $effect(() => {
+    void presetGoal;
+    if (presetGoal) {
+      openCreate();
+      setGoal(presetGoal);
+      onPresetGoalConsumed?.();
+    }
+  });
+
   type RuleAction = { type: string; params?: Record<string, unknown> };
   type StoredRule = AutomationRule & { actions?: RuleAction[] };
 
@@ -44,6 +56,22 @@
   ] as const;
   const HIGH_RISK_ACTIONS = new Set(["send_outlook_email", "send_teams_message"]);
 
+  // Slice 3: goal + scope vocabulary.
+  const GOALS = [
+    { id: "send_email", label: "Send New Email", defaultActions: [{ type: "send_outlook_email" }] },
+    { id: "auto_reply", label: "Auto Reply", defaultActions: [{ type: "send_outlook_email" }] },
+    { id: "download_email", label: "Download Email", defaultActions: [{ type: "download_email" }] },
+    { id: "auto_update_status", label: "Auto Update Status", defaultActions: [{ type: "update_cr_state" }] },
+    { id: "send_teams", label: "Send Teams", defaultActions: [{ type: "send_teams_message" }] },
+  ] as const;
+  const SCOPE_TYPES = [
+    { id: "all", label: "All CR" },
+    { id: "specific", label: "Specific CR" },
+    { id: "filtered", label: "Filtered CR" },
+  ] as const;
+
+  type Conflict = { rule_ids: string[]; rule_names: string[]; key: string };
+
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let loadState: LoadState = $state("idle");
   let errorCode: string = $state("");
@@ -63,6 +91,11 @@
   let formEnabled: boolean = $state(true);
   let formActions: { type: string }[] = $state([]);
   let pendingHighRiskSave: { payload: Record<string, unknown>; isUpdate: boolean } | null = $state(null);
+  // Slice 3: goal + scope + conflicts.
+  let formGoal: string = $state("send_email");
+  let formScopeType: string = $state("all");
+  let formScopeCrIds: string = $state("");
+  let conflicts: Conflict[] = $state([]);
 
   // Per-rule logs panel.
   let logsForRule: string = $state("");
@@ -89,6 +122,17 @@
     }
     rules = resp.data ?? [];
     loadState = "loaded";
+    void loadConflicts();
+  }
+
+  async function loadConflicts() {
+    if (!isPywebviewReady()) return;
+    const resp = await callBridge<Conflict[]>("rules_detect_conflicts");
+    if (resp.ok) conflicts = resp.data ?? [];
+  }
+
+  function ruleHasConflict(ruleId: string): boolean {
+    return conflicts.some((c) => c.rule_ids.includes(ruleId));
   }
 
   onMount(loadRules);
@@ -140,15 +184,26 @@
     editingId = "";
     formName = "";
     formEnabled = true;
-    formActions = [];
+    formGoal = "send_email";
+    formScopeType = "all";
+    formScopeCrIds = "";
+    formActions = GOALS[0].defaultActions.map((a) => ({ type: a.type }));
     formOpen = true;
   }
-  function openEdit(rule: StoredRule) {
+  function openEdit(rule: StoredRule & { goal?: string; scope?: { type?: string; cr_ids?: string[] } }) {
     editingId = rule.id;
     formName = rule.name;
     formEnabled = rule.enabled !== false;
+    formGoal = rule.goal ?? "send_email";
+    formScopeType = rule.scope?.type ?? "all";
+    formScopeCrIds = (rule.scope?.cr_ids ?? []).join(", ");
     formActions = (rule.actions ?? []).map((a) => ({ type: a.type }));
     formOpen = true;
+  }
+  function setGoal(goalId: string) {
+    formGoal = goalId;
+    const preset = GOALS.find((g) => g.id === goalId);
+    if (preset) formActions = preset.defaultActions.map((a) => ({ type: a.type }));
   }
   function closeForm() {
     formOpen = false;
@@ -176,6 +231,11 @@
     const payload: Record<string, unknown> = {
       name: formName.trim(),
       enabled: formEnabled,
+      goal: formGoal,
+      scope: {
+        type: formScopeType,
+        ...(formScopeType === "specific" ? { cr_ids: formScopeCrIds.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
+      },
       actions: formActions,
     };
     const isUpdate = Boolean(editingId);
@@ -230,9 +290,30 @@
     logsForRule = rule.id;
     logsLoading = true;
     logs = [];
-    const resp = await callBridge<RuleLog[]>("rules_get_logs", rule.id, 50);
+    await refreshLogs();
+  }
+  async function refreshLogs() {
+    if (!logsForRule) return;
+    logsLoading = true;
+    const resp = await callBridge<RuleLog[]>("rules_get_logs", logsForRule, 50);
     logsLoading = false;
     if (resp.ok) logs = resp.data ?? [];
+  }
+  function exportLogs() {
+    const blob = new Blob([JSON.stringify(logs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rule-${logsForRule}-logs.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  async function clearRuleLogs() {
+    if (!logsForRule) return;
+    const resp = await callBridge<{ deleted: number }>("rules_clear_logs", logsForRule);
+    if (resp.ok) {
+      logs = [];
+    }
   }
   function closeLogs() {
     logsForRule = "";
@@ -263,6 +344,12 @@
           <div class="ru-card-head">
             <span class="ru-name">{rule.name || "(unnamed)"}</span>
             <span class="ru-pill" class:enabled={rule.enabled} class:disabled={!rule.enabled}>{rule.enabled ? "Enabled" : "Disabled"}</span>
+            {#if (rule as StoredRule & { is_pre_seeded?: boolean }).is_pre_seeded}
+              <span class="ru-pill ru-pill-seed" title="Pre-seeded, disabled by default">seed</span>
+            {/if}
+            {#if ruleHasConflict(rule.id)}
+              <span class="ru-pill ru-pill-warn" title="Shares trigger+goal+scope with another enabled rule">⚠ conflict</span>
+            {/if}
             {#if hasHighRisk(rule.actions ?? [])}
               <span class="ru-pill ru-pill-warn" title="Outlook/Teams action">⚠ high-risk</span>
             {/if}
@@ -307,6 +394,19 @@
       <h4 class="ru-form-title">{editingId ? "Edit rule" : "New rule"}</h4>
       <label class="ru-label">Name<input class="ru-input" bind:value={formName} /></label>
       <label class="ru-checkbox"><input type="checkbox" bind:checked={formEnabled} /> Enabled</label>
+      <label class="ru-label">Goal (drives the action set)
+        <select class="ru-input" value={formGoal} onchange={(e) => setGoal((e.currentTarget as HTMLSelectElement).value)}>
+          {#each GOALS as g}<option value={g.id}>{g.label}</option>{/each}
+        </select>
+      </label>
+      <label class="ru-label">Applies to
+        <select class="ru-input" value={formScopeType} onchange={(e) => (formScopeType = (e.currentTarget as HTMLSelectElement).value)}>
+          {#each SCOPE_TYPES as s}<option value={s.id}>{s.label}</option>{/each}
+        </select>
+      </label>
+      {#if formScopeType === "specific"}
+        <label class="ru-label">CR IDs (comma-separated)<input class="ru-input" bind:value={formScopeCrIds} placeholder="CR-2026-001, CR-2026-002" /></label>
+      {/if}
       <div class="ru-form-block">
         <span class="ru-label">Actions (executed in order, halt on first failure)</span>
         {#each formActions as action, i}
@@ -329,10 +429,16 @@
     </div>
   {/if}
 
-  <!-- Logs -->
+  <!-- Logs right-sidebar drawer -->
   {#if logsForRule}
-    <div class="ru-form">
-      <h4 class="ru-form-title">Logs · <code>{logsForRule}</code></h4>
+    <aside class="ru-sidebar" aria-label={`Logs for rule ${logsForRule}`}>
+      <div class="ru-sidebar-head">
+        <h4 class="ru-form-title">Logs · <code>{logsForRule}</code></h4>
+        <button class="ru-btn" onclick={refreshLogs} disabled={logsLoading}>↻ Refresh</button>
+        <button class="ru-btn" onclick={exportLogs} disabled={logs.length === 0}>⤓ Export</button>
+        <button class="ru-btn ru-btn-danger" onclick={clearRuleLogs} disabled={logs.length === 0}>✕ Clear</button>
+        <button class="ru-btn" onclick={closeLogs} aria-label="Close sidebar">✕</button>
+      </div>
       {#if logsLoading}<p class="ru-hint">◌ Loading logs…</p>
       {:else if logs.length === 0}<p class="ru-hint">No execution logs recorded for this rule.</p>
       {:else}
@@ -346,8 +452,7 @@
           {/each}
         </div>
       {/if}
-      <div class="ru-form-actions"><button class="ru-btn" onclick={closeLogs}>Close</button></div>
-    </div>
+    </aside>
   {/if}
 </div>
 
@@ -383,6 +488,7 @@
   .ru-pill { font-size:9px; font-weight:800; padding:2px 7px; border-radius:999px; border:1px solid #D7DCE2; background:var(--color-workspace-panel); color:var(--color-muted-light); }
   .ru-pill.enabled { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border-color:var(--color-soft-pink-border); }
   .ru-pill-warn { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+  .ru-pill-seed { background:#e0e7ff; color:#3730a3; border-color:#c7d2fe; }
   .ru-actions-list { display:flex; gap:4px; flex-wrap:wrap; }
   .ru-action-pill { font-size:9px; font-weight:750; padding:2px 7px; border-radius:4px; background:#f3f4f6; color:var(--color-ink); border:1px solid #D7DCE2; font-family:monospace; }
   .ru-action-pill.warn { background:#fef3c7; color:#92400e; border-color:#fde68a; }
@@ -402,6 +508,9 @@
   .ru-form-action-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   .ru-form-actions { display:flex; gap:6px; justify-content:flex-end; }
   .ru-logs { display:flex; flex-direction:column; gap:4px; max-height:280px; overflow-y:auto; }
+  .ru-sidebar { position:fixed; right:0; top:0; bottom:0; width:380px; max-width:90vw; background:#fff; border-left:1px solid #D7DCE2; box-shadow:-4px 0 16px rgba(0,0,0,0.08); z-index:50; display:flex; flex-direction:column; gap:8px; padding:12px; overflow-y:auto; }
+  .ru-sidebar-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ru-sidebar-head .ru-form-title { flex:1 1 auto; }
   .ru-log-row { display:flex; gap:8px; padding:4px 6px; border-radius:4px; font-size:10px; font-weight:700; flex-wrap:wrap; }
   .ru-log-row.ok { background:#ecfdf5; color:#166534; }
   .ru-log-row.err { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }

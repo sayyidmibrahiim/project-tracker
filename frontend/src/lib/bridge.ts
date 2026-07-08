@@ -1,4 +1,7 @@
 import type {
+  ApprovalStatus,
+  ApprovalTemplate,
+  ApprovalTemplateSummary,
   BridgeResponse,
   DocxExportResult,
   GlobalPlan,
@@ -307,6 +310,77 @@ export function exportToDocx(
   suggestedName: string,
 ): Promise<BridgeResponse<DocxExportResult>> {
   return callBridge("export_to_docx", html, "html", suggestedName);
+}
+
+// ── Piece C approval automation ──
+
+export function approvalGetStatus(projectPath: string): Promise<BridgeResponse<ApprovalStatus>> {
+  return callBridge("get_approval_status", projectPath);
+}
+
+export function approvalSetEnabled(projectPath: string, enabled: boolean): Promise<BridgeResponse<{ automation_enabled: boolean }>> {
+  return callBridge("approval_set_enabled", projectPath, enabled);
+}
+
+export function approvalSetAutoDownload(projectPath: string, kind: "uat" | "lv", enabled: boolean): Promise<BridgeResponse<{ kind: string; auto_download: boolean }>> {
+  return callBridge("approval_set_auto_download", projectPath, kind, enabled);
+}
+
+export function sendUatApprovalRequest(projectPath: string, mode: "draft" | "send" | "" = ""): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_uat_approval_request", projectPath, mode);
+}
+
+export function sendLvApprovalRequest(projectPath: string, mode: "draft" | "send" | "" = ""): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return callBridge("send_lv_approval_request", projectPath, mode);
+}
+
+/** Send or draft an approval request for either kind (mode picks send vs open-draft). */
+export function approvalSend(projectPath: string, kind: "uat" | "lv", mode: "draft" | "send"): Promise<BridgeResponse<{ status: string; job_id?: string }>> {
+  return kind === "uat" ? sendUatApprovalRequest(projectPath, mode) : sendLvApprovalRequest(projectPath, mode);
+}
+
+export function stopApprovalPolling(projectPath: string, requestType: "uat" | "lv"): Promise<BridgeResponse<{ status: string }>> {
+  return callBridge("stop_approval_polling", projectPath, requestType);
+}
+
+export function approvalForceCheck(projectPath: string, requestType: "uat" | "lv"): Promise<BridgeResponse<{ status: string; subject?: string }>> {
+  return callBridge("approval_force_check", projectPath, requestType);
+}
+
+export function approvalSetAutoUpdateCrState(projectPath: string, enabled: boolean): Promise<BridgeResponse<{ auto_update_cr_state: boolean }>> {
+  return callBridge("approval_set_auto_update_cr_state", projectPath, enabled);
+}
+
+export function getApprovalTemplate(projectPath: string, kind: "uat" | "lv"): Promise<BridgeResponse<{ source: string; template: ApprovalTemplate }>> {
+  return callBridge("get_approval_template", projectPath, kind);
+}
+
+export function updateApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate): Promise<BridgeResponse<{ source: string; template: ApprovalTemplate }>> {
+  return callBridge("update_approval_template", projectPath, kind, template);
+}
+
+export function previewApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate | null): Promise<BridgeResponse<{ to: string; cc: string; subject: string; body: string }>> {
+  return callBridge("preview_approval_template", projectPath, kind, template);
+}
+
+/** Slice 2: remove a per-project template override. */
+export function resetApprovalTemplate(projectPath: string, kind: "uat" | "lv"): Promise<BridgeResponse<{ removed: boolean; source: string }>> {
+  return callBridge("approval_reset_template", projectPath, kind);
+}
+
+/** Slice 2: list all known template kinds + summary. */
+export function listApprovalTemplates(): Promise<BridgeResponse<{ templates: ApprovalTemplateSummary[] }>> {
+  return callBridge("approval_list_templates");
+}
+
+/** Slice 2: open a real Outlook draft with resolved data. */
+export function testApprovalTemplate(projectPath: string, kind: "uat" | "lv", template: ApprovalTemplate | null): Promise<BridgeResponse<{ status: string; subject?: string }>> {
+  return callBridge("approval_test_template", projectPath, kind, template);
+}
+
+/** Slice 2: autocomplete tokens with real preview values for a project. */
+export function approvalAutocompleteTokens(projectPath: string): Promise<BridgeResponse<{ tokens: [string, string][] }>> {
+  return callBridge("approval_autocomplete_tokens", projectPath);
 }
 
 // ── DOCX pipeline (D-0012): source.json = truth, .docx = derived export ──

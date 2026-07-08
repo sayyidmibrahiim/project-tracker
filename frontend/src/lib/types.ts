@@ -341,3 +341,50 @@ export interface RteImageSaveResult {
 
 export type RteSaveReason = "autosave" | "manual" | "switch" | "migration";
 
+// ── Piece C approval automation ──
+export interface ApprovalJob {
+  job_id: string;
+  project_path: string;
+  request_type: "uat" | "lv";
+  cr_number: string;
+  email_subject: string;
+  sent_at: string | null;
+  status: "polling" | "completed" | "timeout" | "stopped" | "dev_skipped";
+  reply_received_at: string | null;
+}
+
+export interface ApprovalKindStatus {
+  eligible: boolean;
+  reasons: string[];
+  job: ApprovalJob | null;
+  auto_download: boolean;
+}
+
+export interface ApprovalStatus {
+  /** Effective value: per-project override else global default, forced off when locked. */
+  automation_enabled: boolean;
+  automation_locked: boolean;
+  outlook_available: boolean;
+  cr_number: string;
+  auto_update_cr_state: boolean;
+  uat: ApprovalKindStatus;
+  lv: ApprovalKindStatus;
+}
+
+export interface ApprovalTemplate {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  mode: "draft" | "send";
+}
+
+/** Slice 2: template summary row for the Automations template list. */
+export interface ApprovalTemplateSummary {
+  kind: string;
+  key: string;
+  name: string;
+  type: string;
+  has_default: boolean;
+}
+
