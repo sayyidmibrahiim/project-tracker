@@ -20,6 +20,8 @@
 
 **Verify:** svelte-check 0 errors/4 pre-existing warnings, 156 files; frontend 184 pass (+2 CICD); `test_cicd_service.py` 14 pass; full pytest 1878 passed + 6 known baseline (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2), NO new fails; build ✓ (app closed 2026-07-09) + app smoke ✓ clean (0-byte stdout/stderr, no traceback).
 
+**Design-first harden pass** (`8c2d4e43`, after user pushed on UI/UX maturity): CICDBrowser rewritten — git-check gate kills the mount install-steps flash (`checking` state); per-region loading (git/repos/tree/clone spinner, reduced-motion safe); clone-URL inline validation (Clone disabled until valid HTTP(S)); shared-root path reuses `util_choose_folder` native picker + guarded save (shared_root persists only after Apply with a non-empty path); `:focus-visible`/`:active` keyboard states on repos/files/dirs; per-file **letter badges M/U/S** instead of color-only dots (a11y — color not sole cue); auto-select the just-cloned repo; responsive stack at ≤900px and ≤560px + ellipsis truncation + `min-width:0`. svelte-check 0 err, frontend 184 pass, build ✓, smoke ✓. Honest caveat: no browser/screenshot tool for pywebview here → visual pixel-check is still the user's live step (repo design-first flow).
+
 **Manual gate:** user runs `npm run build` (app closed) → restart → Piece D checklist in PROGRESS.md → merge to main waits approval. Branch NOT deleted.
 
 **active_menu:** cicd
