@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import base64
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -42,6 +44,26 @@ def encode_repo_id(appcode: str, repo: str) -> str:
     """Return URL-safe repo identity; backend decodes/resolves later."""
     raw = json.dumps({"appcode": appcode, "repo": repo}, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def decode_repo_id(repo_id: str) -> dict[str, str]:
+    padded = str(repo_id or "") + "=" * (-len(str(repo_id or "")) % 4)
+    data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+    return {"appcode": str(data.get("appcode") or ""), "repo": str(data.get("repo") or "")}
+
+
+def run_git(repo_path: Path, args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return subprocess.run(
+        [_git(), "-C", str(repo_path), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        creationflags=_CREATE_NO_WINDOW,
+        env=env,
+        shell=False,
+    )
 
 
 def check_git() -> dict[str, object]:
@@ -126,6 +148,59 @@ def parse_porcelain(text: str) -> dict[str, str]:
         if path:
             result[path] = category
     return result
+
+
+def _status_category(code: str) -> str:
+    if code == "??":
+        return "untracked"
+    if "U" in code:
+        return "conflict"
+    if "D" in code:
+        return "deleted"
+    return _classify(code)
+
+
+def parse_git_status(text: str) -> dict[str, object]:
+    """Parse `git status --porcelain=v1 -b` output for UI source control."""
+    branch = ""
+    upstream = ""
+    ahead = 0
+    behind = 0
+    changes: list[dict[str, object]] = []
+    for line in (text or "").splitlines():
+        if line.startswith("## "):
+            head = line[3:]
+            if " [" in head:
+                head, meta = head.split(" [", 1)
+                ahead_match = re.search(r"ahead (\d+)", meta)
+                behind_match = re.search(r"behind (\d+)", meta)
+                ahead = int(ahead_match.group(1)) if ahead_match else 0
+                behind = int(behind_match.group(1)) if behind_match else 0
+            if "..." in head:
+                branch, upstream = head.split("...", 1)
+            else:
+                branch = head
+            continue
+        if len(line) < 4:
+            continue
+        code, rest = line[:2], line[3:]
+        status = _status_category(code)
+        if status == "clean":
+            continue
+        rel_path = rest.split(" -> ", 1)[-1].strip().strip('"')
+        if not rel_path:
+            continue
+        staged = status != "conflict" and code[0] not in " ?"
+        changes.append({"rel_path": rel_path, "status": status, "staged": staged, "selected": False})
+    return {
+        "branch": branch,
+        "upstream": upstream,
+        "ahead": ahead,
+        "behind": behind,
+        "dirty": bool(changes),
+        "conflicted": any(item["status"] == "conflict" for item in changes),
+        "changes": changes,
+    }
 
 
 def build_file_tree(repo_path: Path, status_map: dict[str, str]) -> list[dict]:
@@ -215,18 +290,21 @@ class CicdService:
     def remote_url(self, repo_path: Path) -> str:
         """Return origin URL for an existing repo, or ''."""
         try:
-            proc = subprocess.run(
-                [_git(), "-C", str(repo_path), "config", "--get", "remote.origin.url"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                creationflags=_CREATE_NO_WINDOW,
-            )
+            proc = run_git(Path(repo_path), ["config", "--get", "remote.origin.url"], timeout=15)
             if proc.returncode != 0:
                 return ""
             return (proc.stdout or "").strip()
         except Exception:
             return ""
+
+    def repo_status(self, repo_path: Path) -> dict[str, object]:
+        """Return parsed branch/change status for an existing repo."""
+        proc = run_git(Path(repo_path), ["status", "--porcelain=v1", "-b"], timeout=30)
+        if proc.returncode != 0:
+            raise ValueError((proc.stderr or proc.stdout or "git status failed").strip())
+        status = parse_git_status(proc.stdout or "")
+        status["remote_url"] = self.remote_url(Path(repo_path))
+        return status
 
     def start_clone(self, clone_url: str, dest_dir: Path) -> dict[str, object]:
         """Validate, then clone the 'cicd' branch on a daemon thread.

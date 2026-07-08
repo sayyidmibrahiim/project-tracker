@@ -262,6 +262,15 @@ class CicdServiceProtocol(Protocol):
     def clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> object:
         """Clone from URL after backend resolves/creates appcode target."""
 
+    def job(self, job_id: str) -> object:
+        """Return git job status by id."""
+
+    def workspace(self, appcode: str = "") -> object:
+        """Return appcodes and repos with backend-generated repo ids."""
+
+    def repo_status(self, repo_id: str) -> object:
+        """Return branch/change status for a backend-resolved repo id."""
+
     def clone_status(self, repo_name: str) -> object:
         """Return {status, error} for a clone job."""
 
@@ -1054,6 +1063,33 @@ class JsApi:
             return ok(_to_frontend_safe(self._cicd_service.clone_from_link(clone_url, appcode_override, confirm_create)))
         except Exception as exc:
             return fail(str(exc), code="CICD_CLONE_FROM_LINK_FAILED")
+
+    def cicd_job(self, job_id: str) -> dict[str, object]:
+        """Poll a git job by id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.job(job_id)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_JOB_FAILED")
+
+    def cicd_workspace(self, appcode: str = "") -> dict[str, object]:
+        """Return appcodes + repos with backend-generated repo ids."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.workspace(appcode)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_WORKSPACE_FAILED")
+
+    def cicd_repo_status(self, repo_id: str) -> dict[str, object]:
+        """Return branch/change status for a backend-resolved repo id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.repo_status(repo_id)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_REPO_STATUS_FAILED")
 
     def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
         """Poll a clone job {status, error}."""

@@ -183,6 +183,78 @@ def test_cicd_clone_from_link_existing_different_remote_blocks(tmp_path, monkeyp
     assert "different remote" in resp["error"]["message"]
 
 
+# ── repo id / status / workspace ───────────────────────────────────────
+def test_cicd_repo_status_rejects_repo_id_escape(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    bad_id = cicd.encode_repo_id("myapp", "../evil")
+    resp = api.cicd_repo_status(bad_id)
+    assert resp["ok"] is False
+    assert "outside CICD folder" in resp["error"]["message"]
+
+
+def test_parse_git_status_porcelain_branch_changes():
+    text = "## cicd...origin/cicd [ahead 1, behind 2]\n M a.txt\nA  staged.txt\n?? new.txt\nUU conflict.txt\n D old.txt\n"
+    result = cicd.parse_git_status(text)
+    assert result["branch"] == "cicd"
+    assert result["upstream"] == "origin/cicd"
+    assert result["ahead"] == 1
+    assert result["behind"] == 2
+    assert result["dirty"] is True
+    assert result["conflicted"] is True
+    changes = {item["rel_path"]: item for item in result["changes"]}
+    assert changes["a.txt"]["status"] == "modified"
+    assert changes["staged.txt"]["status"] == "staged"
+    assert changes["new.txt"]["status"] == "untracked"
+    assert changes["conflict.txt"]["status"] == "conflict"
+    assert changes["old.txt"]["status"] == "deleted"
+
+
+def test_run_git_uses_safe_subprocess_conventions(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(cicd.subprocess, "run", fake_run)
+    cicd.run_git(tmp_path, ["status"], timeout=12)
+    assert captured["cmd"][-1] == "status"
+    assert captured["kwargs"]["shell"] is False
+    assert captured["kwargs"]["timeout"] == 12
+    assert captured["kwargs"]["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert "creationflags" in captured["kwargs"]
+
+
+def test_cicd_workspace_returns_appcodes_and_repo_ids(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    (tmp_path / "root" / "myapp" / "CICD" / "repo1").mkdir(parents=True)
+    resp = api.cicd_workspace()
+    assert resp["ok"] is True
+    assert resp["data"]["appcodes"][0]["name"] == "myapp"
+    repo = resp["data"]["repos"][0]
+    assert repo["name"] == "repo1"
+    assert repo["repo_id"]
+
+
+def test_cicd_repo_status_bridge(tmp_path, monkeypatch):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    (tmp_path / "root" / "myapp" / "CICD" / "repo1").mkdir(parents=True)
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="## cicd...origin/cicd [ahead 1]\n M pipe.yml\n", stderr="")
+
+    monkeypatch.setattr(cicd.subprocess, "run", fake_run)
+    resp = api.cicd_repo_status(cicd.encode_repo_id("myapp", "repo1"))
+    assert resp["ok"] is True
+    assert resp["data"]["branch"] == "cicd"
+    assert resp["data"]["ahead"] == 1
+    assert resp["data"]["changes"][0]["rel_path"] == "pipe.yml"
+
+
 # ── parse_porcelain ────────────────────────────────────────────────────
 def test_parse_porcelain_categories():
     text = " M src/main.py\n?? new.sh\nA  staged.txt\nMM both.py\n"

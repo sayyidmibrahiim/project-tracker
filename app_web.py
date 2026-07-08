@@ -1367,6 +1367,40 @@ def create_js_api(
             started = self._service.start_clone(info.clone_url, cicd_dir)
             return {"job_id": info.repo_name, "repo_id": repo_id, "repo_name": info.repo_name, "appcode": appcode, "status": started.get("status", "cloning")}
 
+        def _repo_path(self, repo_id: str) -> tuple[str, str, Path]:
+            from services.cicd_service import decode_repo_id
+
+            info = decode_repo_id(repo_id)
+            appcode = info["appcode"]
+            repo = info["repo"]
+            config = self._appcode.get_appcode_config(appcode)
+            cicd_dir = self._cicd_dir_from_config(config).resolve()
+            repo_path = (cicd_dir / repo).resolve()
+            if cicd_dir not in repo_path.parents and repo_path != cicd_dir:
+                raise ValueError("Repository path is outside CICD folder")
+            return appcode, repo, repo_path
+
+        def workspace(self, appcode: str = "") -> object:
+            from services.cicd_service import encode_repo_id
+
+            appcodes = list(self._appcode.list_appcodes())
+            selected = str(appcode or (appcodes[0]["name"] if appcodes else ""))
+            repos = []
+            if selected:
+                for repo in self._service.list_repos(self._cicd_dir(selected)):
+                    repo = dict(repo)
+                    repo["repo_id"] = encode_repo_id(selected, str(repo["name"]))
+                    repos.append(repo)
+            return {"appcodes": appcodes, "repos": repos, "selected_appcode": selected}
+
+        def repo_status(self, repo_id: str) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            return self._service.repo_status(repo_path)
+
+        def job(self, job_id: str) -> object:
+            data = self._service.clone_status(job_id)
+            return {"job_id": job_id, "kind": "clone", "state": data.get("status", "unknown"), "progress_label": data.get("status", "unknown"), "exit_code": None, "stdout_tail": "", "stderr_tail": data.get("error", ""), "repo_id": ""}
+
         def clone_status(self, repo_name: str) -> object:
             return self._service.clone_status(repo_name)
 
