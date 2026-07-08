@@ -290,9 +290,30 @@
     logsForRule = rule.id;
     logsLoading = true;
     logs = [];
-    const resp = await callBridge<RuleLog[]>("rules_get_logs", rule.id, 50);
+    await refreshLogs();
+  }
+  async function refreshLogs() {
+    if (!logsForRule) return;
+    logsLoading = true;
+    const resp = await callBridge<RuleLog[]>("rules_get_logs", logsForRule, 50);
     logsLoading = false;
     if (resp.ok) logs = resp.data ?? [];
+  }
+  function exportLogs() {
+    const blob = new Blob([JSON.stringify(logs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rule-${logsForRule}-logs.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  async function clearRuleLogs() {
+    if (!logsForRule) return;
+    const resp = await callBridge<{ deleted: number }>("rules_clear_logs", logsForRule);
+    if (resp.ok) {
+      logs = [];
+    }
   }
   function closeLogs() {
     logsForRule = "";
@@ -408,10 +429,16 @@
     </div>
   {/if}
 
-  <!-- Logs -->
+  <!-- Logs right-sidebar drawer -->
   {#if logsForRule}
-    <div class="ru-form">
-      <h4 class="ru-form-title">Logs · <code>{logsForRule}</code></h4>
+    <aside class="ru-sidebar" aria-label={`Logs for rule ${logsForRule}`}>
+      <div class="ru-sidebar-head">
+        <h4 class="ru-form-title">Logs · <code>{logsForRule}</code></h4>
+        <button class="ru-btn" onclick={refreshLogs} disabled={logsLoading}>↻ Refresh</button>
+        <button class="ru-btn" onclick={exportLogs} disabled={logs.length === 0}>⤓ Export</button>
+        <button class="ru-btn ru-btn-danger" onclick={clearRuleLogs} disabled={logs.length === 0}>✕ Clear</button>
+        <button class="ru-btn" onclick={closeLogs} aria-label="Close sidebar">✕</button>
+      </div>
       {#if logsLoading}<p class="ru-hint">◌ Loading logs…</p>
       {:else if logs.length === 0}<p class="ru-hint">No execution logs recorded for this rule.</p>
       {:else}
@@ -425,8 +452,7 @@
           {/each}
         </div>
       {/if}
-      <div class="ru-form-actions"><button class="ru-btn" onclick={closeLogs}>Close</button></div>
-    </div>
+    </aside>
   {/if}
 </div>
 
@@ -482,6 +508,9 @@
   .ru-form-action-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   .ru-form-actions { display:flex; gap:6px; justify-content:flex-end; }
   .ru-logs { display:flex; flex-direction:column; gap:4px; max-height:280px; overflow-y:auto; }
+  .ru-sidebar { position:fixed; right:0; top:0; bottom:0; width:380px; max-width:90vw; background:#fff; border-left:1px solid #D7DCE2; box-shadow:-4px 0 16px rgba(0,0,0,0.08); z-index:50; display:flex; flex-direction:column; gap:8px; padding:12px; overflow-y:auto; }
+  .ru-sidebar-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ru-sidebar-head .ru-form-title { flex:1 1 auto; }
   .ru-log-row { display:flex; gap:8px; padding:4px 6px; border-radius:4px; font-size:10px; font-weight:700; flex-wrap:wrap; }
   .ru-log-row.ok { background:#ecfdf5; color:#166534; }
   .ru-log-row.err { background:var(--color-soft-pink-surface); color:var(--color-dbs-red); }

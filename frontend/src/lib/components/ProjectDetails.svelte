@@ -12,7 +12,7 @@
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv", goal?: string) => void } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations, onNavigateLogs }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv", goal?: string) => void; onNavigateLogs?: (crId?: string) => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -1265,6 +1265,7 @@
                         : "CR automation master toggle"}
                     onclick={toggleApproval}
                   >{approvalStatus.automation_enabled ? "ON" : "OFF"}</button>
+                  <button class="pd-command-btn" type="button" title="View automation logs for this CR" onclick={() => onNavigateLogs?.(approvalStatus?.cr_number)}>Logs</button>
                 </div>
                 {#if approvalStatus.automation_locked}
                   <p class="pd-auto-hint">Automation is forced OFF because the CR is finished, postponed, or canceled.</p>

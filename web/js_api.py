@@ -401,11 +401,20 @@ class RulesServiceProtocol(Protocol):
     def get_logs(self, rule_id: str, limit: int) -> object:
         """Return up to ``limit`` recent execution logs for ``rule_id``."""
 
+    def clear_rule_logs(self, rule_id: str) -> object:
+        """Slice 5: clear execution logs for one rule."""
+
     def detect_conflicts(self) -> object:
         """Slice 3: return conflict warnings for colliding enabled rules."""
 
     def seed_defaults(self) -> object:
         """Slice 3: seed pre-seeded rules DISABLED (idempotent)."""
+
+    def list_logs(self, *, module: str = "all", cr_id: str = "", rule_id: str = "", limit: int = 200) -> object:
+        """Slice 5: cross-module automation logs (filtered, newest-first)."""
+
+    def clear_logs(self, *, cr_id: str = "") -> object:
+        """Slice 5: clear automation logs (per CR if cr_id given, else all)."""
 
 
 class SecondBrainServiceProtocol(Protocol):
@@ -2170,6 +2179,15 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="RULES_GET_LOGS_FAILED")
 
+    def rules_clear_logs(self, rule_id: str) -> dict[str, object]:
+        """Slice 5: clear execution logs for one rule."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.clear_rule_logs(rule_id)))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_CLEAR_LOGS_FAILED")
+
     def rules_detect_conflicts(self) -> dict[str, object]:
         """Slice 3: return conflict warnings for colliding enabled rules."""
         try:
@@ -2187,6 +2205,39 @@ class JsApi:
             return ok(_to_frontend_safe(self._rules_service.seed_defaults()))
         except Exception as exc:
             return fail(str(exc), code="RULES_SEED_DEFAULTS_FAILED")
+
+    def logs_list(
+        self,
+        module: str = "all",
+        cr_id: str = "",
+        rule_id: str = "",
+        limit: int = 200,
+    ) -> dict[str, object]:
+        """Slice 5: cross-module automation logs, filtered + newest-first."""
+        try:
+            if self._rules_service is None:
+                return ok([])
+            return ok(
+                _to_frontend_safe(
+                    self._rules_service.list_logs(
+                        module=str(module or "all"),
+                        cr_id=str(cr_id or ""),
+                        rule_id=str(rule_id or ""),
+                        limit=int(limit or 200),
+                    )
+                )
+            )
+        except Exception as exc:
+            return fail(str(exc), code="LOGS_LIST_FAILED")
+
+    def logs_clear(self, cr_id: str = "", module: str = "") -> dict[str, object]:
+        """Slice 5: clear logs. If cr_id given, purge only that CR's logs."""
+        try:
+            if self._rules_service is None:
+                return ok({"deleted": 0})
+            return ok(_to_frontend_safe(self._rules_service.clear_logs(cr_id=str(cr_id or ""))))
+        except Exception as exc:
+            return fail(str(exc), code="LOGS_CLEAR_FAILED")
 
     def second_brain_list(self) -> dict[str, object]:
         """Return Second Brain items."""

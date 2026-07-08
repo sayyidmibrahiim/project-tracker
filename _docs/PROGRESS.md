@@ -18,6 +18,8 @@ Active work: **Automation System epic** (Outlook + General Automation). Spec: `_
 
 **Slice 4 — Auto Update CR State engine + Teams followup wired + auto-reply dedup**: implemented, awaiting user manual check. New `services/cr_state_engine.py`: pattern-gated email → CR transition. **DEFAULT AMAN: no patterns configured → engine NO-OP**; only user-set `from`/`subject`/`body` regex patterns (stored per-project in new `ProjectMetadata.auto_update_patterns` dict `{"from","subject","body","target_state"}`) trigger; all patterns must match (AND); invalid regex → no-match + warn; pattern match + legal transition (`core/state_machine.validate_cr_transition`) → state change + `AUTO_UPDATE_CR_STATE` History; pattern match + illegal transition → `AUTO_UPDATE_CR_STATE_BLOCKED` History + skip (never force). Engine wired into `ApprovalPollingService._on_found` (reply-received hook): reads metadata, runs engine, persists on transition; engine errors are swallowed (never break reply handling). Create Drone Ticket **STAYS stub** (Jenkins API deferred). Teams followup wired: PD Teams `[Draft]`→`teams_preview_message` (resolved followup text from CR+project_name), `[Send]`→ConfirmModal→`teams_send_message`, `[Setting]`→deep-link rules preset `send_teams`. Auto-reply dedup (Slice 3 deferred item): `AutomationService.execute_rule` checks `_recently_fired(rule_id, cr_id)` within 1h window for `goal='auto_reply'` rules → skip+log via `automation_rule_logs` cache; fail-open on cache error (rather over-send than block real reply).
 
+**Slice 5 — Logs top-level menu + right-sidebar + retention**: implemented, awaiting user manual check. New `automation_logs` table (clean separation; `automation_rule_logs` untouched) + `AutomationLogRow`, `append_log`, `list_logs(module/cr_id/rule_id)`, `purge_logs_for_cr`, `clear_all_logs`, `clear_rule_logs`. `CacheDb` schema validation updated; cache tests updated. Bridge: `logs_list`, `logs_clear`, `rules_clear_logs`; `_RulesAdapter` exposes `list_logs`, `clear_logs`, `clear_rule_logs`. Retention hook in `_ProjectServiceAdapter._run_transition`: after successful move, if CR state FINISHED/CANCELED, purge `automation_logs` rows for that CR (POSTPONED kept because reversible). Frontend: 8th top-level nav **Logs** (App `PageId`, validPages, TitleBar `navItems`+icon, new `Logs.svelte` overview page with module cards + filters + Refresh/Clear). Rules `Logs` upgraded to right-sidebar drawer with Refresh/Export(JSON)/Clear/Close. PD Automations header gets `[Logs]` button → opens Logs page filtered by CR. **Decision:** right-sidebar implemented for Rules; PD uses top-level Logs filtered by CR (per-project, not per-rule), smallest correct diff.
+
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
 Fix round v2 (steps 0–7, one behavior per round, user manual verify each): **complete 2026-07-06**. Step 0 watchdog `c94e387`, step 1 toolbar active states `65202cf`, steps 2–5b (5s idle countdown, hidden `.rte`, help popover, Narrow margins + clamp, WYSIWYG page + zoom) committed earlier, step 5c image drag-resize `4ca0abd`, step 6 SVG toolbar icons `b1cf0dc`, step 7 default TNR 18px↔13.5pt + per-file toolbar font/size memory `37d8ca7`. PRD §12.12 synced. **Branch merged to `main` 2026-07-06** (user approved; branch kept per user rule).
@@ -68,24 +70,28 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest — Automation System Slice 4, 2026-07-08)
+## Verification (latest — Automation System Slice 5, 2026-07-08)
 
 ```
 svelte-check: 0 errors, 4 warnings (a11y autocomplete <li> — cosmetic)
 frontend tests: 182 pass / 0 fail
-targeted backend tests: 67 passed (incl. 10 new test_cr_state_engine.py)
-full pytest: 1860 passed, 20 skipped, 6 known baseline failures (no new fails)
+targeted backend tests: 78 passed (incl. automation_logs + cache schema + rules + CR state engine)
+full pytest: 1864 passed, 20 skipped, 6 known baseline failures (no new fails)
 build: ✓ (app was closed)
 app smoke: ✓ clean
 ```
 
-Slice 4 manual checklist (for user):
-- [ ] PD: toggle "Auto Update CR State" ON but leave patterns empty → send/receive approval reply → CR state UNCHANGED (no-op, no error).
-- [ ] PD: configure `auto_update_patterns` via metadata (e.g. `{"subject":"approved","target_state":"APPROVED"}`) + toggle ON → receive matching reply → CR transitions to APPROVED + History entry "AUTO_UPDATE_CR_STATE".
-- [ ] Set a pattern targeting an illegal transition (e.g. PENDING_SUBMISSION→FINISHED) → matching reply → CR unchanged + History "AUTO_UPDATE_CR_STATE_BLOCKED".
-- [ ] PD Teams "Auto Followup Ack" `[Draft]` → Teams preview opens with followup message (CR + project name); off-Windows = dev-skipped toast.
-- [ ] PD Teams `[Send]` → ConfirmModal → confirm → Teams message sent (or dev-skipped off-Windows).
-- [ ] PD Teams `[Setting]` → deep-links to Rules tab with form preset goal=send_teams.
-- [ ] Rules: an `auto_reply` rule fired successfully → fire again within 1h for same CR → skipped (dedup) with "dedup" trigger in logs.
+Slice 5 manual checklist (for user):
+- [ ] TitleBar shows 8 nav items including **Logs** icon; clicking it opens Logs page.
+- [ ] Logs page shows overview cards (All/Outlook/Teams/CR Automation/Rules Engine), module filter, CR filter, Refresh, Clear all.
+- [ ] Rules tab → click a rule's `Logs` → right sidebar opens; Refresh/Export/Clear/Close work.
+- [ ] PD Automations header `[Logs]` → opens Logs page filtered by that CR.
+- [ ] Retention: transition CR to FINISHED/CANCELED → `automation_logs` entries for that CR purge; `automation_rule_logs` remains untouched.
 
-(Slices 2+3 manual checklists still apply — all four slices shipped.)
+Combined manual checklist — Slices 2–5:
+- [ ] Slice 2: Template `{` autocomplete real values + keyboard nav; Save/Test/Reset; PD Outlook `[Setting]` deep-links editor; legacy placeholders still render; attachment path works.
+- [ ] Slice 3: Pre-seeded rules disabled; goal wizard + Applies-to scope; conflict warning; wired update_cr_state mutates legally and skips illegally; PD add buttons preset rules.
+- [ ] Slice 4: Auto-update CR state no-op without patterns; pattern match transitions only legal states; Teams Draft/Send/Setting wired; auto-reply dedup skips repeat within 1h.
+- [ ] Slice 5: Logs nav/page/sidebar/retention all work.
+
+Build was run — user must restart app before manual testing.

@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-07-08 (Automation System epic — Slice 5: Logs top-level menu + right-sidebar + retention — final slice)
+
+**Now:** Slice 5 implemented + verified on `automations/approval-polling`. Automation System epic Slices 2–5 are all coded + committed pending user manual check + merge approval.
+- `infrastructure/cache_db.py`: new `AutomationLogRow` + `automation_logs` table (module, rule_id, cr_id, timestamp, event_type, detail). New helpers: `append_log`, `list_logs(module/cr_id/rule_id, newest-first)`, `purge_logs_for_cr`, `clear_all_logs`, `clear_rule_logs`. `automation_rule_logs` left untouched for rules-only backward compat. Schema validation table set updated.
+- `web/js_api.py` + `_RulesAdapter`: `logs_list`, `logs_clear`, `rules_clear_logs`; adapter exposes `list_logs`, `clear_logs`, `clear_rule_logs` via existing cache-aware rules service. `RulesServiceProtocol` extended.
+- Retention: `_ProjectServiceAdapter._run_transition` purges `automation_logs` when CR becomes FINISHED/CANCELED after successful transition (POSTPONED kept because reversible). Swallows retention errors so moves never fail due to log purge.
+- Frontend: new `Logs.svelte` global overview page (cards All/Outlook/Teams/CR Automation/Rules Engine; module+CR filters; Refresh/Clear all; table). App.svelte PageId += `logs`, validPages += logs, render chain += `<Logs initialCrId>`. TitleBar navItems += Logs + icon.
+- Rules `Logs`: existing panel upgraded to fixed right-sidebar drawer with Refresh/Export(JSON)/Clear/Close. Clear uses new `rules_clear_logs` (clears `automation_rule_logs` for that rule).
+- PD Automations header: `[Logs]` button → App pendingLogCrId → Logs page filtered by current CR. Decision: PD uses top-level filtered Logs page instead of sidebar because PD context is project/CR, not rule; smallest correct diff.
+- **Verify:** svelte 0/4; frontend 182; targeted pytest 78; full pytest 1864 + 6 baseline (no new); build ✓; smoke ✓.
+- **Manual gate:** User restart app (build ran), test combined checklist in PROGRESS.md; merge to main waits approval. Branch not deleted.
+- **active_menu:** automations / project-details
+
+---
+
 ## 2026-07-08 (Automation System epic — Slice 4: Auto Update CR State engine + Teams followup + auto-reply dedup)
 
 **Now:** Slice 4 implemented + verified on `automations/approval-polling`. Continuing autonomous loop.

@@ -69,6 +69,19 @@ class AutomationRuleLogRow:
 
 
 @dataclass(frozen=True, slots=True)
+class AutomationLogRow:
+    """Slice 5: cross-module automation log entry (LogEntry logical model)."""
+
+    id: int = 0
+    module: str = ""  # outlook / teams / cr_automation / rules_engine / all
+    rule_id: str = ""
+    cr_id: str = ""
+    timestamp: datetime | None = None
+    event_type: str = ""  # e.g. APPROVAL_TEST_DRAFT_OPENED, AUTO_UPDATE_CR_STATE
+    detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CachedDroneTicketRow:
     project_path: Path
     subfolder_name: str | None = None
@@ -193,6 +206,7 @@ class CacheDb:
                 "notifications",
                 "automation_rule_logs",
                 "approval_polling_jobs",
+                "automation_logs",
             }
             and invalid_project_states is None
             and invalid_cr_states is None
@@ -458,6 +472,100 @@ class CacheDb:
             ).fetchall()
         return [self._rule_log_from_row(row) for row in rows]
 
+    def clear_rule_logs(self, rule_id: str) -> int:
+        """Delete automation_rule_logs for one rule; returns count deleted."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM automation_rule_logs WHERE rule_id = ?",
+                (rule_id,),
+            )
+        return int(cursor.rowcount or 0)
+
+    # ── Slice 5: cross-module automation_logs ─────────────────────────────
+    def append_log(self, row: AutomationLogRow) -> int:
+        """Append a cross-module log entry; return its row id."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO automation_logs (module, rule_id, cr_id, timestamp, event_type, detail)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.module,
+                    row.rule_id,
+                    row.cr_id,
+                    datetime_to_json(row.timestamp),
+                    row.event_type,
+                    row.detail,
+                ),
+            )
+        return int(cursor.lastrowid or 0)
+
+    def list_logs(
+        self,
+        *,
+        module: str = "",
+        cr_id: str = "",
+        rule_id: str = "",
+        limit: int = 200,
+    ) -> list[AutomationLogRow]:
+        """Return automation_logs filtered by module/cr_id/rule_id, newest first."""
+        clauses: list[str] = []
+        params: list[object] = []
+        if module and module != "all":
+            clauses.append("module = ?")
+            params.append(module)
+        if cr_id:
+            clauses.append("cr_id = ?")
+            params.append(cr_id)
+        if rule_id:
+            clauses.append("rule_id = ?")
+            params.append(rule_id)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(int(limit))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, module, rule_id, cr_id, timestamp, event_type, detail
+                FROM automation_logs
+                {where}
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [
+            AutomationLogRow(
+                id=int(r[0]),
+                module=str(r[1]),
+                rule_id=str(r[2]),
+                cr_id=str(r[3]),
+                timestamp=datetime_from_json(r[4]),
+                event_type=str(r[5]),
+                detail=str(r[6]),
+            )
+            for r in rows
+        ]
+
+    def purge_logs_for_cr(self, cr_id: str) -> int:
+        """Delete all automation_logs rows for a CR (retention on terminal state).
+
+        Returns the number of rows deleted. ``automation_rule_logs`` is NOT
+        touched (rules-only backward-compat table).
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM automation_logs WHERE cr_id = ?",
+                (cr_id,),
+            )
+        return int(cursor.rowcount or 0)
+
+    def clear_all_logs(self) -> int:
+        """Delete all automation_logs rows. Returns count deleted."""
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM automation_logs")
+        return int(cursor.rowcount or 0)
+
     def insert_notification(self, notification: Notification) -> None:
         """Persist a notification keyed by its id.
 
@@ -656,6 +764,19 @@ class CacheDb:
                 success INTEGER NOT NULL DEFAULT 0,
                 error_message TEXT,
                 timestamp TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS automation_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                module TEXT NOT NULL DEFAULT '',
+                rule_id TEXT NOT NULL DEFAULT '',
+                cr_id TEXT NOT NULL DEFAULT '',
+                timestamp TEXT,
+                event_type TEXT NOT NULL DEFAULT '',
+                detail TEXT NOT NULL DEFAULT ''
             )
             """
         )

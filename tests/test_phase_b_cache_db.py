@@ -79,6 +79,7 @@ def test_initialize_creates_expected_tables(tmp_path: Path) -> None:
         "notifications",
         "automation_rule_logs",
         "approval_polling_jobs",
+        "automation_logs",
     }
 
 
@@ -266,6 +267,7 @@ def test_reset_recreates_corrupt_db(tmp_path: Path) -> None:
         "notifications",
         "automation_rule_logs",
         "approval_polling_jobs",
+        "automation_logs",
     }
 
 

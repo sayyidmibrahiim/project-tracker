@@ -932,6 +932,20 @@ def create_js_api(
             moved_path = Path(str(result))
             self._rebuild_cache_for(moved_path)
             project_state = _folder_state_for_path(moved_path) or ProjectState.UAT_PREPARE
+            # Slice 5: retention — purge automation_logs when CR reaches a
+            # terminal state (FINISHED/CANCELED). POSTPONED is reversible so we
+            # keep its logs. Swallow errors: retention must never block a move.
+            try:
+                metadata_after = self._metadata_store.read(moved_path)
+                if metadata_after is not None and metadata_after.cr_state in (
+                    CRState.FINISHED,
+                    CRState.CANCELED,
+                ):
+                    cr_id = extract_cr_number(metadata_after.cr_link) or metadata_after.project_name
+                    if cr_id:
+                        self._cache_db.purge_logs_for_cr(cr_id)
+            except Exception:  # noqa: BLE001
+                pass
             return {
                 "project_path": str(moved_path),
                 "project_state": project_state.value,
@@ -1873,6 +1887,9 @@ def create_js_api(
                 for r in matched
             ]
 
+        def clear_rule_logs(self, rule_id: str) -> dict[str, object]:
+            return {"deleted": self._cache.clear_rule_logs(rule_id)}
+
         # -- Slice 3: conflict detection + pre-seeded rules ----------------
         def detect_conflicts(self) -> list[dict[str, object]]:
             """Return conflict warnings for enabled rules sharing trigger+goal+scope.
@@ -1939,6 +1956,38 @@ def create_js_api(
             if added:
                 self._persist(settings, rules)
             return seeded
+
+        # -- Slice 5: cross-module automation_logs ------------------------
+        def list_logs(
+            self,
+            *,
+            module: str = "all",
+            cr_id: str = "",
+            rule_id: str = "",
+            limit: int = 200,
+        ) -> list[dict[str, object]]:
+            rows = self._cache.list_logs(
+                module=module, cr_id=cr_id, rule_id=rule_id, limit=limit
+            )
+            return [
+                {
+                    "id": r.id,
+                    "module": r.module,
+                    "rule_id": r.rule_id,
+                    "cr_id": r.cr_id,
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                    "event_type": r.event_type,
+                    "detail": r.detail,
+                }
+                for r in rows
+            ]
+
+        def clear_logs(self, *, cr_id: str = "") -> dict[str, object]:
+            if cr_id:
+                deleted = self._cache.purge_logs_for_cr(cr_id)
+            else:
+                deleted = self._cache.clear_all_logs()
+            return {"deleted": deleted}
 
     rules_adapter = _RulesAdapter(_settings_store, cache_db)
     # Re-build automation service so rules CRUD + evaluation share one rule list.
