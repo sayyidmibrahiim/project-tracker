@@ -12,7 +12,7 @@
   import type { ToastAction } from "../stores/toastStore";
 
   // Optional cross-page navigation from the Dashboard row menu / header Add Project.
-  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv") => void } = $props();
+  let { initialPath = null, startNew = false, onNavigateDashboard, onNavigateAutomations }: { initialPath?: string | null; startNew?: boolean; onNavigateDashboard?: () => void; onNavigateAutomations?: (kind?: "uat" | "lv", goal?: string) => void } = $props();
 
   type LoadState = "idle" | "loading" | "error" | "loaded";
   let listState: LoadState = $state("idle");
@@ -116,8 +116,8 @@
     approvalBusy = "";
   }
 
-  function openAutomations(kind?: "uat" | "lv") {
-    onNavigateAutomations?.(kind);
+  function openAutomations(kind?: "uat" | "lv", goal?: string) {
+    onNavigateAutomations?.(kind, goal);
   }
 
   function devStub(message: string) {
@@ -1266,7 +1266,7 @@
                         </div>
                       </div>
                     {/each}
-                    <button class="pd-auto-add" type="button" onclick={() => devStub("Custom email automation diatur di Automations → Rules Engine (segera).")}>+ Add Email Automation</button>
+                    <button class="pd-auto-add" type="button" onclick={() => openAutomations(undefined, "send_email")}>+ Add Email Automation</button>
                   </div>
 
                   <div class="pd-auto-group">
@@ -1277,7 +1277,7 @@
                         <span class="pd-auto-item-title">Auto Update CR State</span>
                         <div class="pd-auto-item-actions">
                           <button class="pd-control pd-auto-mini-toggle" type="button" class:on={approvalStatus.auto_update_cr_state} disabled={approvalBusy !== ""} onclick={toggleAutoUpdateCrState}>{approvalStatus.auto_update_cr_state ? "ON" : "OFF"}</button>
-                          <button class="pd-command-btn" type="button" title="Open pattern settings" onclick={() => openAutomations()}>Setting</button>
+                          <button class="pd-command-btn" type="button" title="Open pattern settings" onclick={() => openAutomations(undefined, "auto_update_status")}>Setting</button>
                         </div>
                       </div>
                       <div class="pd-auto-item-sub"><span class="pd-auto-status-label">{approvalStatus.auto_update_cr_state ? "Watching inbox for state-change emails (engine pending)" : "Inactive"}</span></div>
@@ -1309,7 +1309,7 @@
                         </div>
                       </div>
                     {/each}
-                    <button class="pd-auto-add" type="button" onclick={() => devStub("Custom Teams automation diatur di Automations → Rules Engine (segera).")}>+ Add Automation Teams</button>
+                    <button class="pd-auto-add" type="button" onclick={() => openAutomations(undefined, "send_teams")}>+ Add Automation Teams</button>
                   </div>
                 </div>
               </div>

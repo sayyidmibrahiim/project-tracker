@@ -8,6 +8,22 @@
 
 ---
 
+## 2026-07-08 (Automation System epic — Slice 3: Rules Engine goal-driven + wired handlers + scope + conflict + pre-seeded)
+
+**Now:** Slice 3 implemented + verified on `automations/approval-polling`. Continuing autonomous loop.
+- `services/automation_service.py`: ctor += `metadata_store` slot; `rules_conflict_key()` module-level (pure, testable). 5 no-op handlers rewritten with real delegation: `_handle_update_cr_state`/`_handle_update_drone_state` validate via `core/state_machine.validate_cr/drone_transition` (DEFAULT AMAN: illegal→skip+log, never force; missing target_state/project_path/metadata→skip), `_handle_append_history` writes HistoryEntry, `_handle_download_email`/`_handle_save_attachment` stay no-op (Slice 4). Imports: `CRState`/`DroneState` from `core.enums`, `HistoryEntry` from `core.models`, `validate_*` from `core.state_machine`, `InvalidTransitionError` from `core.exceptions`, `Path` top-level.
+- `app_web.py`: `_RulesAdapter` += `detect_conflicts()` (trigger+goal+scope WARNING, never block) + `seed_defaults()` (3 DISABLED pre-seeded rules, idempotent). `_PRESEEDED_RULES` constant. Seed called at `run()` start via new `rules_seed_defaults` bridge (NOT in `create_js_api` — keeps test factories seed-free). `_conflict_key` delegates to service-level.
+- `web/js_api.py`: `RulesServiceProtocol` += `detect_conflicts` + `seed_defaults`. Bridge += `rules_detect_conflicts` + `rules_seed_defaults`.
+- Frontend `RulesActions.svelte`: goal wizard (5 GOALS, goal drives default action set), scope picker (SCOPE_TYPES all/specific/filtered, specific→cr_ids comma-list), conflict badge + pre-seeded "seed" badge in rule cards. Props `presetGoal`+`onPresetGoalConsumed` + `$effect` opens create-form with preset.
+- PD deep-links (ProjectDetails.svelte): `openAutomations(kind?, goal?)` → App.svelte `pendingRuleGoal` → `<Automations initialRuleGoal>` → `<RulesActions presetGoal>`. `[+ Add Email Automation]`→send_email; CR `[Setting]`→auto_update_status; `[+ Add Automation Teams]`→send_teams.
+- **Incident during impl:** initial seed in `create_js_api` broke `test_rules_engine_unit.py` (asserted empty store) — moved seed to `run()` startup. Initial `from app_web import rules_conflict_key` in test polluted sys.modules with webview → broke 4 `import_does_not_require_pywebview` + 3 project_list tests — moved `rules_conflict_key` to `services/automation_service.py` (no webview dep).
+- **DEFERRED to Slice 4**: auto-reply dedup/rate-limit — sender lives in Slice 4 engine; YAGNI now.
+- **Verify:** svelte-check 0/4; frontend 182; targeted pytest 57 (incl 12 new `test_phase_c_automation_slice3.py`); full pytest 1850 + 6 baseline (no new); build ✓; smoke ✓.
+- **Next:** Slice 4 (Auto Update CR State pattern engine + Teams followup wired + auto-reply dedup).
+- **active_menu:** automations / project-details
+
+---
+
 ## 2026-07-08 (Automation System epic — Slice 2: PlaceholderResolver + per-CR templates + editor + Test)
 
 **Now:** Slice 2 implemented + verified on `automations/approval-polling`. Continuing autonomous loop (Slices 2→5 per approved mega-plan).

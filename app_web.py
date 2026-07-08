@@ -123,6 +123,30 @@ def _appcode_from_project_path(path: Path) -> str:
     return ""
 
 
+# Slice 3: pre-seeded rules (DISABLED by default — user must enable).
+_PRESEEDED_RULES: list[dict[str, object]] = [
+    {
+        "name": "Send UAT Acknowledgement",
+        "goal": "send_email",
+        "trigger": {"type": "manual"},
+        "actions": [{"type": "send_outlook_email", "params": {"template_id": "uat_approval"}}],
+    },
+    {
+        "name": "Send LV Acknowledgement",
+        "goal": "send_email",
+        "trigger": {"type": "manual"},
+        "actions": [{"type": "send_outlook_email", "params": {"template_id": "lv_approval"}}],
+    },
+    {
+        "name": "Auto Update CR State",
+        "goal": "auto_update_status",
+        # DEFAULT AMAN: no patterns configured → engine no-ops (Slice 4).
+        "trigger": {"type": "email_received"},
+        "actions": [{"type": "update_cr_state"}],
+    },
+]
+
+
 def create_js_api(
     *,
     db_path: Path | None = None,
@@ -1849,12 +1873,82 @@ def create_js_api(
                 for r in matched
             ]
 
+        # -- Slice 3: conflict detection + pre-seeded rules ----------------
+        def detect_conflicts(self) -> list[dict[str, object]]:
+            """Return conflict warnings for enabled rules sharing trigger+goal+scope.
+
+            A conflict is a WARNING, never a block. Each entry names the two
+            colliding rule ids + the shared key so the UI can badge them.
+            """
+            _, rules = self._read()
+            enabled = [r for r in rules if r.get("enabled", True)]
+            conflicts: list[dict[str, object]] = []
+            for i, a in enumerate(enabled):
+                for b in enabled[i + 1 :]:
+                    key_a = self._conflict_key(a)
+                    if key_a and key_a == self._conflict_key(b):
+                        conflicts.append(
+                            {
+                                "rule_ids": [str(a.get("id", "")), str(b.get("id", ""))],
+                                "rule_names": [str(a.get("name", "")), str(b.get("name", ""))],
+                                "key": key_a,
+                            }
+                        )
+            return conflicts
+
+        @staticmethod
+        def _conflict_key(rule: dict[str, object]) -> str:
+            """Build the trigger+goal+scope signature for conflict detection."""
+            from services.automation_service import rules_conflict_key  # noqa: PLC0415
+
+            return rules_conflict_key(rule)
+
+        def seed_defaults(self) -> list[dict[str, object]]:
+            """Seed pre-seeded rules DISABLED by default. Idempotent.
+
+            Returns the list of pre-seeded rules (existing or newly seeded).
+            User must explicitly enable them.
+            """
+            settings, rules = self._read()
+            existing_names = {
+                str(r.get("name", ""))
+                for r in rules
+                if r.get("is_pre_seeded")
+            }
+            seeded: list[dict[str, object]] = []
+            added = False
+            for preset in _PRESEEDED_RULES:
+                if preset["name"] in existing_names:
+                    continue
+                import uuid
+
+                rule = {
+                    "id": str(uuid.uuid4()),
+                    "name": preset["name"],
+                    "enabled": False,  # DEFAULT AMAN: disabled, user enables
+                    "goal": preset["goal"],
+                    "scope": {"type": "all"},
+                    "trigger": preset["trigger"],
+                    "actions": preset["actions"],
+                    "conditions": [],
+                    "is_pre_seeded": True,
+                }
+                rules.append(rule)
+                seeded.append(rule)
+                added = True
+            if added:
+                self._persist(settings, rules)
+            return seeded
+
     rules_adapter = _RulesAdapter(_settings_store, cache_db)
     # Re-build automation service so rules CRUD + evaluation share one rule list.
+    # Slice 3: inject metadata_store so update_cr_state / update_drone_state /
+    # append_history mutate real project metadata.
     automation_svc = AutomationService(
         rules_provider=rules_adapter.list_rules,
         cache=cache_db,
         notification_service=notification_svc,
+        metadata_store=_metadata_store,
     )
 
     # ── JsApi ─────────────────────────────────────────────────────────
@@ -1936,10 +2030,16 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
             }
         },
     )
+    js_api = create_js_api(db_path=app_config_dir() / "project_tracker_cache.db")
+    # Slice 3: seed pre-seeded rules (DISABLED) idempotently at real app start.
+    try:
+        js_api.rules_seed_defaults()
+    except Exception:  # noqa: BLE001 — seeding must never block startup
+        logger.warning("rules_seed_defaults failed; continuing without seeding")
     window = webview.create_window(
         "Project Tracker DBS",
         url=resolve_frontend_url(dev=dev),
-        js_api=create_js_api(db_path=app_config_dir() / "project_tracker_cache.db"),
+        js_api=js_api,
         width=1200,
         height=760,
         min_size=(960, 640),

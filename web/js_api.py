@@ -401,6 +401,12 @@ class RulesServiceProtocol(Protocol):
     def get_logs(self, rule_id: str, limit: int) -> object:
         """Return up to ``limit`` recent execution logs for ``rule_id``."""
 
+    def detect_conflicts(self) -> object:
+        """Slice 3: return conflict warnings for colliding enabled rules."""
+
+    def seed_defaults(self) -> object:
+        """Slice 3: seed pre-seeded rules DISABLED (idempotent)."""
+
 
 class SecondBrainServiceProtocol(Protocol):
     """Second Brain service surface used by JsApi."""
@@ -2163,6 +2169,24 @@ class JsApi:
             return ok(_to_frontend_safe(self._rules_service.get_logs(rule_id, int(limit or 50))))
         except Exception as exc:
             return fail(str(exc), code="RULES_GET_LOGS_FAILED")
+
+    def rules_detect_conflicts(self) -> dict[str, object]:
+        """Slice 3: return conflict warnings for colliding enabled rules."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.detect_conflicts()))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_DETECT_CONFLICTS_FAILED")
+
+    def rules_seed_defaults(self) -> dict[str, object]:
+        """Slice 3: seed pre-seeded rules DISABLED (idempotent)."""
+        try:
+            if self._rules_service is None:
+                return fail("rules_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._rules_service.seed_defaults()))
+        except Exception as exc:
+            return fail(str(exc), code="RULES_SEED_DEFAULTS_FAILED")
 
     def second_brain_list(self) -> dict[str, object]:
         """Return Second Brain items."""

@@ -27,6 +27,7 @@
   let pendingProjectPath: string | null = $state(null);
   let startNewProject: boolean = $state(false);
   let pendingTemplateKind: "uat" | "lv" | null = $state(null);
+  let pendingRuleGoal: string | null = $state(null);
 
   // Notification state
   let notifications: NotificationItem[] = $state([]);
@@ -261,9 +262,9 @@
         {:else if currentPage === "second-brain"}
           <SecondBrain />
         {:else if currentPage === "project-detail"}
-          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={(kind) => { pendingTemplateKind = kind ?? null; navigate("automations"); }} />
+          <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={(kind, goal) => { pendingTemplateKind = kind ?? null; pendingRuleGoal = goal ?? null; navigate("automations"); }} />
         {:else if currentPage === "automations"}
-          <Automations initialTemplateKind={pendingTemplateKind} onConsumedTemplateKind={() => { pendingTemplateKind = null; }} />
+          <Automations initialTemplateKind={pendingTemplateKind} initialRuleGoal={pendingRuleGoal} onConsumedTemplateKind={() => { pendingTemplateKind = null; }} onConsumedRuleGoal={() => { pendingRuleGoal = null; }} />
         {:else if currentPage === "global-plan"}
           <GlobalPlan />
         {/if}
