@@ -6,7 +6,7 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `automations/approval-polling`.
+Active branch: `general/cicd-bitbucket` (Piece D). Automation System epic (Slices 1–5) merged to `main` 2026-07-08.
 
 Active work: **Automation System epic** (Outlook + General Automation). Spec: `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. 5 slices, PD-box-first; Piece C folded in (backend kept, PD UI replaced). Slices: 1 PD 3-group section · 2 PlaceholderResolver + Template per-CR + editor + Test · 3 Rules Engine goal-wizard + wire no-op actions + conflict detect + pre-seeded · 4 Auto Update CR State + Create Drone (Jenkins stub) + Teams followup · 5 Logs top-level menu + right-sidebar + retention.
 
@@ -19,6 +19,8 @@ Active work: **Automation System epic** (Outlook + General Automation). Spec: `_
 **Slice 4 — Auto Update CR State engine + Teams followup wired + auto-reply dedup**: implemented, awaiting user manual check. New `services/cr_state_engine.py`: pattern-gated email → CR transition. **DEFAULT AMAN: no patterns configured → engine NO-OP**; only user-set `from`/`subject`/`body` regex patterns (stored per-project in new `ProjectMetadata.auto_update_patterns` dict `{"from","subject","body","target_state"}`) trigger; all patterns must match (AND); invalid regex → no-match + warn; pattern match + legal transition (`core/state_machine.validate_cr_transition`) → state change + `AUTO_UPDATE_CR_STATE` History; pattern match + illegal transition → `AUTO_UPDATE_CR_STATE_BLOCKED` History + skip (never force). Engine wired into `ApprovalPollingService._on_found` (reply-received hook): reads metadata, runs engine, persists on transition; engine errors are swallowed (never break reply handling). Create Drone Ticket **STAYS stub** (Jenkins API deferred). Teams followup wired: PD Teams `[Draft]`→`teams_preview_message` (resolved followup text from CR+project_name), `[Send]`→ConfirmModal→`teams_send_message`, `[Setting]`→deep-link rules preset `send_teams`. Auto-reply dedup (Slice 3 deferred item): `AutomationService.execute_rule` checks `_recently_fired(rule_id, cr_id)` within 1h window for `goal='auto_reply'` rules → skip+log via `automation_rule_logs` cache; fail-open on cache error (rather over-send than block real reply).
 
 **Slice 5 — Logs top-level menu + right-sidebar + retention**: implemented, awaiting user manual check. New `automation_logs` table (clean separation; `automation_rule_logs` untouched) + `AutomationLogRow`, `append_log`, `list_logs(module/cr_id/rule_id)`, `purge_logs_for_cr`, `clear_all_logs`, `clear_rule_logs`. `CacheDb` schema validation updated; cache tests updated. Bridge: `logs_list`, `logs_clear`, `rules_clear_logs`; `_RulesAdapter` exposes `list_logs`, `clear_logs`, `clear_rule_logs`. Retention hook in `_ProjectServiceAdapter._run_transition`: after successful move, if CR state FINISHED/CANCELED, purge `automation_logs` rows for that CR (POSTPONED kept because reversible). Frontend: 8th top-level nav **Logs** (App `PageId`, validPages, TitleBar `navItems`+icon, new `Logs.svelte` overview page with module cards + filters + Refresh/Clear). Rules `Logs` upgraded to right-sidebar drawer with Refresh/Export(JSON)/Clear/Close. PD Automations header gets `[Logs]` button → opens Logs page filtered by CR. **Decision:** right-sidebar implemented for Rules; PD uses top-level Logs filtered by CR (per-project, not per-rule), smallest correct diff.
+
+**Piece D — CICD Bitbucket integration (branch `general/cicd-bitbucket`)**: implemented, awaiting user manual check. New 9th top-level nav **CICD** (git-branch icon) → full-page `CICDBrowser.svelte`. New `services/cicd_service.py` (stdlib `subprocess`/`shutil` only — no new dep, per office-offline constraint; **first subprocess in the app**, sets `CREATE_NO_WINDOW` precedent so git never flashes a console): `check_git()` detection, `parse_repo_name`, `parse_porcelain` (XY→modified/untracked/staged), `build_file_tree` (recursive, `.git` skipped, dirs-first), and `CicdService` that clones branch `cicd` on a **daemon thread** (`git clone -b cicd --single-branch`) with a poll-able job dict (`start_clone`→`clone_status`), plus `list_repos` (per-repo status summary) + `list_files`. Bridge: `CicdServiceProtocol` + `cicd_git_status`/`cicd_clone`/`cicd_clone_status`/`cicd_list_repos`/`cicd_list_files`; nested `_CicdServiceAdapter` in `create_js_api` reuses `_AppCodeServiceAdapter.get_appcode_config` to resolve each appcode's CICD dir (`per_appcode` → `{appcode}/CICD`, `shared_root` → `AppCodeConfig.cicd_shared_path`). Frontend polls `cicd_clone_status` every 1.2s (mirrors the RTE export poll), toasts on done/error; file click reuses the existing `file_open` bridge (no new `open_repo_file`); file badges use `.dot-waiting` (orange = modified) / `.dot-done` (green = untracked/staged). **DEFAULT AMAN:** git absent → install-steps empty state + Recheck (never crash); non-git folder / porcelain failure → files shown without status; clone into an existing folder → rejected before spawning. CICD-location switch (per-appcode ↔ shared root) lives on the CICD page via `appcode_update_config` (config is per-appcode, not global Settings). **Deviations from spec (deliberate):** config UI on CICD page not Settings; reuse `file_open`; ONE consolidated `tests/test_cicd_service.py` not three; folder names strip `.git` + clone adds `--single-branch`; directory nodes carry no aggregate badge (files only). D-0014 recorded. Create Drone Ticket (Jenkins) remains out of scope.
 
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
@@ -37,8 +39,8 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 0 | `project-details/rte-interaction-bugs` | User verify RTE follow-up → commit → merge | ✅ Merged 2026-07-04 |
 | 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | ✅ Merged 2026-07-04 |
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | ✅ Merged 2026-07-06 (incl. fix round v2 steps 0–7) |
-| 3 | `automations/approval-polling` | Piece C approval automation (spec 2026-07-02) | Implemented, awaiting user manual check |
-| 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Planned |
+| 3 | `automations/approval-polling` | Piece C approval automation + Automation System epic Slices 1–5 | ✅ Merged 2026-07-08 |
+| 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Implemented, awaiting user manual check |
 | 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
 
@@ -94,4 +96,27 @@ Combined manual checklist — Slices 2–5:
 - [ ] Slice 4: Auto-update CR state no-op without patterns; pattern match transitions only legal states; Teams Draft/Send/Setting wired; auto-reply dedup skips repeat within 1h.
 - [ ] Slice 5: Logs nav/page/sidebar/retention all work.
 
-Build was run — user must restart app before manual testing.
+### Piece D — CICD Bitbucket (branch `general/cicd-bitbucket`, 2026-07-09)
+
+```
+svelte-check: 0 errors, 4 warnings (pre-existing a11y <li> — cosmetic), 156 files
+frontend tests: 184 pass / 0 fail (+2 CICD source-contract tests)
+targeted backend tests: tests/test_cicd_service.py 14 passed + bridge-guard/second-brain smoke = 21 passed
+full pytest: 1878 passed, 20 skipped, 6 known baseline failures (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2) — NO new fails
+build: pending user-closed rebuild before manual test
+```
+
+Piece D manual checklist (for user — after `npm run build` + app restart):
+- [ ] TitleBar shows a **9th CICD item** (git-branch icon between Logs and Settings); clicking opens the page.
+- [ ] Git not installed → install instructions + working **Recheck Git Status** button.
+- [ ] Appcode dropdown lists appcodes; switching reloads the repo list.
+- [ ] Paste a Bitbucket `cicd`-branch URL → Clone → "Cloning…" → success toast; repo appears.
+- [ ] Clone into an already-cloned repo → rejected with a clear message (no crash).
+- [ ] Bad/unreachable URL → error toast carries git stderr (auth/network hint).
+- [ ] Repo row shows status summary ("modified: 3, untracked: 1" or "clean").
+- [ ] Click a repo → file tree expands/collapses; orange dot = modified, green = untracked/staged.
+- [ ] Click a file → opens in the OS default app.
+- [ ] Config row: switch per-appcode ↔ shared-root (+ path); repos reload from the new folder.
+- [ ] Empty CICD folder → "no repos" clone instructions.
+
+Build was run for the Automation epic — user must restart app before manual testing. Piece D needs a fresh `npm run build` before its manual test.

@@ -1967,6 +1967,36 @@ User opens Settings
 
 ---
 
+## 17A. CICD — Bitbucket Integration (Piece D)
+
+Spec: `_docs/specs/superpowers/specs/2026-07-02-cicd-bitbucket-design.md`. ADR: D-0014. A **9th top-level titlebar menu**, "CICD" (git-branch icon, between Logs and Settings), opening a full-page `CICDBrowser.svelte`. It detects the git CLI, clones a repo's `cicd` branch into an appcode's `CICD/` folder (created by Piece A), and browses cloned repos as a VSCode-like file tree that opens files in the OS default app.
+
+### 17A.1 Git CLI detection
+
+On open, the page calls `cicd_git_status` → `{installed, version}` (backend `shutil.which("git")` + `git --version`). If git is **not** installed, the page shows an empty state with the Company Software Center install steps and a **Recheck Git Status** button (re-runs detection). No crash, no repo controls until git is present.
+
+### 17A.2 Clone helper
+
+Appcode dropdown (from `appcode_list`) + a Bitbucket HTTP clone-URL field + **Clone**. Clone runs `git clone -b cicd --single-branch <url> <CICD_DIR>/<repo>` on a **background daemon thread** (never blocks the UI); the frontend polls `cicd_clone_status(repo)` every 1.2s and toasts on done/error (error carries git stderr — auth/network hint). The repo name is parsed from the URL with a trailing `.git` stripped. Cloning into an already-present folder is rejected before spawning. Multiple repos per appcode = multiple subfolders under `CICD/`.
+
+### 17A.3 Repo list + file tree
+
+`cicd_list_repos(appcode)` returns each cloned repo with a git-status summary (`modified`/`untracked`/`staged` counts or `clean`), shown as "modified: 3, untracked: 1". Selecting a repo calls `cicd_list_files(repo_path)` → a recursive tree `[{name, path, type, git_status, children}]` (from `git status --porcelain`, `.git` skipped, directories first). The tree uses `<details>` expand/collapse; per-file status dots = **orange (modified)** / **green (untracked or staged)** / none (clean). Clicking a file reuses the existing `file_open` bridge (`os.startfile`). If a folder is not a git repo (porcelain fails), files render without status dots.
+
+### 17A.4 CICD-folder configuration
+
+A config row on the CICD page switches the selected appcode between **Per appcode** (`{appcode}/CICD`) and **Shared root** (`AppCodeConfig.cicd_shared_path`), persisted via `appcode_update_config`. This lives on the CICD page (not Settings) because the config is per-appcode; changing it reloads the repo list from the new folder.
+
+### 17A.5 Bridge methods
+
+`cicd_git_status()`, `cicd_clone(appcode, clone_url)`, `cicd_clone_status(repo_name)`, `cicd_list_repos(appcode)`, `cicd_list_files(repo_path)` — standard `{ok,data,error}` envelope. Backend: `services/cicd_service.py` (stdlib `subprocess`/`shutil` only — no new dependency; first subprocess in the app, `CREATE_NO_WINDOW` on Windows) + nested `_CicdServiceAdapter` in `create_js_api` reusing `get_appcode_config`.
+
+### 17A.6 Out of scope
+
+Git operations beyond clone (no pull/commit/push — done externally). Create Drone Ticket (Jenkins) is a separate deferred item.
+
+---
+
 ## 18. Notifications System
 
 ### 18.1 Purpose

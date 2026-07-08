@@ -8,6 +8,24 @@
 
 ---
 
+## 2026-07-09 (Piece D — CICD Bitbucket integration — branch `general/cicd-bitbucket`)
+
+**Now:** Piece D implemented + verified on `general/cicd-bitbucket` (branched from `main`; the Automation epic Slices 1–5 were merged to main as `5257da05` before this branch, so main already had Logs as the 8th nav). 4 tasks, 4 commits:
+- **Task 1** `b4cbc84f`: `services/cicd_service.py` — stdlib-only (`subprocess`/`shutil`, no new dep). Pure helpers `check_git`, `parse_repo_name` (strips `.git`), `parse_porcelain` (XY→modified/untracked/staged, rename→new path), `build_file_tree` (recursive, `.git` skipped, dirs-first). `CicdService`: `start_clone` spawns a **daemon thread** (`git clone -b cicd --single-branch`, `creationflags=CREATE_NO_WINDOW` — first subprocess in app) writing a poll-able job dict; `clone_status`, `list_repos` (per-repo status summary), `list_files`. `tests/test_cicd_service.py` (consolidated — one file per user decision): 14 tests (parse/tree/detection/clone-lifecycle via monkeypatched subprocess + bridge envelope via FakeCicdService).
+- **Task 2** `8faffd9d`: `web/js_api.py` — `CicdServiceProtocol` + `cicd_service` ctor kwarg + 5 methods `cicd_git_status`/`cicd_clone`/`cicd_clone_status`/`cicd_list_repos`/`cicd_list_files` (standard `try/None-guard→SERVICE_UNAVAILABLE/ok/except→CICD_*_FAILED` envelope). `app_web.py` — nested `_CicdServiceAdapter` reuses `_AppCodeServiceAdapter.get_appcode_config` to resolve the CICD dir (`per_appcode`→`{appcode}/CICD`, `shared_root`→`cicd_shared_path`); wired via hoisted `_appcode_adapter` + `_cicd_adapter=_CicdServiceAdapter(_appcode_adapter, CicdService())`.
+- **Task 3** `5a262b4a`: `frontend/src/lib/components/CICDBrowser.svelte` (new full page, raw `callBridge` like Logs, inline types, recursive `{#snippet fileTree}` with `<details>` expand/collapse, poll `cicd_clone_status` every 1.2s, orange/green status dots, git-not-installed + no-repos empty states, per-appcode/shared-root config row via `appcode_update_config`, file click reuses `file_open`). TitleBar `navItems`+`navIcons` add 9th "CICD" (git-branch icon between Logs and Settings). App.svelte `PageId`/`validPages`/import/render branch. `components.test.mjs` +2 source-contract tests.
+- **Task 4** (this): full verify gate + docs (D-0014, PRD §17A, PROGRESS Piece D block + checklist).
+
+**Decisions (DEFAULT AMAN / smallest-diff, all in D-0014):** stdlib subprocess no dep; background daemon-thread clone + poll (no UI freeze); reuse `get_appcode_config` + `file_open`; config UI on CICD page not Settings (per-appcode config); one test file not three; strip `.git` + `--single-branch`; dir nodes no aggregate badge. Create Drone Ticket (Jenkins) stays out of scope.
+
+**Verify:** svelte-check 0 errors/4 pre-existing warnings, 156 files; frontend 184 pass (+2 CICD); `test_cicd_service.py` 14 pass; full pytest 1878 passed + 6 known baseline (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2), NO new fails; build + smoke = Task 4 final step (app must be closed; user restart after).
+
+**Manual gate:** user runs `npm run build` (app closed) → restart → Piece D checklist in PROGRESS.md → merge to main waits approval. Branch NOT deleted.
+
+**active_menu:** cicd
+
+---
+
 ## 2026-07-08 (Automation System epic — Slice 5: Logs top-level menu + right-sidebar + retention — final slice)
 
 **Now:** Slice 5 implemented + verified on `automations/approval-polling`. Automation System epic Slices 2–5 are all coded + committed pending user manual check + merge approval.
