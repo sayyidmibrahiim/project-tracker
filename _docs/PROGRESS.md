@@ -103,7 +103,8 @@ svelte-check: 0 errors, 4 warnings (pre-existing a11y <li> — cosmetic), 156 fi
 frontend tests: 184 pass / 0 fail (+2 CICD source-contract tests)
 targeted backend tests: tests/test_cicd_service.py 14 passed + bridge-guard/second-brain smoke = 21 passed
 full pytest: 1878 passed, 20 skipped, 6 known baseline failures (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2) — NO new fails
-build: pending user-closed rebuild before manual test
+build: ✓ (app closed 2026-07-09; pre-existing >500 kB chunk warning only)
+app smoke: ✓ clean (booted with fresh bundle, 0-byte stdout/stderr, no traceback)
 ```
 
 Piece D manual checklist (for user — after `npm run build` + app restart):

@@ -18,7 +18,7 @@
 
 **Decisions (DEFAULT AMAN / smallest-diff, all in D-0014):** stdlib subprocess no dep; background daemon-thread clone + poll (no UI freeze); reuse `get_appcode_config` + `file_open`; config UI on CICD page not Settings (per-appcode config); one test file not three; strip `.git` + `--single-branch`; dir nodes no aggregate badge. Create Drone Ticket (Jenkins) stays out of scope.
 
-**Verify:** svelte-check 0 errors/4 pre-existing warnings, 156 files; frontend 184 pass (+2 CICD); `test_cicd_service.py` 14 pass; full pytest 1878 passed + 6 known baseline (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2), NO new fails; build + smoke = Task 4 final step (app must be closed; user restart after).
+**Verify:** svelte-check 0 errors/4 pre-existing warnings, 156 files; frontend 184 pass (+2 CICD); `test_cicd_service.py` 14 pass; full pytest 1878 passed + 6 known baseline (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2), NO new fails; build ✓ (app closed 2026-07-09) + app smoke ✓ clean (0-byte stdout/stderr, no traceback).
 
 **Manual gate:** user runs `npm run build` (app closed) → restart → Piece D checklist in PROGRESS.md → merge to main waits approval. Branch NOT deleted.
 
