@@ -302,6 +302,20 @@ class AutomationService:
                 )
             return result
 
+        # Slice 4: auto-reply dedup. Auto-reply rules (goal='auto_reply') that
+        # fired successfully within the rate-limit window for the same CR are
+        # skipped to prevent double-send from double-poll. DEFAULT AMAN: dedup
+        # only applies to auto_reply goals; other goals always run.
+        if str(rule.get("goal", "")) == "auto_reply" and self._recently_fired(rule_id, context):
+            result = AutomationExecutionResult(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                skipped=True,
+            )
+            if persist:
+                self._persist_execution(result, f"{trigger_type}|dedup" if trigger_type else "dedup", conditions_passed=len(matched))
+            return result
+
         handlers = dict(self._action_handlers)
         if action_handlers:
             handlers.update(action_handlers)
@@ -583,6 +597,41 @@ class AutomationService:
             project_path,
         )
         return self._ok({"status": "notified"})
+
+    # Slice 4: auto-reply dedup window (1 hour default).
+    _dedup_window_seconds: int = 3600
+
+    def _recently_fired(self, rule_id: str, context: dict[str, object]) -> bool:
+        """True if ``rule_id`` fired successfully within the dedup window for the
+        same CR (identified by ``context['cr_id']`` or ``context['project_path']``).
+
+        Uses the durable ``automation_rule_logs`` cache; on any cache error
+        returns False (fail-open: rather send once too many than block a real reply).
+        """
+        if self._cache is None:
+            return False
+        cr_id = str(context.get("cr_id") or context.get("project_path") or "")
+        sig = f"{rule_id}|{cr_id}"
+        cutoff = local_now().timestamp() - self._dedup_window_seconds
+        try:
+            rows = self._cache.list_rule_logs()
+        except Exception:  # noqa: BLE001
+            return False
+        for row in rows[-50:]:  # only recent rows matter
+            if not getattr(row, "success", False):
+                continue
+            if getattr(row, "rule_id", "") != rule_id:
+                continue
+            row_sig = f"{getattr(row, 'rule_id', '')}|{cr_id}"
+            if row_sig != sig:
+                continue
+            ts = getattr(row, "timestamp", None)
+            try:
+                if ts is not None and ts.timestamp() >= cutoff:
+                    return True
+            except (AttributeError, ValueError):
+                continue
+        return False
 
     def _persist_execution(
         self,

@@ -31,6 +31,9 @@
   let approvalPollTimer: ReturnType<typeof setInterval> | undefined;
   // Armed by the Send button (irreversible outward action → ConfirmModal gate).
   let pendingSend: { kind: "uat" | "lv"; label: string } | null = $state(null);
+  // Slice 4: Teams followup pending send (irreversible outward → ConfirmModal).
+  let pendingTeamsSend: { label: string; message: string } | null = $state(null);
+  let teamsFeedback: string = $state("");
 
   function stopApprovalStatusPoll() {
     if (approvalPollTimer !== undefined) { clearInterval(approvalPollTimer); approvalPollTimer = undefined; }
@@ -84,6 +87,35 @@
     else addToast("Draft opened in Outlook — review then send", "info");
     await loadApprovalStatus();
     approvalBusy = "";
+  }
+
+  // Slice 4: Teams followup — build message from project data, preview or confirm-send.
+  function teamsFollowupMessage(label: string): string {
+    const cr = approvalStatus?.cr_number ?? "";
+    const name = detail?.project_name ?? "";
+    return `Reminder: ${label} pending for ${cr ? "CR-" + cr : name}. Please follow up.`;
+  }
+  async function teamsFollowupPreview(label: string) {
+    if (!selectedPath) return;
+    teamsFeedback = "";
+    const message = teamsFollowupMessage(label);
+    const resp = await callBridge<{ status?: string; message?: string }>("teams_preview_message", message);
+    teamsFeedback = resp.ok
+      ? (resp.data?.status === "dev_skipped" ? "Teams preview (dev-skipped off-Windows)" : "Teams preview opened — message copied")
+      : resp.error.message;
+  }
+  function teamsFollowupSend(label: string) {
+    if (!selectedPath) return;
+    pendingTeamsSend = { label, message: teamsFollowupMessage(label) };
+  }
+  async function confirmTeamsSend() {
+    const p = pendingTeamsSend;
+    pendingTeamsSend = null;
+    if (!p) return;
+    const resp = await callBridge<{ status?: string; message?: string }>("teams_send_message", p.message);
+    teamsFeedback = resp.ok
+      ? (resp.data?.status === "dev_skipped" ? "Teams send (dev-skipped off-Windows)" : "Teams message sent")
+      : resp.error.message;
   }
 
   async function forceCheck(kind: "uat" | "lv") {
@@ -1302,9 +1334,9 @@
                           <span class="pd-status-dot dot-inactive"></span>
                           <span class="pd-auto-item-title">{label}</span>
                           <div class="pd-auto-item-actions">
-                            <button class="pd-command-btn" type="button" onclick={() => devStub("Teams followup diatur setelah Template system (Slice 2).")}>Send</button>
-                            <button class="pd-command-btn" type="button" onclick={() => devStub("Teams followup diatur setelah Template system (Slice 2).")}>Draft</button>
-                            <button class="pd-command-btn" type="button" onclick={() => devStub("Teams followup diatur setelah Template system (Slice 2).")}>Setting</button>
+                            <button class="pd-command-btn" type="button" onclick={() => teamsFollowupSend(label)}>Send</button>
+                            <button class="pd-command-btn" type="button" onclick={() => teamsFollowupPreview(label)}>Draft</button>
+                            <button class="pd-command-btn" type="button" title="Open Teams template settings" onclick={() => openAutomations(undefined, "send_teams")}>Setting</button>
                           </div>
                         </div>
                       </div>
@@ -1451,6 +1483,8 @@
   <ConfirmModal title="Reopen project?" actionLabel="Reopen to UAT_PREPARE" targetName={pendingReopen.name} reversible={true} onConfirm={confirmReopen} onCancel={cancelReopen} />
 {:else if pendingSend}
   <ConfirmModal title="Send approval email?" actionLabel="Send now" targetName={`${pendingSend.label}${approvalStatus?.cr_number ? " · " + approvalStatus.cr_number : ""}`} reversible={false} onConfirm={confirmSend} onCancel={() => (pendingSend = null)} />
+{:else if pendingTeamsSend}
+  <ConfirmModal title="Send Teams followup?" actionLabel="Send now" targetName={pendingTeamsSend.label} reversible={false} onConfirm={confirmTeamsSend} onCancel={() => (pendingTeamsSend = null)} />
 {/if}
 
 <style>

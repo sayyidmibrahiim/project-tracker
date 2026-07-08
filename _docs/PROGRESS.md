@@ -16,6 +16,8 @@ Active work: **Automation System epic** (Outlook + General Automation). Spec: `_
 
 **Slice 3 — Rules Engine goal-driven + wire no-op actions + scope + conflict + pre-seeded**: implemented, awaiting user manual check. `AutomationService` ctor gains `metadata_store` injection slot; 5 no-op handlers wired to real services — `_handle_update_cr_state`/`_handle_update_drone_state` validate via `core/state_machine` (DEFAULT AMAN: illegal transition → skip+log, never force; no target_state/project_path/metadata → skip), `_handle_append_history` writes `HistoryEntry`, `_handle_download_email`/`_handle_save_attachment` stay guarded no-op (Slice 4 wires real paths). `_RulesAdapter` gains `detect_conflicts()` (trigger+goal+scope signature; WARNING only, never blocks) + `seed_defaults()` (3 pre-seeded rules DISABLED by default: Send UAT Ack, Send LV Ack, Auto Update CR State; idempotent by `is_pre_seeded`+name). `rules_conflict_key()` module-level in `automation_service.py` (pure, testable, no webview dep). Bridge: `rules_detect_conflicts` + `rules_seed_defaults` (seed called at app `run()` start, not on every `create_js_api` — keeps test factories seed-free). `RulesServiceProtocol` extended. Frontend `RulesActions.svelte`: goal wizard (5 goals drive default action set), scope picker (All/Specific CR with cr_ids comma-list), conflict badge + pre-seeded badge in rule cards. PD deep-links: `[+ Add Email Automation]`→rules preset `send_email`; CR `[Setting]`→rules preset `auto_update_status`; `[+ Add Automation Teams]`→rules preset `send_teams` (via `onNavigateAutomations(kind, goal)` → App.svelte `pendingRuleGoal` → Automations rules tab → RulesActions form open with preset). **DEFERRED to Slice 4**: auto-reply dedup/rate-limit — the auto-reply send path lives in the Slice 4 engine; building dedup now = YAGNI (no sender yet).
 
+**Slice 4 — Auto Update CR State engine + Teams followup wired + auto-reply dedup**: implemented, awaiting user manual check. New `services/cr_state_engine.py`: pattern-gated email → CR transition. **DEFAULT AMAN: no patterns configured → engine NO-OP**; only user-set `from`/`subject`/`body` regex patterns (stored per-project in new `ProjectMetadata.auto_update_patterns` dict `{"from","subject","body","target_state"}`) trigger; all patterns must match (AND); invalid regex → no-match + warn; pattern match + legal transition (`core/state_machine.validate_cr_transition`) → state change + `AUTO_UPDATE_CR_STATE` History; pattern match + illegal transition → `AUTO_UPDATE_CR_STATE_BLOCKED` History + skip (never force). Engine wired into `ApprovalPollingService._on_found` (reply-received hook): reads metadata, runs engine, persists on transition; engine errors are swallowed (never break reply handling). Create Drone Ticket **STAYS stub** (Jenkins API deferred). Teams followup wired: PD Teams `[Draft]`→`teams_preview_message` (resolved followup text from CR+project_name), `[Send]`→ConfirmModal→`teams_send_message`, `[Setting]`→deep-link rules preset `send_teams`. Auto-reply dedup (Slice 3 deferred item): `AutomationService.execute_rule` checks `_recently_fired(rule_id, cr_id)` within 1h window for `goal='auto_reply'` rules → skip+log via `automation_rule_logs` cache; fail-open on cache error (rather over-send than block real reply).
+
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
 Fix round v2 (steps 0–7, one behavior per round, user manual verify each): **complete 2026-07-06**. Step 0 watchdog `c94e387`, step 1 toolbar active states `65202cf`, steps 2–5b (5s idle countdown, hidden `.rte`, help popover, Narrow margins + clamp, WYSIWYG page + zoom) committed earlier, step 5c image drag-resize `4ca0abd`, step 6 SVG toolbar icons `b1cf0dc`, step 7 default TNR 18px↔13.5pt + per-file toolbar font/size memory `37d8ca7`. PRD §12.12 synced. **Branch merged to `main` 2026-07-06** (user approved; branch kept per user rule).
@@ -66,25 +68,24 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest — Automation System Slice 3, 2026-07-08)
+## Verification (latest — Automation System Slice 4, 2026-07-08)
 
 ```
-svelte-check: 0 errors, 4 warnings (a11y non-interactive <li> onclick on autocomplete items — cosmetic)
+svelte-check: 0 errors, 4 warnings (a11y autocomplete <li> — cosmetic)
 frontend tests: 182 pass / 0 fail
-targeted backend tests: 57 passed (phase_c automation + js_api + email render + resolver + slice3 handlers + conflict-key)
-full pytest: 1850 passed, 20 skipped, 6 known baseline failures (no new fails)
+targeted backend tests: 67 passed (incl. 10 new test_cr_state_engine.py)
+full pytest: 1860 passed, 20 skipped, 6 known baseline failures (no new fails)
 build: ✓ (app was closed)
 app smoke: ✓ clean
 ```
 
-Slice 3 manual checklist (for user):
-- [ ] Automations → Rules tab: 3 pre-seeded rules appear DISABLED (Send UAT Ack, Send LV Ack, Auto Update CR State), "seed" badge.
-- [ ] `+ New rule` → pick Goal → action set auto-fills for that goal (e.g. Send New Email → send_outlook_email).
-- [ ] "Applies to": All / Specific CR (enter CR IDs) saved + reloaded.
-- [ ] Create 2 enabled rules with same trigger+goal+scope → both get "⚠ conflict" badge (warning, not blocked).
-- [ ] Edit a rule with `update_cr_state` action → Execute with legal target_state → CR state changes + History entry; illegal target → skipped + logged (no force).
-- [ ] PD `[+ Add Email Automation]` → Rules tab opens with form preset goal=send_email.
-- [ ] PD CR group `[Setting]` → Rules tab opens with form preset goal=auto_update_status.
-- [ ] PD `[+ Add Automation Teams]` → Rules tab opens with form preset goal=send_teams.
+Slice 4 manual checklist (for user):
+- [ ] PD: toggle "Auto Update CR State" ON but leave patterns empty → send/receive approval reply → CR state UNCHANGED (no-op, no error).
+- [ ] PD: configure `auto_update_patterns` via metadata (e.g. `{"subject":"approved","target_state":"APPROVED"}`) + toggle ON → receive matching reply → CR transitions to APPROVED + History entry "AUTO_UPDATE_CR_STATE".
+- [ ] Set a pattern targeting an illegal transition (e.g. PENDING_SUBMISSION→FINISHED) → matching reply → CR unchanged + History "AUTO_UPDATE_CR_STATE_BLOCKED".
+- [ ] PD Teams "Auto Followup Ack" `[Draft]` → Teams preview opens with followup message (CR + project name); off-Windows = dev-skipped toast.
+- [ ] PD Teams `[Send]` → ConfirmModal → confirm → Teams message sent (or dev-skipped off-Windows).
+- [ ] PD Teams `[Setting]` → deep-links to Rules tab with form preset goal=send_teams.
+- [ ] Rules: an `auto_reply` rule fired successfully → fire again within 1h for same CR → skipped (dedup) with "dedup" trigger in logs.
 
-(Slice 2 manual checklist still applies — both slices shipped.)
+(Slices 2+3 manual checklists still apply — all four slices shipped.)

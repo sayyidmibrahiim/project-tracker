@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-07-08 (Automation System epic — Slice 4: Auto Update CR State engine + Teams followup + auto-reply dedup)
+
+**Now:** Slice 4 implemented + verified on `automations/approval-polling`. Continuing autonomous loop.
+- New `services/cr_state_engine.py`: `patterns_configured()`/`match_email()`/`apply_transition()`. Pattern-gated email→CR transition. **DEFAULT AMAN: no patterns = no-op.** All configured patterns (AND) must match (regex, case-insensitive); invalid regex→no-match+warn; legal transition→state+History `AUTO_UPDATE_CR_STATE`; illegal→History `AUTO_UPDATE_CR_STATE_BLOCKED`+skip (never force).
+- `core/models.py`: `ProjectMetadata.auto_update_patterns: dict` (from_dict/to_dict wired) — `{"from","subject","body","target_state"}`.
+- `services/approval_polling_service.py`: `_on_found` (reply hook) runs engine when metadata available; engine errors swallowed (never break reply handling). Added `logging` + `_log`.
+- `services/automation_service.py`: auto-reply dedup (Slice 3 deferred item) — `execute_rule` checks `_recently_fired(rule_id, cr_id)` within 1h window for `goal='auto_reply'` rules → skip+log via `automation_rule_logs` cache; fail-open on cache error. `_dedup_window_seconds=3600`.
+- Frontend `ProjectDetails.svelte`: Teams followup wired — `[Draft]`→`teams_preview_message` (followup text from CR+project_name), `[Send]`→ConfirmModal(`pendingTeamsSend`)→`teams_send_message`, `[Setting]`→deep-link rules preset `send_teams`. `teamsFeedback` display.
+- Create Drone Ticket: **STAYS stub** (Jenkins API deferred) — no change.
+- **Verify:** svelte 0/4; frontend 182; targeted pytest 67 (incl 10 new `test_cr_state_engine.py`); full pytest 1860 + 6 baseline (no new); build ✓; smoke ✓.
+- **Next:** Slice 5 (Logs top-level menu + right-sidebar + retention — LAST slice).
+- **active_menu:** automations / project-details
+
+---
+
 ## 2026-07-08 (Automation System epic — Slice 3: Rules Engine goal-driven + wired handlers + scope + conflict + pre-seeded)
 
 **Now:** Slice 3 implemented + verified on `automations/approval-polling`. Continuing autonomous loop.

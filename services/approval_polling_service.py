@@ -10,6 +10,7 @@ first matching reply as .msg into _cr-docs/, CoUninitialize in finally.
 
 from __future__ import annotations
 
+import logging
 import sys
 import uuid
 from datetime import datetime
@@ -47,6 +48,8 @@ TEMPLATE_FIELDS = ("to", "cc", "subject", "body", "mode")
 
 # CR states where automation is forced off (terminal lifecycle states).
 TERMINAL_CR_STATES = {CRState.FINISHED, CRState.POSTPONED, CRState.CANCELED}
+
+_log = logging.getLogger(__name__)
 
 
 def _ok(data: Any = None) -> dict[str, Any]:
@@ -604,6 +607,17 @@ class ApprovalPollingService:
         self._cache.update_approval_job(
             str(job["job_id"]), status="completed", reply_received_at=local_now().replace(tzinfo=None).isoformat()
         )
+        # Slice 4: run the auto-update CR state engine when enabled + patterns set.
+        try:
+            from services.cr_state_engine import apply_transition  # noqa: PLC0415
+
+            metadata = self._metadata_store.read(Path(str(job["project_path"])))
+            if metadata is not None:
+                result = apply_transition(metadata, subject=str(subject))
+                if result.acted:
+                    self._metadata_store.write(Path(str(job["project_path"])), metadata)
+        except Exception:  # noqa: BLE001 — engine must never break reply handling
+            _log.warning("auto-update CR state engine failed", exc_info=True)
         if self._notification_service:
             self._notification_service.add(
                 type="SUCCESS",
