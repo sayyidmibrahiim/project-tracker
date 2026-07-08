@@ -259,6 +259,9 @@ class CicdServiceProtocol(Protocol):
     def clone(self, appcode: str, clone_url: str) -> object:
         """Start a background clone of branch 'cicd' into the appcode CICD dir."""
 
+    def clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> object:
+        """Clone from URL after backend resolves/creates appcode target."""
+
     def clone_status(self, repo_name: str) -> object:
         """Return {status, error} for a clone job."""
 
@@ -1042,6 +1045,15 @@ class JsApi:
             return ok(_to_frontend_safe(self._cicd_service.clone(appcode, clone_url)))
         except Exception as exc:
             return fail(str(exc), code="CICD_CLONE_FAILED")
+
+    def cicd_clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> dict[str, object]:
+        """Resolve appcode from clone URL, optionally create it, then clone branch 'cicd'."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone_from_link(clone_url, appcode_override, confirm_create)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_FROM_LINK_FAILED")
 
     def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
         """Poll a clone job {status, error}."""

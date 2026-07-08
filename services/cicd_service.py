@@ -8,6 +8,8 @@ Domain rule: never crash on missing git or non-git folders (DEFAULT AMAN).
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
+import json
 import shutil
 import subprocess
 import sys
@@ -34,6 +36,12 @@ class CloneUrlInfo:
 def _git() -> str:
     """Resolve the git executable, falling back to bare 'git'."""
     return shutil.which("git") or "git"
+
+
+def encode_repo_id(appcode: str, repo: str) -> str:
+    """Return URL-safe repo identity; backend decodes/resolves later."""
+    raw = json.dumps({"appcode": appcode, "repo": repo}, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def check_git() -> dict[str, object]:
@@ -203,6 +211,22 @@ class CicdService:
         if job is None:
             return {"status": "unknown", "error": ""}
         return dict(job)
+
+    def remote_url(self, repo_path: Path) -> str:
+        """Return origin URL for an existing repo, or ''."""
+        try:
+            proc = subprocess.run(
+                [_git(), "-C", str(repo_path), "config", "--get", "remote.origin.url"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                creationflags=_CREATE_NO_WINDOW,
+            )
+            if proc.returncode != 0:
+                return ""
+            return (proc.stdout or "").strip()
+        except Exception:
+            return ""
 
     def start_clone(self, clone_url: str, dest_dir: Path) -> dict[str, object]:
         """Validate, then clone the 'cicd' branch on a daemon thread.

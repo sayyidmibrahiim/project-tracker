@@ -107,6 +107,82 @@ def test_cicd_preview_link_warns_when_candidate_has_separators(tmp_path):
     assert any("separator" in warning.lower() for warning in resp["data"]["warnings"])
 
 
+# ── clone from link adapter ─────────────────────────────────────────────
+def test_cicd_clone_from_link_missing_appcode_requires_confirmation(tmp_path):
+    api = _api_with_root(tmp_path)
+    resp = api.cicd_clone_from_link("https://host/scm/team/newapp.git")
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == "CICD_CLONE_FROM_LINK_FAILED"
+    assert "Create appcode confirmation is required" in resp["error"]["message"]
+
+
+def test_cicd_clone_from_link_confirmed_creates_tree_and_starts_clone(tmp_path, monkeypatch):
+    started = {}
+
+    def fake_start_clone(self, clone_url, dest_dir):
+        started["clone_url"] = clone_url
+        started["dest_dir"] = str(dest_dir)
+        return {"repo_name": "newapp", "path": str(dest_dir / "newapp"), "status": "cloning"}
+
+    monkeypatch.setattr(cicd.CicdService, "start_clone", fake_start_clone)
+    api = _api_with_root(tmp_path)
+    resp = api.cicd_clone_from_link("https://host/scm/team/newapp.git", confirm_create=True)
+    data = resp["data"]
+    root = tmp_path / "root" / "newapp"
+    assert resp["ok"] is True
+    assert data["status"] == "cloning"
+    assert data["repo_name"] == "newapp"
+    assert data["appcode"] == "newapp"
+    assert data["job_id"] == "newapp"
+    assert data["repo_id"]
+    assert started["dest_dir"].endswith("newapp\\CICD") or started["dest_dir"].endswith("newapp/CICD")
+    assert (root / "CICD").is_dir()
+    year_dirs = [p for p in root.iterdir() if p.name.isdigit()]
+    assert year_dirs
+    year = year_dirs[0]
+    for state in ["UAT_PREPARE", "PROD_READY", "IMPLEMENTED", "POSTPONED", "CANCELED"]:
+        assert (year / "CR" / state).is_dir()
+    assert (year / "Non-CR").is_dir()
+    assert (root / "appcode.json").is_file()
+
+
+def test_cicd_clone_from_link_existing_appcode_keeps_config(tmp_path, monkeypatch):
+    def fake_start_clone(self, clone_url, dest_dir):
+        return {"repo_name": "myapp", "path": str(dest_dir / "myapp"), "status": "cloning"}
+
+    monkeypatch.setattr(cicd.CicdService, "start_clone", fake_start_clone)
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    before = api.appcode_get_config("myapp")["data"]
+    resp = api.cicd_clone_from_link("https://host/scm/team/myapp.git")
+    after = api.appcode_get_config("myapp")["data"]
+    assert resp["ok"] is True
+    assert after == before
+
+
+def test_cicd_clone_from_link_existing_same_remote_returns_exists(tmp_path, monkeypatch):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "myapp"
+    repo.mkdir(parents=True)
+    monkeypatch.setattr(cicd.CicdService, "remote_url", lambda self, path: "https://host/scm/team/myapp.git")
+    resp = api.cicd_clone_from_link("https://host/scm/team/myapp.git")
+    assert resp["ok"] is True
+    assert resp["data"]["status"] == "exists"
+    assert resp["data"]["repo_name"] == "myapp"
+
+
+def test_cicd_clone_from_link_existing_different_remote_blocks(tmp_path, monkeypatch):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "myapp"
+    repo.mkdir(parents=True)
+    monkeypatch.setattr(cicd.CicdService, "remote_url", lambda self, path: "https://host/scm/team/other.git")
+    resp = api.cicd_clone_from_link("https://host/scm/team/myapp.git")
+    assert resp["ok"] is False
+    assert "different remote" in resp["error"]["message"]
+
+
 # ── parse_porcelain ────────────────────────────────────────────────────
 def test_parse_porcelain_categories():
     text = " M src/main.py\n?? new.sh\nA  staged.txt\nMM both.py\n"
@@ -239,6 +315,9 @@ class _CicdAdapterStub:
     def clone(self, appcode, clone_url):
         return self._service.start_clone(clone_url, "/tmp/cicd")
 
+    def clone_from_link(self, clone_url, appcode_override="", confirm_create=False):
+        return {"job_id": "myapp", "repo_id": "abc", "repo_name": "myapp", "appcode": "myapp", "status": "cloning"}
+
     def clone_status(self, repo_name):
         return self._service.clone_status(repo_name)
 
@@ -259,6 +338,12 @@ def test_bridge_preview_link_ok():
     api = JsApi(dashboard_service=None, cicd_service=_CicdAdapterStub(FakeCicdService()))
     resp = api.cicd_preview_link("https://host/scm/team/myapp.git")
     assert resp["ok"] is True and resp["data"]["repo_name"] == "myapp"
+
+
+def test_bridge_clone_from_link_ok():
+    api = JsApi(dashboard_service=None, cicd_service=_CicdAdapterStub(FakeCicdService()))
+    resp = api.cicd_clone_from_link("https://host/scm/team/myapp.git")
+    assert resp["ok"] is True and resp["data"]["status"] == "cloning"
 
 
 def test_bridge_service_unavailable():

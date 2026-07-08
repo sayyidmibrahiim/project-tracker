@@ -1328,8 +1328,44 @@ def create_js_api(
         def git_status(self) -> object:
             return self._service.git_status()
 
+        @staticmethod
+        def _same_remote(left: str, right: str) -> bool:
+            def norm(value: str) -> str:
+                value = str(value or "").strip().rstrip("/")
+                return value[:-4] if value.casefold().endswith(".git") else value
+
+            return norm(left) == norm(right)
+
         def clone(self, appcode: str, clone_url: str) -> object:
             return self._service.start_clone(clone_url, self._cicd_dir(appcode))
+
+        def clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> object:
+            from core.rules import validate_windows_folder_name
+            from services.cicd_service import encode_repo_id, parse_clone_url
+
+            info = parse_clone_url(clone_url)
+            appcode = str(appcode_override or info.appcode_candidate).strip()
+            validate_windows_folder_name(appcode)
+            appcodes = list(self._appcode.list_appcodes())
+            matches = [item for item in appcodes if str(item["name"]).casefold() == appcode.casefold()]
+            if len(matches) > 1:
+                raise ValueError(f"Multiple appcodes match: {appcode}")
+            if not matches:
+                if not confirm_create:
+                    raise ValueError("Create appcode confirmation is required before cloning")
+                self._appcode.add_appcode(appcode)
+                matches = [self._appcode.get_appcode_config(appcode)]
+            appcode = str(matches[0]["name"])
+            cicd_dir = self._cicd_dir_from_config(matches[0])
+            repo_dir = cicd_dir / info.repo_name
+            repo_id = encode_repo_id(appcode, info.repo_name)
+            if repo_dir.exists():
+                remote = self._service.remote_url(repo_dir)
+                if self._same_remote(remote, info.clone_url):
+                    return {"job_id": "", "repo_id": repo_id, "repo_name": info.repo_name, "appcode": appcode, "status": "exists"}
+                raise ValueError(f"Repository folder already exists with a different remote: {repo_dir}")
+            started = self._service.start_clone(info.clone_url, cicd_dir)
+            return {"job_id": info.repo_name, "repo_id": repo_id, "repo_name": info.repo_name, "appcode": appcode, "status": started.get("status", "cloning")}
 
         def clone_status(self, repo_name: str) -> object:
             return self._service.clone_status(repo_name)
