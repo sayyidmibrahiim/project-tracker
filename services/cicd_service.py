@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import base64
+import hashlib
 import json
 import os
 import re
@@ -25,6 +26,7 @@ from core.rules import validate_windows_folder_name
 # calls don't flash a black box. 0 elsewhere (flag is Windows-only).
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
 _CLONE_TIMEOUT_SECONDS = 600
+_MAX_TEXT_FILE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -305,6 +307,36 @@ class CicdService:
         status = parse_git_status(proc.stdout or "")
         status["remote_url"] = self.remote_url(Path(repo_path))
         return status
+
+    def file_read(self, file_path: Path) -> dict[str, object]:
+        path = Path(file_path)
+        if not path.is_file():
+            raise ValueError("File path must point to a file")
+        raw = path.read_bytes()
+        if len(raw) > _MAX_TEXT_FILE_BYTES:
+            raise ValueError("File is larger than 1 MiB; open externally")
+        if b"\x00" in raw:
+            raise ValueError("Binary files are read-only; open externally")
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("File is not valid UTF-8; open externally") from exc
+        return {"content": content, "hash": hashlib.sha256(raw).hexdigest(), "mtime": path.stat().st_mtime, "encoding": "utf-8", "readonly_reason": ""}
+
+    def file_save(self, file_path: Path, content: str, expected_hash: str) -> dict[str, object]:
+        path = Path(file_path)
+        if not path.is_file():
+            raise ValueError("File path must point to a file")
+        current = hashlib.sha256(path.read_bytes()).hexdigest()
+        if current != str(expected_hash or ""):
+            error = ValueError("File changed outside the app; reload before saving")
+            setattr(error, "code", "STALE_FILE")
+            raise error
+        tmp = path.with_name(f".{path.name}.tmp")
+        tmp.write_text(str(content or ""), encoding="utf-8")
+        tmp.replace(path)
+        raw = path.read_bytes()
+        return {"hash": hashlib.sha256(raw).hexdigest(), "mtime": path.stat().st_mtime, "status": "saved"}
 
     def start_clone(self, clone_url: str, dest_dir: Path) -> dict[str, object]:
         """Validate, then clone the 'cicd' branch on a daemon thread.

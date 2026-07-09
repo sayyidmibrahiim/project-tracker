@@ -1397,6 +1397,26 @@ def create_js_api(
             _appcode, _repo, repo_path = self._repo_path(repo_id)
             return self._service.repo_status(repo_path)
 
+        def _file_path(self, repo_id: str, rel_path: str) -> Path:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            rel = Path(str(rel_path or ""))
+            if rel.is_absolute() or ".." in rel.parts or rel.parts[:1] == (".git",):
+                raise ValueError("File path is outside CICD repo")
+            file_path = (repo_path / rel).resolve()
+            if repo_path not in file_path.parents:
+                raise ValueError("File path is outside CICD repo")
+            return file_path
+
+        def file_read(self, repo_id: str, rel_path: str) -> object:
+            return self._service.file_read(self._file_path(repo_id, rel_path))
+
+        def file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            status = self._service.repo_status(repo_path)
+            if status.get("branch") != "cicd":
+                raise ValueError("Save allowed only on branch cicd")
+            return self._service.file_save(self._file_path(repo_id, rel_path), content, expected_hash)
+
         def job(self, job_id: str) -> object:
             data = self._service.clone_status(job_id)
             return {"job_id": job_id, "kind": "clone", "state": data.get("status", "unknown"), "progress_label": data.get("status", "unknown"), "exit_code": None, "stdout_tail": "", "stderr_tail": data.get("error", ""), "repo_id": ""}

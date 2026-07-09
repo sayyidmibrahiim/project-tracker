@@ -271,6 +271,12 @@ class CicdServiceProtocol(Protocol):
     def repo_status(self, repo_id: str) -> object:
         """Return branch/change status for a backend-resolved repo id."""
 
+    def file_read(self, repo_id: str, rel_path: str) -> object:
+        """Return UTF-8 file content with hash guard metadata."""
+
+    def file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> object:
+        """Save UTF-8 file when hash and branch guard pass."""
+
     def clone_status(self, repo_name: str) -> object:
         """Return {status, error} for a clone job."""
 
@@ -1090,6 +1096,24 @@ class JsApi:
             return ok(_to_frontend_safe(self._cicd_service.repo_status(repo_id)))
         except Exception as exc:
             return fail(str(exc), code="CICD_REPO_STATUS_FAILED")
+
+    def cicd_file_read(self, repo_id: str, rel_path: str) -> dict[str, object]:
+        """Read a safe repo-relative UTF-8 file."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.file_read(repo_id, rel_path)))
+        except Exception as exc:
+            return fail(str(exc), code=getattr(exc, "code", "CICD_FILE_READ_FAILED"))
+
+    def cicd_file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> dict[str, object]:
+        """Save a safe repo-relative UTF-8 file with hash guard."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.file_save(repo_id, rel_path, content, expected_hash)))
+        except Exception as exc:
+            return fail(str(exc), code=getattr(exc, "code", "CICD_FILE_SAVE_FAILED"))
 
     def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
         """Poll a clone job {status, error}."""

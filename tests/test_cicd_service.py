@@ -255,6 +255,89 @@ def test_cicd_repo_status_bridge(tmp_path, monkeypatch):
     assert resp["data"]["changes"][0]["rel_path"] == "pipe.yml"
 
 
+# ── file read / save ───────────────────────────────────────────────────
+def test_cicd_file_read_rejects_unsafe_paths(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    repo_id = cicd.encode_repo_id("myapp", "repo1")
+    for rel_path in ["../x.txt", "/abs.txt", ".git/config"]:
+        resp = api.cicd_file_read(repo_id, rel_path)
+        assert resp["ok"] is False
+
+
+def test_cicd_file_read_rejects_binary_large_and_directory(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    (repo / "bin.dat").write_bytes(b"a\x00b")
+    (repo / "large.txt").write_text("x" * (1024 * 1024 + 1), encoding="utf-8")
+    repo_id = cicd.encode_repo_id("myapp", "repo1")
+    assert api.cicd_file_read(repo_id, "bin.dat")["ok"] is False
+    assert api.cicd_file_read(repo_id, "large.txt")["ok"] is False
+    assert api.cicd_file_read(repo_id, ".")["ok"] is False
+
+
+def test_cicd_file_read_returns_text_hash_mtime(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    (repo / "pipe.yml").write_text("hello", encoding="utf-8")
+    resp = api.cicd_file_read(cicd.encode_repo_id("myapp", "repo1"), "pipe.yml")
+    assert resp["ok"] is True
+    assert resp["data"]["content"] == "hello"
+    assert resp["data"]["hash"]
+    assert resp["data"]["mtime"]
+    assert resp["data"]["encoding"] == "utf-8"
+
+
+def test_cicd_file_save_requires_cicd_branch(tmp_path, monkeypatch):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    (repo / "pipe.yml").write_text("hello", encoding="utf-8")
+    repo_id = cicd.encode_repo_id("myapp", "repo1")
+    current = api.cicd_file_read(repo_id, "pipe.yml")["data"]
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "main"})
+    resp = api.cicd_file_save(repo_id, "pipe.yml", "next", current["hash"])
+    assert resp["ok"] is False
+    assert "branch cicd" in resp["error"]["message"]
+
+
+def test_cicd_file_save_rejects_stale_hash(tmp_path, monkeypatch):
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd"})
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    (repo / "pipe.yml").write_text("hello", encoding="utf-8")
+    resp = api.cicd_file_save(cicd.encode_repo_id("myapp", "repo1"), "pipe.yml", "next", "bad")
+    assert resp["ok"] is False
+    assert resp["error"]["code"] == "STALE_FILE"
+    assert (repo / "pipe.yml").read_text(encoding="utf-8") == "hello"
+
+
+def test_cicd_file_save_writes_atomically_and_returns_new_hash(tmp_path, monkeypatch):
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd"})
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    target = repo / "pipe.yml"
+    target.write_text("hello", encoding="utf-8")
+    repo_id = cicd.encode_repo_id("myapp", "repo1")
+    current = api.cicd_file_read(repo_id, "pipe.yml")["data"]
+    resp = api.cicd_file_save(repo_id, "pipe.yml", "next", current["hash"])
+    assert resp["ok"] is True
+    assert target.read_text(encoding="utf-8") == "next"
+    assert resp["data"]["hash"] != current["hash"]
+    assert not list(repo.glob("*.tmp"))
+
+
 # ── parse_porcelain ────────────────────────────────────────────────────
 def test_parse_porcelain_categories():
     text = " M src/main.py\n?? new.sh\nA  staged.txt\nMM both.py\n"
