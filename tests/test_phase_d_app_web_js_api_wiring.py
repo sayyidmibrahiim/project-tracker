@@ -147,8 +147,17 @@ def test_run_uses_app_config_cache_path(monkeypatch, tmp_path):
         return fake_api
 
     monkeypatch.setattr(app_web, "create_js_api", fake_create_js_api)
-    monkeypatch.setattr(app_web.webview, "create_window", lambda *args, **kwargs: captured.setdefault("window_kwargs", kwargs))
-    monkeypatch.setattr(app_web.webview, "start", lambda **kwargs: captured.setdefault("start_kwargs", kwargs))
+
+    class FakeWebview:
+        def create_window(self, *args, **kwargs):
+            captured["window_kwargs"] = kwargs
+            return object()
+
+        def start(self, **kwargs):
+            captured["start_kwargs"] = kwargs
+
+    # app_web imports pywebview lazily in run(); inject a fake so no window is created.
+    monkeypatch.setattr(app_web, "webview", FakeWebview())
 
     app_web.run(start_webview=False)
 

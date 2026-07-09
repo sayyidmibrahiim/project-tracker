@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-import webview
+# pywebview is imported lazily in run() so app_web stays importable headless
+# (tests/CI have no window). Tests patch app_web.webview, so keep it a module attr.
+webview = None
 
 from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
 from core.models import AppCodeConfig, AppSettings, DroneTicket, ProjectMetadata, local_now
@@ -2235,6 +2237,11 @@ def resolve_frontend_url(*, dev: bool = False, project_root: Path = PROJECT_ROOT
 
 def run(*, dev: bool = False, start_webview: bool = True) -> None:
     """Create webview window and start pywebview on main thread."""
+    global webview
+    if webview is None:  # lazy real import; tests pre-patch app_web.webview with a fake
+        import webview as _webview
+        webview = _webview
+
     logger = app_logger.setup_backend_logging()
     logger.info(
         "backend.app.start",
