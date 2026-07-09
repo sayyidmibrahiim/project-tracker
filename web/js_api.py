@@ -247,6 +247,49 @@ class AppCodeServiceProtocol(Protocol):
         """Update appcode config."""
 
 
+class CicdServiceProtocol(Protocol):
+    """CICD service surface used by JsApi."""
+
+    def git_status(self) -> object:
+        """Return {installed, version}."""
+
+    def preview_link(self, clone_url: str) -> object:
+        """Return clone URL preview with inferred appcode target."""
+
+    def clone(self, appcode: str, clone_url: str) -> object:
+        """Start a background clone of branch 'cicd' into the appcode CICD dir."""
+
+    def clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> object:
+        """Clone from URL after backend resolves/creates appcode target."""
+
+    def job(self, job_id: str) -> object:
+        """Return git job status by id."""
+
+    def workspace(self, appcode: str = "") -> object:
+        """Return appcodes and repos with backend-generated repo ids."""
+
+    def repo_status(self, repo_id: str) -> object:
+        """Return branch/change status for a backend-resolved repo id."""
+
+    def file_read(self, repo_id: str, rel_path: str) -> object:
+        """Return UTF-8 file content with hash guard metadata."""
+
+    def file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> object:
+        """Save UTF-8 file when hash and branch guard pass."""
+
+    def git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> object:
+        """Run allowed safe git action for a backend-resolved repo id."""
+
+    def clone_status(self, repo_name: str) -> object:
+        """Return {status, error} for a clone job."""
+
+    def list_repos(self, appcode: str) -> object:
+        """Return cloned repos with git status summary."""
+
+    def list_files(self, repo_path: str) -> object:
+        """Return recursive file tree with per-file git status."""
+
+
 class FileServiceProtocol(Protocol):
     """File service surface used by JsApi."""
 
@@ -591,6 +634,7 @@ class JsApi:
         global_plan_service: GlobalPlanServiceProtocol | None = None,
         appcode_service: AppCodeServiceProtocol | None = None,
         approval_service: ApprovalServiceProtocol | None = None,
+        cicd_service: CicdServiceProtocol | None = None,
     ) -> None:
         self._dashboard_service = dashboard_service
         self._notification_service = notification_service
@@ -612,6 +656,7 @@ class JsApi:
         self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
         self._approval_service = approval_service
+        self._cicd_service = cicd_service
 
     def frontend_log(self, event: dict[str, object]) -> dict[str, object]:
         """Persist a frontend activity/debug event to the AppData frontend log."""
@@ -991,6 +1036,123 @@ class JsApi:
             return ok(_to_frontend_safe(self._appcode_service.update_appcode_config(appcode, data)))
         except Exception as exc:
             return fail(str(exc), code="APPCODE_UPDATE_CONFIG_FAILED")
+
+    def cicd_git_status(self) -> dict[str, object]:
+        """Return git CLI install status {installed, version}."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.git_status()))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_GIT_STATUS_FAILED")
+
+    def cicd_preview_link(self, clone_url: str) -> dict[str, object]:
+        """Preview repo/appcode target from a Bitbucket clone URL."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.preview_link(clone_url)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_PREVIEW_LINK_FAILED")
+
+    def cicd_clone(self, appcode: str, clone_url: str) -> dict[str, object]:
+        """Start a background clone of branch 'cicd' into the appcode CICD folder."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone(appcode, clone_url)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_FAILED")
+
+    def cicd_clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> dict[str, object]:
+        """Resolve appcode from clone URL, optionally create it, then clone branch 'cicd'."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone_from_link(clone_url, appcode_override, confirm_create)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_FROM_LINK_FAILED")
+
+    def cicd_job(self, job_id: str) -> dict[str, object]:
+        """Poll a git job by id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.job(job_id)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_JOB_FAILED")
+
+    def cicd_workspace(self, appcode: str = "") -> dict[str, object]:
+        """Return appcodes + repos with backend-generated repo ids."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.workspace(appcode)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_WORKSPACE_FAILED")
+
+    def cicd_repo_status(self, repo_id: str) -> dict[str, object]:
+        """Return branch/change status for a backend-resolved repo id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.repo_status(repo_id)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_REPO_STATUS_FAILED")
+
+    def cicd_file_read(self, repo_id: str, rel_path: str) -> dict[str, object]:
+        """Read a safe repo-relative UTF-8 file."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.file_read(repo_id, rel_path)))
+        except Exception as exc:
+            return fail(str(exc), code=getattr(exc, "code", "CICD_FILE_READ_FAILED"))
+
+    def cicd_file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> dict[str, object]:
+        """Save a safe repo-relative UTF-8 file with hash guard."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.file_save(repo_id, rel_path, content, expected_hash)))
+        except Exception as exc:
+            return fail(str(exc), code=getattr(exc, "code", "CICD_FILE_SAVE_FAILED"))
+
+    def cicd_git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+        """Run an allowed safe git action for a backend-resolved repo id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.git_action(repo_id, action, payload)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_GIT_ACTION_FAILED")
+
+    def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
+        """Poll a clone job {status, error}."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.clone_status(repo_name)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_CLONE_STATUS_FAILED")
+
+    def cicd_list_repos(self, appcode: str) -> dict[str, object]:
+        """List cloned repos in the appcode CICD folder with status summary."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.list_repos(appcode)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_LIST_REPOS_FAILED")
+
+    def cicd_list_files(self, repo_path: str) -> dict[str, object]:
+        """Return the recursive file tree with git status for a cloned repo."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.list_files(repo_path)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_LIST_FILES_FAILED")
 
     def dashboard_list_projects(self, year: str | None = None, appcode: str | None = None) -> dict[str, object]:
         """Return dashboard project rows."""

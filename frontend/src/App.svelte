@@ -9,6 +9,7 @@
   import Automations from "./lib/components/Automations.svelte";
   import GlobalPlan from "./lib/components/GlobalPlan.svelte";
   import Logs from "./lib/components/Logs.svelte";
+  import CICDBrowser from "./lib/components/CICDBrowser.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
   import Toast from "./lib/components/Toast.svelte";
@@ -16,7 +17,7 @@
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
   import type { NotificationItem } from "./lib/types";
 
-  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "logs" | "settings";
+  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "logs" | "cicd" | "settings";
 
   // All pages have real components — no placeholder needed.
 
@@ -79,7 +80,7 @@
   }
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan", "logs"];
+    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan", "logs", "cicd"];
     logActivity({ source: "App.navigate", kind: "navigation", event: "start", from: currentPage, to: id, valid: validPages.includes(id) });
     if (validPages.includes(id)) {
       if (id !== "project-detail") {
@@ -271,6 +272,8 @@
           <GlobalPlan />
         {:else if currentPage === "logs"}
           <Logs initialCrId={pendingLogCrId} />
+        {:else if currentPage === "cicd"}
+          <CICDBrowser />
         {/if}
       {/key}
     </div>

@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-import webview
+# pywebview is imported lazily in run() so app_web stays importable headless
+# (tests/CI have no window). Tests patch app_web.webview, so keep it a module attr.
+webview = None
 
 from core.enums import CRState, DroneState, NonCrState, ProjectState, ProjectType
 from core.models import AppCodeConfig, AppSettings, DroneTicket, ProjectMetadata, local_now
@@ -1249,9 +1251,15 @@ def create_js_api(
         def get_appcode_config(self, appcode: str) -> object:
             appcode_path = self._appcode_path(appcode)
             config_path = appcode_path / "appcode.json"
-            if not config_path.is_file():
-                raise FileNotFoundError(f"Appcode config not found: {config_path}")
-            config = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            if config_path.is_file():
+                config = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            elif appcode_path.is_dir():
+                # ponytail: folder made manually on disk (e.g. SSID: year subfolder, no
+                # appcode.json) still lists in discover_appcodes — synthesize the same
+                # default here instead of raising, so selecting it doesn't error.
+                config = AppCodeConfig(display_name=appcode_path.name)
+            else:
+                raise FileNotFoundError(f"Appcode not found: {appcode_path.name}")
             return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=config))
 
         def update_appcode_config(self, appcode: str, data: dict[str, object]) -> object:
@@ -1269,6 +1277,170 @@ def create_js_api(
                 current.cicd_shared_path = Path(shared) if shared else None
             config_path.write_text(json.dumps(current.to_dict(), indent=2), encoding="utf-8")
             return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=current))
+
+    # ── cicd service adapter (git clone + repo browse) ────────────────
+    class _CicdServiceAdapter:
+        """Resolve each appcode's CICD dir (reusing appcode config) then
+        delegate git work to CicdService. per_appcode -> {appcode}/CICD;
+        shared_root -> AppCodeConfig.cicd_shared_path."""
+
+        def __init__(self, appcode_adapter, service) -> None:
+            self._appcode = appcode_adapter
+            self._service = service
+
+        def _cicd_dir(self, appcode: str) -> Path:
+            config = self._appcode.get_appcode_config(appcode)
+            return self._cicd_dir_from_config(config)
+
+        @staticmethod
+        def _cicd_dir_from_config(config: dict[str, object]) -> Path:
+            if config.get("cicd_location") == "shared_root":
+                shared = config.get("cicd_shared_path")
+                if not shared:
+                    raise ValueError("Shared CICD path is not configured for this appcode")
+                cicd_dir = Path(str(shared))
+            else:
+                cicd_dir = Path(str(config["path"])) / "CICD"
+            cicd_dir.mkdir(parents=True, exist_ok=True)
+            return cicd_dir
+
+        def preview_link(self, clone_url: str) -> object:
+            from services.cicd_service import parse_clone_url
+
+            info = parse_clone_url(clone_url)
+            appcodes = list(self._appcode.list_appcodes())
+            matches = [item for item in appcodes if str(item["name"]).casefold() == info.appcode_candidate.casefold()]
+            if len(matches) > 1:
+                raise ValueError(f"Multiple appcodes match: {info.appcode_candidate}")
+            matched = matches[0] if matches else None
+            appcode = str(matched["name"] if matched else info.appcode_candidate)
+            if not matched:
+                from core.rules import validate_windows_folder_name
+
+                validate_windows_folder_name(appcode)
+            cicd_dir = self._cicd_dir_from_config(matched) if matched else (self._appcode._root() / appcode / "CICD")
+            warnings = []
+            if any(separator in info.appcode_candidate for separator in ("-", "_", ".", " ")):
+                warnings.append("Appcode candidate contains a separator; confirm or correct it before clone.")
+            return {
+                "repo_name": info.repo_name,
+                "appcode_candidate": info.appcode_candidate,
+                "matched_appcode": appcode if matched else "",
+                "appcode_exists": matched is not None,
+                "needs_confirmation": matched is None,
+                "target_dir": str(cicd_dir),
+                "target_repo_path": str(cicd_dir / info.repo_name),
+                "warnings": warnings,
+            }
+
+        def git_status(self) -> object:
+            return self._service.git_status()
+
+        @staticmethod
+        def _same_remote(left: str, right: str) -> bool:
+            def norm(value: str) -> str:
+                value = str(value or "").strip().rstrip("/")
+                return value[:-4] if value.casefold().endswith(".git") else value
+
+            return norm(left) == norm(right)
+
+        def clone(self, appcode: str, clone_url: str) -> object:
+            return self._service.start_clone(clone_url, self._cicd_dir(appcode))
+
+        def clone_from_link(self, clone_url: str, appcode_override: str = "", confirm_create: bool = False) -> object:
+            from core.rules import validate_windows_folder_name
+            from services.cicd_service import encode_repo_id, parse_clone_url
+
+            info = parse_clone_url(clone_url)
+            appcode = str(appcode_override or info.appcode_candidate).strip()
+            validate_windows_folder_name(appcode)
+            appcodes = list(self._appcode.list_appcodes())
+            matches = [item for item in appcodes if str(item["name"]).casefold() == appcode.casefold()]
+            if len(matches) > 1:
+                raise ValueError(f"Multiple appcodes match: {appcode}")
+            if not matches:
+                if not confirm_create:
+                    raise ValueError("Create appcode confirmation is required before cloning")
+                self._appcode.add_appcode(appcode)
+                matches = [self._appcode.get_appcode_config(appcode)]
+            appcode = str(matches[0]["name"])
+            cicd_dir = self._cicd_dir_from_config(matches[0])
+            repo_dir = cicd_dir / info.repo_name
+            repo_id = encode_repo_id(appcode, info.repo_name)
+            if repo_dir.exists():
+                remote = self._service.remote_url(repo_dir)
+                if self._same_remote(remote, info.clone_url):
+                    return {"job_id": "", "repo_id": repo_id, "repo_name": info.repo_name, "appcode": appcode, "status": "exists"}
+                raise ValueError(f"Repository folder already exists with a different remote: {repo_dir}")
+            started = self._service.start_clone(info.clone_url, cicd_dir)
+            return {"job_id": info.repo_name, "repo_id": repo_id, "repo_name": info.repo_name, "appcode": appcode, "status": started.get("status", "cloning")}
+
+        def _repo_path(self, repo_id: str) -> tuple[str, str, Path]:
+            from services.cicd_service import decode_repo_id
+
+            info = decode_repo_id(repo_id)
+            appcode = info["appcode"]
+            repo = info["repo"]
+            config = self._appcode.get_appcode_config(appcode)
+            cicd_dir = self._cicd_dir_from_config(config).resolve()
+            repo_path = (cicd_dir / repo).resolve()
+            if cicd_dir not in repo_path.parents and repo_path != cicd_dir:
+                raise ValueError("Repository path is outside CICD folder")
+            return appcode, repo, repo_path
+
+        def workspace(self, appcode: str = "") -> object:
+            from services.cicd_service import encode_repo_id
+
+            appcodes = list(self._appcode.list_appcodes())
+            selected = str(appcode or (appcodes[0]["name"] if appcodes else ""))
+            repos = []
+            if selected:
+                for repo in self._service.list_repos(self._cicd_dir(selected)):
+                    repo = dict(repo)
+                    repo["repo_id"] = encode_repo_id(selected, str(repo["name"]))
+                    repos.append(repo)
+            return {"appcodes": appcodes, "repos": repos, "selected_appcode": selected}
+
+        def repo_status(self, repo_id: str) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            return self._service.repo_status(repo_path)
+
+        def _file_path(self, repo_id: str, rel_path: str) -> Path:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            rel = Path(str(rel_path or ""))
+            if rel.is_absolute() or ".." in rel.parts or rel.parts[:1] == (".git",):
+                raise ValueError("File path is outside CICD repo")
+            file_path = (repo_path / rel).resolve()
+            if repo_path not in file_path.parents:
+                raise ValueError("File path is outside CICD repo")
+            return file_path
+
+        def file_read(self, repo_id: str, rel_path: str) -> object:
+            return self._service.file_read(self._file_path(repo_id, rel_path))
+
+        def file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            status = self._service.repo_status(repo_path)
+            if status.get("branch") != "cicd":
+                raise ValueError("Save allowed only on branch cicd")
+            return self._service.file_save(self._file_path(repo_id, rel_path), content, expected_hash)
+
+        def git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            return self._service.git_action(repo_path, action, payload)
+
+        def job(self, job_id: str) -> object:
+            data = self._service.clone_status(job_id)
+            return {"job_id": job_id, "kind": "clone", "state": data.get("status", "unknown"), "progress_label": data.get("status", "unknown"), "exit_code": None, "stdout_tail": "", "stderr_tail": data.get("error", ""), "repo_id": ""}
+
+        def clone_status(self, repo_name: str) -> object:
+            return self._service.clone_status(repo_name)
+
+        def list_repos(self, appcode: str) -> object:
+            return self._service.list_repos(self._cicd_dir(appcode))
+
+        def list_files(self, repo_path: str) -> object:
+            return self._service.list_files(Path(repo_path))
 
     # ── year service adapter (SettingsStore → year list) ──────────────
     class _YearServiceAdapter:
@@ -2001,6 +2173,10 @@ def create_js_api(
     )
 
     # ── JsApi ─────────────────────────────────────────────────────────
+    from services.cicd_service import CicdService
+
+    _appcode_adapter = _AppCodeServiceAdapter(_settings_store)
+    _cicd_adapter = _CicdServiceAdapter(_appcode_adapter, CicdService())
     return JsApi(
         dashboard_service=dashboard_svc,
         notification_service=notification_svc,
@@ -2020,7 +2196,7 @@ def create_js_api(
         second_brain_service=second_brain_svc,
         scheduler_service=scheduler_svc,
         year_service=_YearServiceAdapter(_settings_store),
-        appcode_service=_AppCodeServiceAdapter(_settings_store),
+        appcode_service=_appcode_adapter,
         file_service=_FileServiceAdapter(_settings_store),
         notes_service=_NotesServiceAdapter(),
         rte_document_service=_get_rte_document_service_lazy(),
@@ -2036,6 +2212,7 @@ def create_js_api(
         ),
         global_plan_service=global_plan_svc,
         approval_service=approval_svc,
+        cicd_service=_cicd_adapter,
     )
 
 
@@ -2066,6 +2243,11 @@ def resolve_frontend_url(*, dev: bool = False, project_root: Path = PROJECT_ROOT
 
 def run(*, dev: bool = False, start_webview: bool = True) -> None:
     """Create webview window and start pywebview on main thread."""
+    global webview
+    if webview is None:  # lazy real import; tests pre-patch app_web.webview with a fake
+        import webview as _webview
+        webview = _webview
+
     logger = app_logger.setup_backend_logging()
     logger.info(
         "backend.app.start",

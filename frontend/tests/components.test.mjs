@@ -34,8 +34,43 @@ const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
 const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
 const PROJECT_DETAILS_SRC = "../src/lib/components/ProjectDetails.svelte";
+const CICD_SRC = "../src/lib/components/CICDBrowser.svelte";
 
 const noop = () => {};
+
+test("CICDBrowser v2 uses link-only clone flow + safe git bridge + editor", () => {
+  const src = readFileSync(fileURLToPath(new URL(CICD_SRC, import.meta.url)), "utf8");
+  assert.match(src, /cicdPreviewLink/); // link preview, no appcode-first dropdown clone
+  assert.match(src, /cicdCloneFromLink/); // backend resolves/creates appcode
+  assert.match(src, /confirm_create|confirmCreate/i); // create requires confirmation
+  assert.match(src, /cicdRepoStatus/);
+  assert.match(src, /cicdFileRead/);
+  assert.match(src, /cicdFileSave/);
+  assert.match(src, /cicdGitAction/);
+  assert.match(src, /CICDCodeEditor/); // editor pane
+  assert.match(src, /ConfirmModal/); // push + create confirmation gates
+  assert.doesNotMatch(src, /"push",\s*\{\s*force/); // never force push
+  assert.match(src, /Recheck Git Status/); // git-not-installed empty state
+  assert.match(src, /snippet fileTree/); // recursive tree
+});
+
+test("CICDCodeEditor mounts CodeMirror with Ctrl+S save + stale reload path", () => {
+  const editor = readFileSync(fileURLToPath(new URL("../src/lib/components/CICDCodeEditor.svelte", import.meta.url)), "utf8");
+  assert.match(editor, /@codemirror\/view/);
+  assert.match(editor, /Mod-s/); // Ctrl/Cmd+S
+  assert.match(editor, /onSave/);
+  const src = readFileSync(fileURLToPath(new URL(CICD_SRC, import.meta.url)), "utf8");
+  assert.match(src, /STALE_FILE/); // stale-save handling
+});
+
+test("App + TitleBar register the CICD page", () => {
+  const app = readFileSync(fileURLToPath(new URL("../src/App.svelte", import.meta.url)), "utf8");
+  assert.match(app, /currentPage === "cicd"/);
+  assert.match(app, /import CICDBrowser/);
+  const bar = readFileSync(fileURLToPath(new URL("../src/lib/components/TitleBar.svelte", import.meta.url)), "utf8");
+  assert.match(bar, /id: "cicd"/);
+  assert.match(bar, /cicd: `<svg/);
+});
 
 after(() => cleanup());
 
