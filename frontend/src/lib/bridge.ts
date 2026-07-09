@@ -423,3 +423,72 @@ export function rteExportRequest(filePath: string): Promise<BridgeResponse<RteEx
 export function rteExportStatus(filePath: string): Promise<BridgeResponse<RteExportState>> {
   return callBridge("rte_export_status", filePath);
 }
+
+// ── CICD Workbench (Piece D v2) ──
+
+export type CicdLinkPreview = {
+  repo_name: string;
+  appcode_candidate: string;
+  matched_appcode: string;
+  appcode_exists: boolean;
+  needs_confirmation: boolean;
+  target_dir: string;
+  target_repo_path: string;
+  warnings: string[];
+};
+export type CicdCloneResult = { job_id: string; repo_id: string; repo_name: string; appcode: string; status: string };
+export type CicdJob = { job_id: string; kind: string; state: string; progress_label: string; exit_code: number | null; stdout_tail: string; stderr_tail: string; repo_id: string };
+export type CicdRepoSummary = { modified: number; untracked: number; staged: number; clean: boolean };
+export type CicdWorkspaceRepo = { name: string; path: string; status: CicdRepoSummary; repo_id: string };
+export type CicdWorkspaceAppcode = { name: string; display_name: string };
+export type CicdWorkspace = { appcodes: CicdWorkspaceAppcode[]; repos: CicdWorkspaceRepo[]; selected_appcode: string };
+export type CicdChange = { rel_path: string; status: string; staged: boolean; selected: boolean };
+export type CicdRepoStatus = { branch: string; upstream: string; ahead: number; behind: number; dirty: boolean; conflicted: boolean; remote_url: string; changes: CicdChange[] };
+export type CicdFileNode = { name: string; path: string; type: "file" | "dir"; git_status: string; children: CicdFileNode[] };
+export type CicdFileContent = { content: string; hash: string; mtime: number; encoding: string; readonly_reason: string };
+export type CicdFileSaveResult = { hash: string; mtime: number; status: string };
+
+/** Preview repo/appcode target from a Bitbucket clone URL. */
+export function cicdPreviewLink(cloneUrl: string): Promise<BridgeResponse<CicdLinkPreview>> {
+  return callBridge("cicd_preview_link", cloneUrl);
+}
+
+/** Resolve appcode from a clone URL, optionally create it, then clone branch cicd. */
+export function cicdCloneFromLink(cloneUrl: string, appcodeOverride = "", confirmCreate = false): Promise<BridgeResponse<CicdCloneResult>> {
+  return callBridge("cicd_clone_from_link", cloneUrl, appcodeOverride, confirmCreate);
+}
+
+/** Poll a git job by id. */
+export function cicdJob(jobId: string): Promise<BridgeResponse<CicdJob>> {
+  return callBridge("cicd_job", jobId);
+}
+
+/** Return appcodes + repos with backend-generated repo ids. */
+export function cicdWorkspace(appcode = ""): Promise<BridgeResponse<CicdWorkspace>> {
+  return callBridge("cicd_workspace", appcode);
+}
+
+/** Return branch/change status for a backend-resolved repo id. */
+export function cicdRepoStatus(repoId: string): Promise<BridgeResponse<CicdRepoStatus>> {
+  return callBridge("cicd_repo_status", repoId);
+}
+
+/** Return the recursive file tree with git status for a cloned repo. */
+export function cicdListFiles(repoPath: string): Promise<BridgeResponse<CicdFileNode[]>> {
+  return callBridge("cicd_list_files", repoPath);
+}
+
+/** Read a safe repo-relative UTF-8 file with hash guard metadata. */
+export function cicdFileRead(repoId: string, relPath: string): Promise<BridgeResponse<CicdFileContent>> {
+  return callBridge("cicd_file_read", repoId, relPath);
+}
+
+/** Save a safe repo-relative UTF-8 file with hash + branch guard. */
+export function cicdFileSave(repoId: string, relPath: string, content: string, expectedHash: string): Promise<BridgeResponse<CicdFileSaveResult>> {
+  return callBridge("cicd_file_save", repoId, relPath, content, expectedHash);
+}
+
+/** Run an allowed safe git action for a backend-resolved repo id. */
+export function cicdGitAction(repoId: string, action: string, payload: Record<string, unknown> = {}): Promise<BridgeResponse<{ status?: string; job_id?: string }>> {
+  return callBridge("cicd_git_action", repoId, action, payload);
+}

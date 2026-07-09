@@ -38,14 +38,29 @@ const CICD_SRC = "../src/lib/components/CICDBrowser.svelte";
 
 const noop = () => {};
 
-test("CICDBrowser wires git-detection, clone poll, tree, and file open", () => {
+test("CICDBrowser v2 uses link-only clone flow + safe git bridge + editor", () => {
   const src = readFileSync(fileURLToPath(new URL(CICD_SRC, import.meta.url)), "utf8");
-  assert.match(src, /cicd_git_status/);
-  assert.match(src, /cicd_clone_status/); // poll loop
-  assert.match(src, /cicd_list_files/);
-  assert.match(src, /file_open/); // reuse existing open, not open_repo_file
+  assert.match(src, /cicdPreviewLink/); // link preview, no appcode-first dropdown clone
+  assert.match(src, /cicdCloneFromLink/); // backend resolves/creates appcode
+  assert.match(src, /confirm_create|confirmCreate/i); // create requires confirmation
+  assert.match(src, /cicdRepoStatus/);
+  assert.match(src, /cicdFileRead/);
+  assert.match(src, /cicdFileSave/);
+  assert.match(src, /cicdGitAction/);
+  assert.match(src, /CICDCodeEditor/); // editor pane
+  assert.match(src, /ConfirmModal/); // push + create confirmation gates
+  assert.doesNotMatch(src, /"push",\s*\{\s*force/); // never force push
   assert.match(src, /Recheck Git Status/); // git-not-installed empty state
   assert.match(src, /snippet fileTree/); // recursive tree
+});
+
+test("CICDCodeEditor mounts CodeMirror with Ctrl+S save + stale reload path", () => {
+  const editor = readFileSync(fileURLToPath(new URL("../src/lib/components/CICDCodeEditor.svelte", import.meta.url)), "utf8");
+  assert.match(editor, /@codemirror\/view/);
+  assert.match(editor, /Mod-s/); // Ctrl/Cmd+S
+  assert.match(editor, /onSave/);
+  const src = readFileSync(fileURLToPath(new URL(CICD_SRC, import.meta.url)), "utf8");
+  assert.match(src, /STALE_FILE/); // stale-save handling
 });
 
 test("App + TitleBar register the CICD page", () => {
