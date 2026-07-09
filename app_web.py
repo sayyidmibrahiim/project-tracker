@@ -1251,9 +1251,15 @@ def create_js_api(
         def get_appcode_config(self, appcode: str) -> object:
             appcode_path = self._appcode_path(appcode)
             config_path = appcode_path / "appcode.json"
-            if not config_path.is_file():
-                raise FileNotFoundError(f"Appcode config not found: {config_path}")
-            config = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            if config_path.is_file():
+                config = AppCodeConfig.from_dict(json.loads(config_path.read_text(encoding="utf-8")))
+            elif appcode_path.is_dir():
+                # ponytail: folder made manually on disk (e.g. SSID: year subfolder, no
+                # appcode.json) still lists in discover_appcodes — synthesize the same
+                # default here instead of raising, so selecting it doesn't error.
+                config = AppCodeConfig(display_name=appcode_path.name)
+            else:
+                raise FileNotFoundError(f"Appcode not found: {appcode_path.name}")
             return self._payload(filesystem.AppCodeEntry(path=appcode_path, name=appcode_path.name, config=config))
 
         def update_appcode_config(self, appcode: str, data: dict[str, object]) -> object:

@@ -91,6 +91,16 @@ def test_cicd_preview_link_matches_existing_appcode_case_insensitive(tmp_path):
     assert resp["data"]["appcode_candidate"] == "wgid"
 
 
+def test_cicd_workspace_tolerates_appcode_without_config(tmp_path):
+    # Folder made manually on disk (year subfolder, no appcode.json) — e.g. SSID.
+    api = _api_with_root(tmp_path)
+    ssid = tmp_path / "root" / "SSID"
+    (ssid / "2026").mkdir(parents=True)
+    resp = api.cicd_workspace("SSID")
+    assert resp["ok"] is True, resp
+    assert resp["data"]["selected_appcode"] == "SSID"
+
+
 def test_cicd_preview_link_missing_appcode_requires_confirmation(tmp_path):
     api = _api_with_root(tmp_path)
     resp = api.cicd_preview_link("https://host/scm/team/newapp.git")
