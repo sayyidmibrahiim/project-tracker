@@ -20,7 +20,9 @@ Active work: **Automation System epic** (Outlook + General Automation). Spec: `_
 
 **Slice 5 — Logs top-level menu + right-sidebar + retention**: implemented, awaiting user manual check. New `automation_logs` table (clean separation; `automation_rule_logs` untouched) + `AutomationLogRow`, `append_log`, `list_logs(module/cr_id/rule_id)`, `purge_logs_for_cr`, `clear_all_logs`, `clear_rule_logs`. `CacheDb` schema validation updated; cache tests updated. Bridge: `logs_list`, `logs_clear`, `rules_clear_logs`; `_RulesAdapter` exposes `list_logs`, `clear_logs`, `clear_rule_logs`. Retention hook in `_ProjectServiceAdapter._run_transition`: after successful move, if CR state FINISHED/CANCELED, purge `automation_logs` rows for that CR (POSTPONED kept because reversible). Frontend: 8th top-level nav **Logs** (App `PageId`, validPages, TitleBar `navItems`+icon, new `Logs.svelte` overview page with module cards + filters + Refresh/Clear). Rules `Logs` upgraded to right-sidebar drawer with Refresh/Export(JSON)/Clear/Close. PD Automations header gets `[Logs]` button → opens Logs page filtered by CR. **Decision:** right-sidebar implemented for Rules; PD uses top-level Logs filtered by CR (per-project, not per-rule), smallest correct diff.
 
-**Piece D — CICD Bitbucket integration (branch `general/cicd-bitbucket`)**: implemented, awaiting user manual check. New 9th top-level nav **CICD** (git-branch icon) → full-page `CICDBrowser.svelte`. New `services/cicd_service.py` (stdlib `subprocess`/`shutil` only — no new dep, per office-offline constraint; **first subprocess in the app**, sets `CREATE_NO_WINDOW` precedent so git never flashes a console): `check_git()` detection, `parse_repo_name`, `parse_porcelain` (XY→modified/untracked/staged), `build_file_tree` (recursive, `.git` skipped, dirs-first), and `CicdService` that clones branch `cicd` on a **daemon thread** (`git clone -b cicd --single-branch`) with a poll-able job dict (`start_clone`→`clone_status`), plus `list_repos` (per-repo status summary) + `list_files`. Bridge: `CicdServiceProtocol` + `cicd_git_status`/`cicd_clone`/`cicd_clone_status`/`cicd_list_repos`/`cicd_list_files`; nested `_CicdServiceAdapter` in `create_js_api` reuses `_AppCodeServiceAdapter.get_appcode_config` to resolve each appcode's CICD dir (`per_appcode` → `{appcode}/CICD`, `shared_root` → `AppCodeConfig.cicd_shared_path`). Frontend polls `cicd_clone_status` every 1.2s (mirrors the RTE export poll), toasts on done/error; file click reuses the existing `file_open` bridge (no new `open_repo_file`); file badges use `.dot-waiting` (orange = modified) / `.dot-done` (green = untracked/staged). **DEFAULT AMAN:** git absent → install-steps empty state + Recheck (never crash); non-git folder / porcelain failure → files shown without status; clone into an existing folder → rejected before spawning. CICD-location switch (per-appcode ↔ shared root) lives on the CICD page via `appcode_update_config` (config is per-appcode, not global Settings). **Deviations from spec (deliberate):** config UI on CICD page not Settings; reuse `file_open`; ONE consolidated `tests/test_cicd_service.py` not three; folder names strip `.git` + clone adds `--single-branch`; directory nodes carry no aggregate badge (files only). D-0014 recorded. Create Drone Ticket (Jenkins) remains out of scope.
+**Piece D v2 — CICD Workbench (branch `general/cicd-bitbucket`)**: backend + UI rebuilt after manual-check rejection of the basic v1 page (flow/UI/scope). Awaiting user manual check. **Link-only clone flow**: user pastes a Bitbucket URL only; backend `parse_clone_url` derives the appcode candidate, `cicd_preview_link` shows repo/appcode/target/warnings, `cicd_clone_from_link(clone_url, appcode_override, confirm_create)` matches an existing appcode (case-insensitive, preserves on-disk spelling) or — only after ConfirmModal — creates the full D-0008 tree via the existing `add_appcode` path, then clones `git clone -b cicd --single-branch`. Same-remote existing repo returns `status:"exists"` (no re-clone); different-remote blocks. Backend-owned safety: **repo IDs** are `base64url({appcode,repo})` (frontend never sends write paths); every resolved path is asserted inside the appcode CICD dir; file read/save rejects absolute/`..`/`.git`/binary/>1 MiB, is UTF-8 only, hash-guarded (`STALE_FILE`), atomic temp-write, and blocked unless branch==`cicd`; `run_git` uses `shell=False` + list args + `CREATE_NO_WINDOW` + `GIT_TERMINAL_PROMPT=0` + timeouts. **Safe git actions** (`cicd_git_action` allowlist): stage/unstage/commit-selected (message required), pull `--ff-only` (blocked when dirty), push `origin cicd` (never force, ConfirmModal), sync (behind→pull, ahead→push, equal→no-op, dirty/diverged→block), refresh. Bridge: `cicd_preview_link`/`cicd_clone_from_link`/`cicd_job`/`cicd_workspace`/`cicd_repo_status`/`cicd_list_files`/`cicd_file_read`/`cicd_file_save`/`cicd_git_action` + typed `bridge.ts` wrappers. **UI**: `CICDBrowser.svelte` rebuilt as a VSCode-like Red-Binder workbench — clone bar + preview card, Explorer (appcode select + repos + file tree), Editor (`CICDCodeEditor.svelte` = **CodeMirror 6**, locally bundled, no CDN — user-approved dep 2026-07-09; YAML/JSON/JS/TS/Python/Markdown by extension, Ctrl+S save, dirty dot, stale-reload banner, read-only card for binary/large/non-cicd), Source Control (branch pill, ahead/behind, changed-file checkboxes, commit/push/pull/sync, output tail); responsive 3-pane ≥1360 / 2-pane 960–1359 / single-column tabs <960. Fix: `app_web` now imports pywebview lazily (module attr) so headless imports stay webview-free (CICD test suite exposed the latent contract break). D-0014. Create Drone Ticket (Jenkins) still out of scope. Superseded v1 note below.
+
+**Piece D v1 (superseded by v2 above)**: initial basic page — appcode dropdown + clone URL + repo list + file tree + open-external. Rejected on manual check (appcode-first flow, unpolished UI, no editing/git). New 9th top-level nav **CICD** (git-branch icon) → full-page `CICDBrowser.svelte`. New `services/cicd_service.py` (stdlib `subprocess`/`shutil` only — no new dep, per office-offline constraint; **first subprocess in the app**, sets `CREATE_NO_WINDOW` precedent so git never flashes a console): `check_git()` detection, `parse_repo_name`, `parse_porcelain` (XY→modified/untracked/staged), `build_file_tree` (recursive, `.git` skipped, dirs-first), and `CicdService` that clones branch `cicd` on a **daemon thread** (`git clone -b cicd --single-branch`) with a poll-able job dict (`start_clone`→`clone_status`), plus `list_repos` (per-repo status summary) + `list_files`. Bridge: `CicdServiceProtocol` + `cicd_git_status`/`cicd_clone`/`cicd_clone_status`/`cicd_list_repos`/`cicd_list_files`; nested `_CicdServiceAdapter` in `create_js_api` reuses `_AppCodeServiceAdapter.get_appcode_config` to resolve each appcode's CICD dir (`per_appcode` → `{appcode}/CICD`, `shared_root` → `AppCodeConfig.cicd_shared_path`). Frontend polls `cicd_clone_status` every 1.2s (mirrors the RTE export poll), toasts on done/error; file click reuses the existing `file_open` bridge (no new `open_repo_file`); file badges use `.dot-waiting` (orange = modified) / `.dot-done` (green = untracked/staged). **DEFAULT AMAN:** git absent → install-steps empty state + Recheck (never crash); non-git folder / porcelain failure → files shown without status; clone into an existing folder → rejected before spawning. CICD-location switch (per-appcode ↔ shared root) lives on the CICD page via `appcode_update_config` (config is per-appcode, not global Settings). **Deviations from spec (deliberate):** config UI on CICD page not Settings; reuse `file_open`; ONE consolidated `tests/test_cicd_service.py` not three; folder names strip `.git` + clone adds `--single-branch`; directory nodes carry no aggregate badge (files only). D-0014 recorded. Create Drone Ticket (Jenkins) remains out of scope.
 
 2026-07-04 incident: post-manual-check fix round (active states, 5s countdown, hidden `.rte`, help popover, WYSIWYG page + resize) **rolled back in full** — user reported all editor behavior abnormal. Pipeline returned to first-manual-check state; fixes were later re-applied one at a time with user verify between each. See session-notes rollback entry + CLAUDE.md/AGENTS.md "RTE Change Safety".
 
@@ -40,7 +42,7 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 1 | `general/header-redesign` | Remove red `.app-header`, page-header becomes single header, red token unification, a11y | ✅ Merged 2026-07-04 |
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | ✅ Merged 2026-07-06 (incl. fix round v2 steps 0–7) |
 | 3 | `automations/approval-polling` | Piece C approval automation + Automation System epic Slices 1–5 | ✅ Merged 2026-07-08 |
-| 4 | `general/cicd-bitbucket` | Piece D CICD integration (spec 2026-07-02) | Implemented, awaiting user manual check |
+| 4 | `general/cicd-bitbucket` | Piece D CICD Workbench v2 (link-only clone, editing, safe git) | Implemented (v2), awaiting user manual check |
 | 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
 
@@ -96,28 +98,30 @@ Combined manual checklist — Slices 2–5:
 - [ ] Slice 4: Auto-update CR state no-op without patterns; pattern match transitions only legal states; Teams Draft/Send/Setting wired; auto-reply dedup skips repeat within 1h.
 - [ ] Slice 5: Logs nav/page/sidebar/retention all work.
 
-### Piece D — CICD Bitbucket (branch `general/cicd-bitbucket`, 2026-07-09)
+### Piece D v2 — CICD Workbench (branch `general/cicd-bitbucket`, 2026-07-09)
 
 ```
-svelte-check: 0 errors, 4 warnings (pre-existing a11y <li> — cosmetic), 156 files
-frontend tests: 184 pass / 0 fail (+2 CICD source-contract tests)
-targeted backend tests: tests/test_cicd_service.py 14 passed + bridge-guard/second-brain smoke = 21 passed
-full pytest: 1878 passed, 20 skipped, 6 known baseline failures (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2) — NO new fails
-build: ✓ (app closed 2026-07-09; pre-existing >500 kB chunk warning only)
-app smoke: ✓ clean (booted with fresh bundle, 0-byte stdout/stderr, no traceback)
+svelte-check: 0 errors, 4 warnings (pre-existing a11y <li> — cosmetic), 174 files
+frontend tests: 185 pass / 0 fail (CICD v2 source-contract + CodeMirror editor contract)
+targeted backend tests: tests/test_cicd_service.py 51 passed
+full pytest: 1915 passed, 20 skipped, 6 known baseline failures (test_phase_c_js_api_project x3, test_phase_d_app_web_project_service_adapter x1, test_year_create x2) — NO new fails
+build: ✓ (app closed 2026-07-09; CodeMirror bundles locally; pre-existing >500 kB chunk warning only)
+app smoke: not yet run for v2 — user restarts app after fresh build
 ```
 
-Piece D manual checklist (for user — after `npm run build` + app restart):
-- [ ] TitleBar shows a **9th CICD item** (git-branch icon between Logs and Settings); clicking opens the page.
-- [ ] Git not installed → install instructions + working **Recheck Git Status** button.
-- [ ] Appcode dropdown lists appcodes; switching reloads the repo list.
-- [ ] Paste a Bitbucket `cicd`-branch URL → Clone → "Cloning…" → success toast; repo appears.
-- [ ] Clone into an already-cloned repo → rejected with a clear message (no crash).
-- [ ] Bad/unreachable URL → error toast carries git stderr (auth/network hint).
-- [ ] Repo row shows status summary ("modified: 3, untracked: 1" or "clean").
-- [ ] Click a repo → file tree expands/collapses; orange dot = modified, green = untracked/staged.
-- [ ] Click a file → opens in the OS default app.
-- [ ] Config row: switch per-appcode ↔ shared-root (+ path); repos reload from the new folder.
-- [ ] Empty CICD folder → "no repos" clone instructions.
+Commits (v2): `cf7024f0` preview+appcode-resolve · `b0323ebd` clone-from-link+auto-create · `19c919cc` safe status/workspace · `29295b5b` file read/save · `280f76ec` safe git actions · `72d7a417` link-only workbench UI + CodeMirror + SCM · `61a6ecab` lazy pywebview import fix.
 
-Build was run for the Automation epic — user must restart app before manual testing. Piece D needs a fresh `npm run build` before its manual test.
+Piece D v2 manual checklist (for user — after `npm run build` + app restart):
+- [ ] **Flow**: paste a Bitbucket clone link only (no appcode dropdown first); preview card shows repo + appcode + target path.
+- [ ] Existing appcode auto-detected (case-insensitive); clone lands in `{appcode}/CICD/{repo}`.
+- [ ] Missing appcode → ConfirmModal "Create & Clone"; confirms → full year/CR/Non-CR tree + appcode.json created, then clone.
+- [ ] Candidate with a separator (e.g. `wgid-cicd`) → editable Appcode-name field appears before clone.
+- [ ] Same-remote existing repo → selects (no re-clone); different-remote → clear block message.
+- [ ] **UI** at ≥1360 (3 panes: Explorer/Editor/Source Control), ~1100 (Explorer + right group), <900 (single-column tabs) — no broken overflow; white canvas, red accent only, keyboard focus visible.
+- [ ] **Editor**: open a text file (YAML/JSON/…), edit, Ctrl+S saves; dirty dot appears/clears.
+- [ ] Binary/large file → read-only card with Open External.
+- [ ] Change the file outside the app then save → stale banner with Reload / Open External.
+- [ ] File on a non-`cicd` branch → read-only banner; save blocked.
+- [ ] **Git**: changed files listed with badges; commit selected only (message required); Push asks confirmation and never force-pushes; Pull ff-only (blocked when dirty); Sync handles ahead/behind/equal/dirty/diverged.
+
+Build must be run while the app is CLOSED; user restarts the app before manual testing.
