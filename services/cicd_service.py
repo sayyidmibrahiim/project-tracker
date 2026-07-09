@@ -338,6 +338,53 @@ class CicdService:
         raw = path.read_bytes()
         return {"hash": hashlib.sha256(raw).hexdigest(), "mtime": path.stat().st_mtime, "status": "saved"}
 
+    def git_action(self, repo_path: Path, action: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+        payload = dict(payload or {})
+        status = self.repo_status(repo_path)
+        if status.get("branch") != "cicd":
+            raise ValueError("Git actions allowed only on branch cicd")
+        paths = [str(path) for path in payload.get("paths", []) if str(path)]
+
+        def run(args: list[str]) -> None:
+            proc = run_git(Path(repo_path), args, timeout=120)
+            if proc.returncode != 0:
+                raise ValueError((proc.stderr or proc.stdout or "git action failed").strip())
+
+        if action == "stage_selected":
+            run(["add", "--", *paths])
+        elif action == "unstage_selected":
+            run(["restore", "--staged", "--", *paths])
+        elif action == "commit_selected":
+            message = str(payload.get("message") or "").strip()
+            if not message:
+                raise ValueError("Commit message is required")
+            run(["add", "--", *paths])
+            run(["commit", "-m", message])
+        elif action == "pull_ff_only":
+            if status.get("dirty"):
+                raise ValueError("Commit or discard local changes before pulling")
+            run(["pull", "--ff-only", "origin", "cicd"])
+        elif action == "push":
+            run(["push", "origin", "cicd"])
+        elif action == "sync":
+            if status.get("dirty"):
+                raise ValueError("Commit or discard local changes before syncing")
+            ahead = int(status.get("ahead") or 0)
+            behind = int(status.get("behind") or 0)
+            if ahead and behind:
+                raise ValueError("Branch diverged; resolve manually outside the app")
+            if behind:
+                run(["pull", "--ff-only", "origin", "cicd"])
+            elif ahead:
+                run(["push", "origin", "cicd"])
+            else:
+                return {"status": "clean"}
+        elif action == "refresh":
+            return {"status": "refreshed"}
+        else:
+            raise ValueError(f"Unsupported CICD git action: {action}")
+        return {"status": "ok"}
+
     def start_clone(self, clone_url: str, dest_dir: Path) -> dict[str, object]:
         """Validate, then clone the 'cicd' branch on a daemon thread.
 

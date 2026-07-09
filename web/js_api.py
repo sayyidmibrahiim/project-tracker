@@ -277,6 +277,9 @@ class CicdServiceProtocol(Protocol):
     def file_save(self, repo_id: str, rel_path: str, content: str, expected_hash: str) -> object:
         """Save UTF-8 file when hash and branch guard pass."""
 
+    def git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> object:
+        """Run allowed safe git action for a backend-resolved repo id."""
+
     def clone_status(self, repo_name: str) -> object:
         """Return {status, error} for a clone job."""
 
@@ -1114,6 +1117,15 @@ class JsApi:
             return ok(_to_frontend_safe(self._cicd_service.file_save(repo_id, rel_path, content, expected_hash)))
         except Exception as exc:
             return fail(str(exc), code=getattr(exc, "code", "CICD_FILE_SAVE_FAILED"))
+
+    def cicd_git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+        """Run an allowed safe git action for a backend-resolved repo id."""
+        try:
+            if self._cicd_service is None:
+                return fail("cicd_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._cicd_service.git_action(repo_id, action, payload)))
+        except Exception as exc:
+            return fail(str(exc), code="CICD_GIT_ACTION_FAILED")
 
     def cicd_clone_status(self, repo_name: str) -> dict[str, object]:
         """Poll a clone job {status, error}."""

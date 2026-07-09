@@ -338,6 +338,84 @@ def test_cicd_file_save_writes_atomically_and_returns_new_hash(tmp_path, monkeyp
     assert not list(repo.glob("*.tmp"))
 
 
+# ── git actions ────────────────────────────────────────────────────────
+def _repo_for_git_action(tmp_path):
+    api = _api_with_root(tmp_path)
+    assert api.appcode_add("myapp")["ok"] is True
+    repo = tmp_path / "root" / "myapp" / "CICD" / "repo1"
+    repo.mkdir(parents=True)
+    return api, cicd.encode_repo_id("myapp", "repo1")
+
+
+def test_cicd_git_action_stage_and_unstage_selected(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd", "dirty": False, "ahead": 0, "behind": 0})
+    monkeypatch.setattr(cicd, "run_git", lambda repo, args, timeout=30: calls.append(args) or subprocess.CompletedProcess(args, 0, stdout="", stderr=""))
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "stage_selected", {"paths": ["a.yml"]})["ok"] is True
+    assert api.cicd_git_action(repo_id, "unstage_selected", {"paths": ["a.yml"]})["ok"] is True
+    assert calls == [["add", "--", "a.yml"], ["restore", "--staged", "--", "a.yml"]]
+
+
+def test_cicd_git_action_commit_selected_requires_message_and_commits(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd", "dirty": False, "ahead": 0, "behind": 0})
+    monkeypatch.setattr(cicd, "run_git", lambda repo, args, timeout=30: calls.append(args) or subprocess.CompletedProcess(args, 0, stdout="", stderr=""))
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "commit_selected", {"paths": ["a.yml"], "message": ""})["ok"] is False
+    resp = api.cicd_git_action(repo_id, "commit_selected", {"paths": ["a.yml"], "message": "update pipeline"})
+    assert resp["ok"] is True
+    assert calls == [["add", "--", "a.yml"], ["commit", "-m", "update pipeline"]]
+
+
+def test_cicd_git_action_pull_blocks_dirty_else_ff_only(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd", "dirty": True, "ahead": 0, "behind": 1})
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "pull_ff_only", {})["ok"] is False
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd", "dirty": False, "ahead": 0, "behind": 1})
+    monkeypatch.setattr(cicd, "run_git", lambda repo, args, timeout=30: calls.append(args) or subprocess.CompletedProcess(args, 0, stdout="", stderr=""))
+    assert api.cicd_git_action(repo_id, "pull_ff_only", {})["ok"] is True
+    assert calls == [["pull", "--ff-only", "origin", "cicd"]]
+
+
+def test_cicd_git_action_push_uses_origin_cicd_never_force(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "cicd", "dirty": False, "ahead": 1, "behind": 0})
+    monkeypatch.setattr(cicd, "run_git", lambda repo, args, timeout=30: calls.append(args) or subprocess.CompletedProcess(args, 0, stdout="", stderr=""))
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "push", {})["ok"] is True
+    assert calls == [["push", "origin", "cicd"]]
+    assert all("--force" not in arg for call in calls for arg in call)
+
+
+def test_cicd_git_action_sync_states(tmp_path, monkeypatch):
+    calls = []
+    states = iter([
+        {"branch": "cicd", "dirty": False, "ahead": 0, "behind": 1},
+        {"branch": "cicd", "dirty": False, "ahead": 1, "behind": 0},
+        {"branch": "cicd", "dirty": False, "ahead": 0, "behind": 0},
+        {"branch": "cicd", "dirty": True, "ahead": 0, "behind": 1},
+        {"branch": "cicd", "dirty": False, "ahead": 1, "behind": 1},
+    ])
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: next(states))
+    monkeypatch.setattr(cicd, "run_git", lambda repo, args, timeout=30: calls.append(args) or subprocess.CompletedProcess(args, 0, stdout="", stderr=""))
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "sync", {})["data"]["status"] == "ok"
+    assert api.cicd_git_action(repo_id, "sync", {})["data"]["status"] == "ok"
+    assert api.cicd_git_action(repo_id, "sync", {})["data"]["status"] == "clean"
+    assert api.cicd_git_action(repo_id, "sync", {})["ok"] is False
+    assert api.cicd_git_action(repo_id, "sync", {})["ok"] is False
+    assert calls == [["pull", "--ff-only", "origin", "cicd"], ["push", "origin", "cicd"]]
+
+
+def test_cicd_git_action_blocks_non_cicd_branch_and_unknown_action(tmp_path, monkeypatch):
+    monkeypatch.setattr(cicd.CicdService, "repo_status", lambda self, path: {"branch": "main", "dirty": False, "ahead": 0, "behind": 0})
+    api, repo_id = _repo_for_git_action(tmp_path)
+    assert api.cicd_git_action(repo_id, "push", {})["ok"] is False
+    assert api.cicd_git_action(repo_id, "nope", {})["ok"] is False
+
+
 # ── parse_porcelain ────────────────────────────────────────────────────
 def test_parse_porcelain_categories():
     text = " M src/main.py\n?? new.sh\nA  staged.txt\nMM both.py\n"

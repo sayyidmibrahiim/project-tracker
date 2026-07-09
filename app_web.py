@@ -1417,6 +1417,10 @@ def create_js_api(
                 raise ValueError("Save allowed only on branch cicd")
             return self._service.file_save(self._file_path(repo_id, rel_path), content, expected_hash)
 
+        def git_action(self, repo_id: str, action: str, payload: dict[str, object] | None = None) -> object:
+            _appcode, _repo, repo_path = self._repo_path(repo_id)
+            return self._service.git_action(repo_path, action, payload)
+
         def job(self, job_id: str) -> object:
             data = self._service.clone_status(job_id)
             return {"job_id": job_id, "kind": "clone", "state": data.get("status", "unknown"), "progress_label": data.get("status", "unknown"), "exit_code": None, "stdout_tail": "", "stderr_tail": data.get("error", ""), "repo_id": ""}
