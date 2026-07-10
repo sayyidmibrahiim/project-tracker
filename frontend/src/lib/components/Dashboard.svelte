@@ -889,8 +889,8 @@
   .dash-reset-filter:disabled { opacity:.45; cursor:not-allowed; }
   .dashboard-table-card { box-shadow:none; }
   .dashboard-table-scroll { border:0; border-radius:0; box-shadow:none; padding:0; background:#fff; scrollbar-gutter:stable; }
-  .dashboard-project-table { min-width:1450px; border:0; border-radius:0; }
-  .dashboard-project-table .table-header-row, .dashboard-project-table .project-row { grid-template-columns:40px 150px minmax(190px,.9fr) 138px 138px minmax(225px,1fr) 148px 220px 190px 56px; }
+  .dashboard-project-table { width:100%; border:0; border-radius:0; }
+  .dashboard-project-table .table-header-row, .dashboard-project-table .project-row { grid-template-columns:40px minmax(110px,1fr) minmax(170px,2.2fr) minmax(100px,1fr) minmax(100px,1fr) minmax(180px,2fr) minmax(110px,1fr) minmax(160px,1.6fr) minmax(140px,1.4fr) 56px; }
   .dashboard-project-table .project-row { min-height:88px; border-top:1px solid var(--light-border); transition:background .16s ease, box-shadow .16s ease; }
   .dashboard-project-table .project-row.alt { min-height:88px; background:#fff; }
   .dashboard-project-table .table-cell { border-right:1px solid var(--light-border); }

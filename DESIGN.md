@@ -123,7 +123,7 @@ The palette is restrained: a dark chrome frame, a white work surface, and one re
 - **DBS Red** (`#b91c1c` / `oklch(0.45 0.18 25)`): The sole accent. Primary action buttons, active navigation, important state indicators, folder status markers. Never a page wash or background tint.
 
 ### Neutral
-- **Black Chrome** (`#0a0a0b`): The titlebar, window chrome, and sidebar dock. The frameless shell's frame.
+- **Black Chrome** (`#0a0a0b`): Custom TitleBar and window chrome. The frameless shell's visual frame.
 - **Surface Dark** (`#141416`): Dark panel backgrounds within the chrome. Hover surfaces over chrome.
 - **Dark Border** (`#2c2c30`): Dividers inside dark chrome areas.
 - **Canvas White** (`#ffffff`): The main workspace background. Every page, table, card, and form sits on white.

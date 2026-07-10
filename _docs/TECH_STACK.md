@@ -22,6 +22,9 @@
 
 - **pywebview** with `frameless=True` + custom Svelte titlebar component
 - WebView2 runtime (Windows)
+- Native move/Aero Snap + edge/corner resize use `WM_NCLBUTTONDOWN` hit-test codes through the Python bridge; do not replace them with JavaScript pointer-delta resizing or `-webkit-app-region: drag`
+- A guarded Win32 `GWLP_WNDPROC` hook removes the standard frame and applies active-monitor `rcWork` bounds through `WM_GETMINMAXINFO`, preserving the taskbar while maximized
+- WinForms `Form.WindowState` is the maximize/restore source of truth; native resize is disabled while maximized; shell minimum is 960×640
 - `pywebview.start()` must run on main thread — non-negotiable
 - Prebuilt `web/static/` included so app runs after `pip install` alone
 - Rebuild frontend only when frontend source changes

@@ -248,12 +248,20 @@ export function winMinimize(): Promise<BridgeResponse<null>> {
   return callBridge("win_minimize");
 }
 
-export function winToggleMaximize(): Promise<BridgeResponse<null>> {
-  return callBridge("win_toggle_maximize");
+export function winToggleMaximize(currentState: string): Promise<BridgeResponse<{ state: "normal" | "maximized" }>> {
+  return callBridge("win_toggle_maximize", currentState);
 }
 
 export function winClose(): Promise<BridgeResponse<null>> {
   return callBridge("win_close");
+}
+
+export function winStartDrag(): Promise<BridgeResponse<null>> {
+  return callBridge("win_start_drag");
+}
+
+export function winStartResize(direction: string): Promise<BridgeResponse<null>> {
+  return callBridge("win_start_resize", direction);
 }
 
 /** Callback type for window state changes. */

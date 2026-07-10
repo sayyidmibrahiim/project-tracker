@@ -179,7 +179,7 @@ project_tracker_dbs/
 │   │   ├── lib/
 │   │   │   ├── api/              # Typed wrappers around window.pywebview.api.*
 │   │   │   ├── stores/           # Svelte writable/derived stores
-│   │   │   ├── components/       # Reusable UI components (Sidebar, Header, Table, Card, etc.)
+│   │   │   ├── components/       # Reusable UI components (TitleBar, Table, Card, dialogs, etc.)
 │   │   │   └── types/            # TypeScript interfaces mirroring Python models
 │   │   ├── routes/               # Page-level Svelte components
 │   │   └── app.html              # pywebview HTML shell
@@ -237,7 +237,7 @@ python -m pytest tests/windows/ -v  # manual verification
 --color-error-red: #991b1b; /* error and danger states */
 
 /* Surface */
---color-sidebar-bg: #0a0a0b; /* black chrome sidebar */
+--color-black-chrome: #0a0a0b; /* custom TitleBar/window chrome */
 --color-surface-dark: #141416; /* dark surface elements */
 --color-border-dark: #2c2c30; /* dark border */
 --color-nav-active-bg: #231112; /* active nav item bg */
@@ -288,8 +288,8 @@ Panels:       #E6E8EB bg, 1px soft border, rounded-xl
 Buttons (primary): #B91C1C bg, white text, rounded-md, hover → #991B1B
 Buttons (secondary): white bg, #B91C1C text, 1px #FFD4DF border, hover → #FFF1F4
 Tables:       white bg, dark header (#111111), white text, 1px grid lines
-Sidebar:      #0A0A0B bg, collapsed/expanded, active item has left-border + #231112 bg
-Header:       #B91C1C bg, white title, white datetime badge border, refresh button white bg
+TitleBar:     #0A0A0B bg, compact icon navigation, #231112 active bg + red indicator
+Page header:  white bg, dark title, contextual controls; red used as accent only
 Splitters:    visible handle, pink on hover
 Scrollbars:   thin (4px), pink accent handle
 ```
@@ -299,8 +299,9 @@ Scrollbars:   thin (4px), pink accent handle
 - Avoid fixed major container sizes; use flex/grid with `min-*` readability constraints.
 - Use `clamp()` for font sizes where needed.
 - Major panels use resizable splitters (CSS resize or library).
-- All list/table panels scroll internally; no page-level overflow.
-- **Sidebar:** `Sidebar.svelte` implements the **bottom dock** (see §10.3). The name is legacy. There is no persistent left sidebar.
+- Shell minimum size is 960×640. TitleBar, Project Details, and CICD switch to compact layout at ≤1024px so controls remain reachable near that minimum.
+- All list/table panels scroll internally; no page-level overflow. Wide Dashboard rows expose horizontal scrolling on `.table-scroll` while the app body remains fixed-width.
+- **Navigation:** `TitleBar.svelte` owns top-level navigation (see §10.3). There is no persistent sidebar or bottom dock.
 - Header controls use `min-w` to prevent clipping on small screens.
 - Empty-area click must clear selection in tables/trees/lists.
 
@@ -528,7 +529,6 @@ Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTra
   "second_brain_folder": "%APPDATA%\\ProjectTrackerDBS\\SecondBrain",
   "file_template_folder": "",
   "ui": {
-    "sidebar_collapsed": false,
     "last_active_page": "dashboard",
     "last_selected_year": null
   },
@@ -786,10 +786,13 @@ Action:
 3. Second Brain  (contains: Notes, Link Bank)
 4. Report
 5. Automations   (contains: Outlook, Teams, Scheduler, Rules Engine)
-6. Settings
+6. Global Plan
+7. Logs
+8. CICD
+9. Settings
 ```
 
-Notifications are **not** a separate page — they are opened from the bottom dock notification button/popover and remain reachable on all pages.
+Notifications are **not** a separate page — they are opened from the custom TitleBar notification button/popover and remain reachable on all pages.
 
 ### 10.2 App Shell Layout
 
@@ -811,11 +814,15 @@ Notifications are **not** a separate page — they are opened from the bottom do
 ### 10.3 TitleBar Navigation Rules (D-0005)
 
 - Navigation lives in the frameless custom TitleBar (dark chrome `#0A0A0B`), not a sidebar or dock.
-- 7 icon nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Global Plan, Settings. Each has an `aria-label` and a tooltip on hover.
+- 9 icon nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Global Plan, Logs, CICD, Settings. Each has an `aria-label` and a tooltip on hover.
 - Active nav item: `#231112` background + `#DC2626` icon color + small red indicator bar under the icon (non-color cue).
 - Live clock in the right cluster: `ddd, dd MMM yyyy HH:mm:ss` (en-GB, ticking; hidden below 1100px width).
 - Notification bell with unread badge opens a compact popover (newest first, per-item dismiss + dismiss all).
-- Window controls (minimize / maximize-restore / close) via Python bridge.
+- Empty non-interactive chrome behaves as a native Windows caption: click-drag moves the window and participates in top/side/corner Aero Snap; controls, search, navigation buttons, links, and popovers never drag the window.
+- A second click in empty chrome and the maximize/restore button both toggle the real WinForms window state. Repeated maximize/restore preserves the normal restore rectangle; drag-down from maximized follows standard Windows behavior.
+- Edge/corner resizing uses the Windows native hit-test loop, keeps native cursor/geometry behavior, and cannot shrink below 960×640. Resize hit targets are disabled while maximized.
+- Frameless maximization uses the active monitor work area, so a non-autohide taskbar stays visible on any monitor/taskbar edge; the top frame remains visually absent.
+- Window controls (minimize / maximize-restore / close) and native caption/resize intents communicate through the typed Python bridge (D-0015).
 
 ### 10.4 Page Header Rules
 
@@ -844,7 +851,7 @@ KPI Row:   [Total CR] [UAT Prepare] [PROD Ready] [Implemented] [Postponed]
 Filter Row: [All (n)] [UAT Prepare (n)] [PROD Ready (n)] [Implemented (n)]
             [Postponed (n)] [Canceled (n)]          ... [N project(s)]
 ─────────────────────────────────────────────────────────────────────────
-Project Table (scrollable, full height)
+Project Table (full height; vertical + owned horizontal scroll at narrow widths)
 ```
 
 ### 11.3 User Flow — Initial Load
@@ -2003,14 +2010,14 @@ Git operations beyond clone (no pull/commit/push — done externally). Create Dr
 
 Lightweight operational alerts visible at all times without leaving the current page.
 
-### 18.2 Notification Panel (Bottom Dock)
+### 18.2 Notification Panel (TitleBar)
 
-Notifications are accessible from the bottom dock (see §10.3). A dock button with unread badge shows the notification count. Click/hover opens a compact popover above the dock.
+Notifications are accessible from the custom TitleBar (see §10.3). Its bell button shows the unread count; click opens a compact popover below the TitleBar.
 
 ```
-DOCK NOTIFICATION BUTTON:
+TITLEBAR NOTIFICATION BUTTON:
   Bell icon button with unread count badge
-  Hover/click → compact popover above dock
+  Click → compact popover below TitleBar
 
 POPOVER:
   Scrollable list of notification cards (newest first)
@@ -2632,19 +2639,19 @@ Verify: unit tests for services using mocked infrastructure. Bridge response sha
 
 ### Phase D — Svelte Frontend Shell
 
-Build: Svelte app structure, app shell, sidebar, header, notification panel, router.
+Build: Svelte app structure, frameless app shell, custom TitleBar, page headers, notification panel, router.
 
 Cover:
 
 - `app.html` + Vite config.
 - Svelte stores: `projectsStore`, `settingsStore`, `notificationsStore`, `currentPageStore`.
-- Sidebar component: nav items, collapse/expand, notification panel.
-- Header component: title, datetime, actions.
+- TitleBar component: nav items, live clock, notifications/help, native-window controls and interaction guards.
+- Per-page `.page-header`: title + contextual actions.
 - Event polling: `setInterval(1500)` → `get_pending_events()`.
 - TypeScript types mirroring Python models.
 - `window.pywebview.api.*` typed wrappers.
 
-Verify: browser preview on Linux matches prototype visual. pywebview preview where safe on Windows.
+Verify: browser preview covers layout; live pywebview on Windows covers native drag/Aero Snap, maximize/restore, taskbar work area, and edge/corner resize.
 
 ### Phase E — Dashboard & Project Details
 
@@ -2753,15 +2760,16 @@ Verify: app installs and runs on clean Windows machine.
 | #   | Criteria                                                                        |
 | --- | ------------------------------------------------------------------------------- |
 | 1   | Production UI uses pywebview + Svelte + TypeScript + Vite + Tailwind (no PyQt). |
-| 2   | Sidebar/header are visually consistent across all 6 pages.                      |
+| 2   | Custom TitleBar and per-page headers are visually consistent across all pages. |
 | 3   | Notification panel persists and is not recreated during page navigation.        |
 | 4   | Dashboard year dropdown shows only existing year folders.                       |
 | 5   | CR/Drone link paste displays extracted identifier; click opens default browser. |
 | 6   | Inline CR/Drone editing in dashboard table works for bulk paste workflows.      |
 | 7   | Empty-area click clears table/tree/list selection.                              |
 | 8   | Search inputs are debounced and provide visible feedback.                       |
-| 9   | All content panels scroll internally without page-level overflow.               |
-| 10  | UI is usable on both laptop (1366×768) and external monitor (1920×1080).        |
+| 9   | All content panels scroll internally without page-level overflow; wide Dashboard rows expose owned horizontal scrolling. |
+| 10  | UI is usable at enforced minimum 960×640, laptop 1366×768, and external monitor 1920×1080. |
+| 11  | Frameless shell matches Windows behavior: native drag/Aero Snap, double-click/button maximize↔restore, taskbar-safe maximization, guarded controls, and native edge/corner resize. |
 
 ### 26.4 Features
 

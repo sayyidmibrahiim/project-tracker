@@ -13,7 +13,7 @@
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
   import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
   import Toast from "./lib/components/Toast.svelte";
-  import { callBridge, isPywebviewReady, waitForPywebviewReady } from "./lib/bridge";
+  import { callBridge, isPywebviewReady, waitForPywebviewReady, winStartResize } from "./lib/bridge";
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
   import type { NotificationItem } from "./lib/types";
 
@@ -36,6 +36,15 @@
   let notifications: NotificationItem[] = $state([]);
   type NotifLoadState = "idle" | "loading" | "error" | "loaded";
   let notifLoadState: NotifLoadState = $state("idle");
+  let windowState = $state<"normal" | "maximized" | "minimized">("normal");
+
+  // Frameless window resize: hand the drag to the native OS loop (real
+  // edge/corner resizing, respects min_size). Left button only.
+  function startResize(direction: string, e: MouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    winStartResize(direction);
+  }
 
   // Event polling
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -231,17 +240,18 @@
   });
 </script>
 
-<div class="resize-edge">
-  <div class="resize-edge-top"></div>
-  <div class="resize-edge-bottom"></div>
-  <div class="resize-edge-left"></div>
-  <div class="resize-edge-right"></div>
-  <div class="resize-edge-tl"></div>
-  <div class="resize-edge-tr"></div>
-  <div class="resize-edge-bl"></div>
-  <div class="resize-edge-br"></div>
-</div>
 <div class="app-shell">
+  {#if windowState !== "maximized"}
+    <!-- Native resize handles: thin OS-drag zones on every edge + corner. -->
+    <div class="resize-edge re-top" onmousedown={(e) => startResize("top", e)}></div>
+    <div class="resize-edge re-bottom" onmousedown={(e) => startResize("bottom", e)}></div>
+    <div class="resize-edge re-left" onmousedown={(e) => startResize("left", e)}></div>
+    <div class="resize-edge re-right" onmousedown={(e) => startResize("right", e)}></div>
+    <div class="resize-edge re-tl" onmousedown={(e) => startResize("topleft", e)}></div>
+    <div class="resize-edge re-tr" onmousedown={(e) => startResize("topright", e)}></div>
+    <div class="resize-edge re-bl" onmousedown={(e) => startResize("bottomleft", e)}></div>
+    <div class="resize-edge re-br" onmousedown={(e) => startResize("bottomright", e)}></div>
+  {/if}
   <TitleBar
     {currentPage}
     {notifications}
@@ -251,6 +261,7 @@
     onDismiss={handleDismiss}
     onDismissAll={handleDismissAll}
     onSearchChange={handleSearchChange}
+    onWindowStateChange={(state) => (windowState = state)}
     interactionLocked={interactionLocked}
   />
   <main class="main">

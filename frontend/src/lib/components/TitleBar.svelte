@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import type { NotificationItem } from "../types";
-  import { winMinimize, winToggleMaximize, winClose, getUserProfile, waitForPywebviewReady, onWinStateChange } from "../bridge";
+  import { winMinimize, winToggleMaximize, winClose, winStartDrag, getUserProfile, waitForPywebviewReady, onWinStateChange } from "../bridge";
   import { logActivity } from "../activityLogger";
 
   let {
@@ -13,6 +13,7 @@
     onDismissAll,
     searchQuery,
     onSearchChange,
+    onWindowStateChange = () => {},
     interactionLocked = false,
   }: {
     currentPage: string;
@@ -23,6 +24,7 @@
     onDismissAll: () => void;
     searchQuery: string;
     onSearchChange: (q: string) => void;
+    onWindowStateChange?: (state: "normal" | "maximized" | "minimized") => void;
     interactionLocked?: boolean;
   } = $props();
 
@@ -66,6 +68,11 @@
     }
   }
 
+  function setWindowState(state: "normal" | "maximized" | "minimized") {
+    winState = state;
+    onWindowStateChange(state);
+  }
+
   onMount(async () => {
     await waitForPywebviewReady();
     const resp = await getUserProfile();
@@ -76,7 +83,7 @@
       userName = resp.error?.message || "bridge_failed";
     }
     window.addEventListener("click", handleWindowClick);
-    unsubWinState = onWinStateChange((s) => (winState = s));
+    unsubWinState = onWinStateChange(setWindowState);
     clockTimer = setInterval(() => (now = new Date()), 1000);
   });
 
@@ -93,9 +100,25 @@
     searchTimer = setTimeout(() => onSearchChange(value), 200);
   }
 
+  async function toggleMaximize() {
+    const r = await winToggleMaximize(winState);
+    if (r.ok && r.data?.state) setWindowState(r.data.state);
+  }
+
   function handleMinimize() { winMinimize(); }
-  function handleToggleMaximize() { winToggleMaximize(); }
+  function handleToggleMaximize() { toggleMaximize(); }
   function handleClose() { winClose(); }
+
+  function handleTitlebarMouseDown(event: MouseEvent) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, select, textarea, a, [role='button'], .search-box, .notif-popover, .help-popover")) return;
+    if (event.detail >= 2) {
+      toggleMaximize();
+      return;
+    }
+    winStartDrag();
+  }
 
   function navigateTo(id: string) {
     logActivity({ source: "TitleBar.navigateTo", kind: "navigation", event: "start", from: currentPage, to: id });
@@ -135,7 +158,7 @@
   };
 </script>
 
-<div class="titlebar" ondblclick={handleToggleMaximize} role="region" aria-label="Window titlebar">
+<div class="titlebar" onmousedown={handleTitlebarMouseDown} role="region" aria-label="Window titlebar">
   <div class="titlebar-left">
     <div class="user-avatar" title={userName}>
       <span class="avatar-initials">{userInitials}</span>
@@ -240,9 +263,19 @@
       {/if}
     </div>
     <div class="win-controls">
-      <button class="win-btn" onclick={handleMinimize} title="Minimize">─</button>
-      <button class="win-btn" onclick={handleToggleMaximize} title={winState === "maximized" ? "Restore" : "Maximize"}>{winState === "maximized" ? "▣" : "⛶"}</button>
-      <button class="win-btn win-close" onclick={handleClose} title="Close">✕</button>
+      <button class="win-btn" onclick={handleMinimize} title="Minimize" aria-label="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"><path d="M0 5 H10"/></svg>
+      </button>
+      <button class="win-btn" onclick={handleToggleMaximize} title={winState === "maximized" ? "Restore" : "Maximize"} aria-label={winState === "maximized" ? "Restore" : "Maximize"}>
+        {#if winState === "maximized"}
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"><path d="M3 0.5 H9.5 V7"/><rect x="0.5" y="2.5" width="7" height="7"/></svg>
+        {:else}
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+        {/if}
+      </button>
+      <button class="win-btn win-close" onclick={handleClose} title="Close" aria-label="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" shape-rendering="crispEdges"><path d="M0 0 L10 10 M10 0 L0 10"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -258,7 +291,6 @@
     flex: 0 0 48px;
     background: var(--black-chrome);
     border-bottom: 1px solid var(--dark-border);
-    -webkit-app-region: drag;
     user-select: none;
     padding: 0 8px;
     gap: 8px;
@@ -512,34 +544,38 @@
   }
   .help-shortcut span { color: var(--text-muted); font-weight: 800; }
 
+  /* Windows 11 native caption buttons: flush to the top-right corner, full bar
+     height, no radius/gap. Negative right/top margin cancels the titlebar's
+     `padding: 0 8px` so the group sits in the true window corner. */
   .win-controls {
     display: flex;
-    align-items: center;
-    gap: 4px;
+    align-items: stretch;
+    gap: 0;
+    align-self: stretch;
+    margin: 0 -8px 0 4px;
     -webkit-app-region: no-drag;
   }
   .win-btn {
-    width: 36px;
-    height: 28px;
+    width: 46px;
+    height: 100%;
     border: 0;
-    border-radius: 5px;
+    border-radius: 0;
     background: transparent;
     color: var(--inactive-nav-text);
-    font-size: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background .12s ease, color .12s ease;
-    font-family: var(--font);
+    transition: background .1s ease, color .1s ease;
   }
-  .win-btn:hover { background: var(--surface-dark); color: #fff; }
-  .win-close:hover { background: var(--primary-red); color: #fff; }
+  .win-btn:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+  .win-btn:active { background: rgba(255, 255, 255, 0.09); }
+  .win-close:hover, .win-close:active { background: #c42b1c; color: #fff; }
 
   @media (max-width: 1100px) {
     .titlebar-clock { display: none; }
   }
-  @media (max-width: 900px) {
+  @media (max-width: 1024px) {
     .search-box { width: 140px; }
     .search-box.focused { width: 180px; }
     .titlebar-nav { gap: 0; }

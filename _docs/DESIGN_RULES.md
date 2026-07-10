@@ -34,7 +34,7 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 ## Color Use
 
-- Dark chrome: title/header/bottom dock/navigation only.
+- Dark chrome: custom TitleBar/navigation only.
 - White canvas: main workspace, cards, tables, forms.
 - DBS red `#B91C1C`: primary action, active state, important status, 1–2 accents per panel.
 - Soft pink tokens: selected/active background tints, not bulk surfaces.
@@ -49,9 +49,10 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 ## Layout
 
-- Desktop-first. Minimum practical window: 800×600.
-- Test: 800×600, 1024×768, 1280×720, 1920×1080.
-- Data-heavy screens: tables/lists stay dense; detail panels reduce columns.
+- Desktop-first. Enforced minimum window: 960×640.
+- Test: 960×640, 1024×768, 1280×720, 1920×1080.
+- At ≤1024px, TitleBar, Project Details, and CICD use their compact layouts; controls must remain reachable at the enforced minimum.
+- Data-heavy screens: tables/lists stay dense; detail panels reduce columns. Wide tables own horizontal overflow inside their panel rather than clipping or widening the app body.
 - Avoid card nesting beyond 2 levels.
 - Prefer shared components over per-menu copy-paste.
 
@@ -59,7 +60,7 @@ Desktop productivity app: dense, calm, Windows-native. Dark chrome shell + white
 
 | Element           | Components                                                                                       |
 | ----------------- | ------------------------------------------------------------------------------------------------ |
-| Shell chrome      | `Header.svelte`, `Sidebar.svelte` (IS the bottom dock; legacy name, was once a left sidebar)     |
+| Shell chrome      | `TitleBar.svelte` + `App.svelte` native resize hit zones                                        |
 | Primary data view | `Dashboard.svelte`, `ProjectDetails.svelte`, `Report.svelte`                                     |
 | Actions           | `ProjectActions.svelte`, `ProjectTransitions.svelte`, `FileActions.svelte`                       |
 | Automation panels | `RulesActions.svelte`, `SchedulerActions.svelte`, `TeamsActions.svelte`, `OutlookActions.svelte` |

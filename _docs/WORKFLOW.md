@@ -130,10 +130,11 @@ Generate this after every code completion:
 
 ### Responsive
 
-- [ ] Window 800×600 — layout not broken
-- [ ] Window 1024×768 — layout comfortable
+- [ ] Window 960×640 (enforced minimum) — controls remain reachable; wide tables expose panel-owned horizontal scroll
+- [ ] Window 1024×768 — compact-layout boundary behaves cleanly
 - [ ] Window 1920×1080 — layout fills space well
-- [ ] Bottom dock auto-hide/reveal works at all widths (legacy sidebar behavior is bottom dock)
+- [ ] Empty TitleBar chrome drags/Aero-Snaps and double-click toggles maximize/restore; interactive chrome stays isolated
+- [ ] Maximized shell respects taskbar work area; edge/corner resize remains native and is unavailable while maximized
 
 ### Interaction
 

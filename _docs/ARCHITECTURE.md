@@ -46,6 +46,13 @@ core      → nothing (pure domain, no imports from other layers)
 - APScheduler jobs
 - Notification persistence
 
+## Desktop Window Boundary
+
+- Svelte TitleBar owns interaction intent: interactive-child guards, second-click maximize intent, and whether resize hit zones are rendered for the current window state.
+- `web/js_api.py` owns WinForms/Win32 interop: real `Form.WindowState`, native caption/resize hit forwarding, frame removal, and monitor work-area geometry.
+- Windows owns the modal move/resize loop, Aero Snap, cursor feedback, minimum-size enforcement, and final restore geometry. Do not recreate these with JavaScript coordinate tracking.
+- Frameless WndProc callbacks and original-proc pointers must remain strongly referenced for the process lifetime; unsupported/non-Windows paths fail closed to the normal pywebview shell.
+
 ## Persistence Model
 
 | What                 | Where               | Rule                                             |
