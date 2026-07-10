@@ -782,7 +782,7 @@
     .cicd-editor-pane { grid-column: 2; grid-row: 1; }
     .cicd-explorer { grid-row: 1 / span 2; }
   }
-  @media (max-width: 959px) {
+  @media (max-width: 1024px) {
     .cicd-workbench { display: block; flex: 1; overflow: auto; }
     .cicd-mobile-tabs { display: flex; gap: 4px; padding: 6px; background: var(--surface-dark); border-radius: 6px; position: sticky; bottom: 0; }
     .cicd-mobile-tabs button { flex: 1; height: 30px; font-size: 11px; font-weight: 800; border: none; border-radius: 4px; background: transparent; color: var(--inactive-nav-text); cursor: pointer; }

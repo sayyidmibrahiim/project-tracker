@@ -1,6 +1,7 @@
 """Phase C.5a — JsApi response contract tests (TDD: RED first)."""
 
 import importlib
+import inspect
 import json
 import sys
 from dataclasses import FrozenInstanceError
@@ -119,3 +120,29 @@ def test_poll_events_exception_returns_fail(monkeypatch):
             "details": None,
         },
     }
+
+
+@pytest.mark.parametrize(
+    ("monitor", "work", "expected"),
+    [
+        ((0, 0, 1920, 1080), (0, 0, 1920, 1040), (0, 0, 1920, 1040)),
+        ((0, 0, 1920, 1080), (40, 0, 1920, 1080), (40, 0, 1880, 1080)),
+        ((-1920, 0, 0, 1080), (-1920, 0, 0, 1040), (0, 0, 1920, 1040)),
+    ],
+)
+def test_maximized_work_area_bounds_respect_taskbar(
+    monitor: tuple[int, int, int, int],
+    work: tuple[int, int, int, int],
+    expected: tuple[int, int, int, int],
+) -> None:
+    assert js_api._maximized_work_area_bounds(monitor, work) == expected
+
+
+def test_frameless_window_uses_work_area_and_blocks_resize_while_maximized() -> None:
+    wndproc = inspect.getsource(js_api._install_frameless_wndproc)
+    hit_drag = inspect.getsource(js_api.JsApi._win_hit_drag)
+
+    assert "WM_GETMINMAXINFO" in wndproc
+    assert "_maximized_work_area_bounds" in wndproc
+    assert "FormWindowState.Maximized" in hit_drag
+    assert "hit != 2" in hit_drag

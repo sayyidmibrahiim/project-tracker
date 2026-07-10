@@ -72,6 +72,32 @@ test("App + TitleBar register the CICD page", () => {
   assert.match(bar, /cicd: `<svg/);
 });
 
+test("TitleBar starts native drag on empty-area mousedown and preserves double-click maximize", () => {
+  const bar = readFileSync(fileURLToPath(new URL("../src/lib/components/TitleBar.svelte", import.meta.url)), "utf8");
+  const dragGuard = bar.match(/target\.closest\("([^"]+)"\)/)?.[1] ?? "";
+  assert.match(bar, /winStartDrag/);
+  assert.match(bar, /function handleTitlebarMouseDown\(event: MouseEvent\)/);
+  assert.match(bar, /event\.button !== 0/);
+  assert.match(bar, /event\.detail >= 2/);
+  assert.match(bar, /onmousedown=\{handleTitlebarMouseDown\}/);
+  assert.doesNotMatch(dragGuard, /(^|,\s*)nav(?=,|$)|\.titlebar-nav|\.titlebar-right/);
+  assert.match(dragGuard, /button/);
+  assert.match(dragGuard, /\.search-box/);
+  assert.match(dragGuard, /\.notif-popover/);
+  assert.match(dragGuard, /\.help-popover/);
+  assert.doesNotMatch(bar, /ondblclick=/);
+  assert.doesNotMatch(bar, /\.titlebar\s*\{[^}]*-webkit-app-region:\s*drag/s);
+});
+
+test("App removes custom resize zones while the native window is maximized", () => {
+  const app = readFileSync(fileURLToPath(new URL("../src/App.svelte", import.meta.url)), "utf8");
+  const bar = readFileSync(fileURLToPath(new URL("../src/lib/components/TitleBar.svelte", import.meta.url)), "utf8");
+  assert.match(app, /let windowState = \$state<"normal" \| "maximized" \| "minimized">/);
+  assert.match(app, /\{#if windowState !== "maximized"\}[\s\S]*resize-edge[\s\S]*\{\/if\}/);
+  assert.match(app, /onWindowStateChange=/);
+  assert.match(bar, /onWindowStateChange/);
+});
+
 after(() => cleanup());
 
 function confirmProps(overrides) {

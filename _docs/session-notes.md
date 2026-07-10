@@ -8,6 +8,113 @@
 
 ---
 
+## 2026-07-10 (Native window resize + Aero Snap — branch `general/window-responsive-fixes`)
+
+**Now:** frameless window now gets real edge/corner resizing AND Windows Aero Snap via the native OS modal loop (`WM_NCLBUTTONDOWN` + hit-test codes). Replaces the inert cursor-only resize-edges a prior session on this branch deleted (see block below) — these are functional, not decorative.
+
+- `web/js_api.py`: new `_win_hit_drag(hit)` helper — resolves the WinForms Form (`BrowserView.instances[win.uid]`), then on the UI thread (`form.BeginInvoke(Action(...))`) does `ReleaseCapture()` + `SendMessageW(hwnd, WM_NCLBUTTONDOWN, hit, 0)`. Windows-only, call-time guarded (try/except → `ok()` no-op elsewhere). Public bridge methods `win_start_drag()` (HTCAPTION=2, gives Aero Snap) + `win_start_resize(direction)` (8 dirs → HTLEFT..HTBOTTOMRIGHT 10–17).
+- `frontend/src/lib/bridge.ts`: `winStartDrag()`, `winStartResize(direction)` wrappers.
+- `TitleBar.svelte`: `.titlebar` `-webkit-app-region: drag` **removed**; drag now JS `onmousedown={handleTitlebarMouseDown}` → `winStartDrag()` (skips interactive chrome via `closest(...)`). This is what enables Aero Snap — CSS app-region drag = manual move, no snap. `ondblclick` maximize kept (native never receives DBLCLK since we only send NCLBUTTONDOWN on each mousedown).
+- `App.svelte`: 8 `.resize-edge` divs (edges + corners) `onmousedown={(e)=>startResize(dir,e)}`; `styles.css` positions them `position:fixed z-index:1100` (above titlebar 1000) with per-edge cursors. Min size enforced by OS (pywebview `min_size=(960,640)`), no JS clamp needed.
+
+**Why native loop, not JS coordinate-forwarding:** only the OS move/resize loop produces the snap-layout preview shadow + quarter/half tiling. Pointer-delta → resize API = laggy and gives no snap. Ladder rung 4 (native platform feature).
+
+**Verify:** svelte-check 0 errors (13 warnings — 9 new = cosmetic a11y on resize divs / titlebar mousedown, same accepted class); `npm run build` clean; `web.js_api` + `app_web` import clean headless; `win_start_drag`/`win_start_resize`/`_win_hit_drag` present on JsApi. **Native window behavior NOT verifiable headless (GUI + interactive Windows session required)** — user must test live.
+
+**Manual checklist (user, live app after build+restart):**
+- [ ] Drag empty titlebar area → window moves; drag to top edge = maximize snap preview; drag to left/right screen edge = half-screen snap; corner = quarter snap (snap shadow visible).
+- [ ] Drag over nav icons / search / buttons does NOT move the window.
+- [ ] Double-click empty titlebar → maximize/restore still works.
+- [ ] Drag each of the 4 edges → window resizes that side; cursor shows correct arrow on hover.
+- [ ] Drag each of 4 corners → diagonal resize.
+- [ ] Resize cannot shrink below 960×640 (OS min-size).
+- [ ] Minimize / maximize / close buttons unaffected.
+
+**Round 2 (after live test: resize+min_size PASSED; snap/guard/dblclick FAILED):**
+- **#2+#3 shared root cause:** `winStartDrag()` fired on every titlebar mousedown → native NC move loop started instantly + captured input until mouseup, swallowing the dblclick sequence and every caption button click. **Fix (TitleBar.svelte):** threshold-armed drag — mousedown only records start pos; `winStartDrag()` fires from mousemove after >4px; bare click/dblclick never enters the OS loop. Added `onmousemove`/`onmouseup` on `.titlebar`; broadened guard to include `.titlebar-right`.
+- **#3 also:** `winState` stale (relied on maybe-not-firing `pywin-state` events). **Fix (js_api.py `win_toggle_maximize`):** now reads real `form.WindowState` (WinForms), flips on UI thread via `BeginInvoke`, returns `{state}`; `bridge.ts` typed to `{state}`; TitleBar `toggleMaximize()` sets `winState` from the return. Backend = source of truth, no event dependency.
+- **#1 snap:** NC move loop already runs (resize proves it); frameless window just isn't Aero-arrangeable. **Fix (js_api.py `_enable_native_snap`, called on `w.events.shown`):** re-add `WS_MAXIMIZEBOX|WS_THICKFRAME` on the raw HWND + `SWP_FRAMECHANGED`. **UNCERTAIN — needs live test:** if a thin sizing border appears or half/quarter snap stays partial, next round adds a `WM_NCCALCSIZE` subclass (with maximized inset) — deferred (bad WndProc crashes msg loop, can't test headless).
+
+Verify R2: svelte-check 0 errors (13 warnings, cosmetic); build clean; `web.js_api`+`app_web` import clean; `_enable_native_snap` + `win_toggle_maximize` present. Live behavior still unverifiable headless.
+
+**Next:** user live re-test (esp. #1 snap border/tiling) → if snap partial, WM_NCCALCSIZE round. Uncommitted.
+
+**Round 3 (Chrome-like frameless finish — border removal + Win11 buttons):**
+- **#1 border (root fix, was deferred in R2):** `WS_THICKFRAME` reserves a non-client frame Windows draws as the top border. **Fix (js_api.py):** new `_build_nc_frame_hook()` returns a WinForms `NativeWindow` subclass whose `WndProc` handles `WM_NCCALCSIZE` — leaves `rgrc[0]` (window rect) as the client rect (borderless), sets `m.Result=0`, returns without base; when `IsZoomed`, insets by `SM_CXFRAME+SM_CXPADDEDBORDER` / `SM_CYFRAME+SM_CXPADDEDBORDER` so a maximized/snapped window keeps the taskbar. `_enable_native_snap` attaches it via `AssignHandle` (BEFORE `SWP_FRAMECHANGED`), stored in module-global `_nc_frame_hook` so it's never GC'd. Chose `NativeWindow` over raw `GWL_WNDPROC` swap — WinForms calls base.WndProc + owns callback lifetime = much lower crash risk. Fallback: skip `AssignHandle` → border returns, app stable.
+- **#2 buttons:** `TitleBar.svelte` window controls now Win11-style — thin SVG icons (min = `M0 5 H10`, max = 9×9 rect, restore = offset squares, close = X), `stroke-width:1 shape-rendering:crispEdges`. CSS: 46px wide, full 48px bar height, no radius, gap 0, `margin:0 -8px 0 4px` on `.win-controls` to sit flush in the corner; hover min/max `rgba(255,255,255,.06)` / active `.09`, close hover `#c42b1c`.
+- **#3/#4/#5 (drag/dblclick/guard):** unchanged — R2 code already correct; verify live.
+
+Verify R3: svelte-check 0 errors (13 cosmetic warnings); `npm run build` clean (fresh bundle in web/static — **user must restart app before testing**); `web.js_api` import clean headless, `_build_nc_frame_hook` present. WndProc/native behavior unverifiable headless.
+
+**Next R3:** user live-test — border gone? buttons Win11? snap/dblclick/guard OK? maximized keeps taskbar? If maximized inset off a few px, tune `SM_*` sum live. Uncommitted.
+
+**Round 4 (live test R3: border STILL present + drag DEAD):**
+- **#2 drag regression root cause:** R2's threshold-armed drag fired `winStartDrag()` on *mousemove after 4px* — async bridge round-trip arrives too late, OS never grabs the move loop (resize works because resize-edge divs fire on *mousedown*, immediate). **Fix:** restored pywebview's `-webkit-app-region: drag` on `.titlebar` (compositor-level, reliable, no async race); removed JS threshold handlers (`handleTitlebarMouseDown/Move/Up`, `dragArmed`, `winStartDrag` import). Kept `ondblclick` maximize + child `no-drag`. **Trade-off:** pywebview app-region drag repositions the window itself → **NO Aero Snap** with this method. Drag reliability chosen over snap; snap = follow-up needing WebView2 non-client-region support (`IsNonClientRegionSupportEnabled`, not exposed by pywebview 6.2.1 out of the box). `win_start_drag`/`_win_hit_drag` backend kept (unused by drag now; resize still uses `_win_hit_drag`).
+- **#1 border root cause:** pythonnet `NativeWindow` WM_NCCALCSIZE override silently didn't intercept (border stayed = WS_THICKFRAME frame still drawn). **Fix:** replaced with deterministic **ctypes `GWLP_WNDPROC` subclass** (`_install_frameless_wndproc`) — chains to original proc via `CallWindowProcW`, returns `0` for `WM_NCCALCSIZE` (client == whole window → no frame), insets when `IsZoomed`. WNDPROC callback + original proc held in module-globals (`_frameless_wndproc_ref/_orig`) so never GC'd. 64-bit-safe (`SetWindowLongPtrW`, `LRESULT=c_longlong`). Best-effort try/except → border stays if it fails, app stable.
+
+Verify R4: svelte-check 0 errors (12 cosmetic warnings); build clean (fresh bundle — **restart before test**); `web.js_api` import clean, `_install_frameless_wndproc` present. WndProc + app-region drag unverifiable headless.
+
+**Next R4:** user live-test — (1) border gone now? (2) drag works (window follows)? (3) dblclick maximize? Note: Aero Snap intentionally OFF this round. If border still present, the ctypes subclass isn't taking → need live logging. Uncommitted.
+
+**Round 5 (live test R4: border/resize/buttons/guard passed; drag + dblclick still failed):**
+- **Root cause:** WebView2 in pywebview 6.2.1 does not honor `.titlebar { -webkit-app-region: drag; }`, so web content keeps the pointer and the window never moves. R2 also proved that calling the async bridge after a mousemove threshold is too late for Windows to enter its native move loop; the working resize path calls the same `WM_NCLBUTTONDOWN` forwarding on mousedown.
+- **Fix (`TitleBar.svelte` only):** restored the existing `winStartDrag` bridge import and added one empty-titlebar `onmousedown` handler. Non-left clicks and interactive descendants are ignored. A second click (`event.detail >= 2`) toggles maximize before any native move loop starts; a first click immediately calls `winStartDrag()` for native movement + Aero Snap. Removed standalone `ondblclick` and the ineffective `.titlebar` app-region drag rule; child no-drag rules remain.
+- **Regression contract:** `frontend/tests/components.test.mjs` now locks the mousedown/native-drag, second-click maximize, no-`ondblclick`, and no-titlebar-app-region behavior. Test was observed RED before the fix, then GREEN: 26 passed / 0 failed.
+- **Verify R5:** `npm --prefix D:/Ibrahim/Projects/project_tracker/frontend run check` = 0 errors / 13 warnings (known a11y class); build = clean, 256 modules transformed (Project Tracker process confirmed closed first). Native drag/double-click remains unverified because it needs the interactive Windows GUI. Fresh `web/static` bundle requires app restart before testing.
+- **Files this round:** `frontend/src/lib/components/TitleBar.svelte`, `frontend/tests/components.test.mjs`, `_docs/session-notes.md`. Backend, `App.svelte`, and `bridge.ts` were not changed in Round 5.
+- **Next R5:** user restart + live-test drag/Aero Snap, double-click maximize/restore, interaction guard, resize/min-size, border/taskbar regressions. If drag still fails, discuss enabling WebView2 `IsNonClientRegionSupportEnabled`; do not attempt it blind. Work remains uncommitted.
+
+**Round 6 (live test R5: drag + double-click failed; controls/resize/frame passed):**
+- **Observed:** empty-titlebar drag did nothing and double-click did not toggle maximize/restore. Nav/search/buttons stayed isolated, native edge/corner resize + 960×640 minimum worked, border stayed absent, and maximized taskbar behavior passed.
+- **Root cause:** R5's interaction guard rejected `nav`, `.titlebar-nav`, and `.titlebar-right`. The centered `.titlebar-nav` is `flex: 1`, so it owns nearly all visually empty titlebar space. Those clicks returned from `handleTitlebarMouseDown` before reaching either `winStartDrag()` or the `event.detail >= 2` maximize branch. This means R5 never actually exercised the native drag bridge; WebView2 capture was not yet the demonstrated blocker.
+- **Fix:** narrowed the guard to real controls and overlay content only: buttons, form controls, links/`role=button`, `.search-box`, `.notif-popover`, and `.help-popover`. Empty space inside the flex nav and right chrome now behaves like a normal Windows caption; actual nav/search/window controls remain non-draggable. No backend, bridge, resize-zone, or frame-hook change.
+- **Windows-standard resize:** intentionally retained the passing path. Edge/corner zones only initiate `WM_NCLBUTTONDOWN` with Windows HT resize codes; Windows owns movement, cursor loop, min-size enforcement, and final geometry rather than custom JavaScript resizing.
+- **Regression:** strengthened `frontend/tests/components.test.mjs` so flex containers cannot re-enter the drag guard while search/popovers remain protected. Observed RED on the old selector, then GREEN: 26 passed / 0 failed.
+- **Verify R6:** `svelte-check` = 0 errors / 13 known warnings; production build = clean, 256 modules transformed after confirming the app was closed. Fresh `web/static` requires restart. Native behavior still awaits user live-test.
+- **Next R6:** restart app; test empty nav whitespace + left/right chrome whitespace for drag/Aero Snap and double-click restore/maximize, then recheck controls and resize. If movement still fails after this selector fix, add one-shot bridge instrumentation before considering WebView2 non-client-region support. Work remains uncommitted.
+
+**Round 7 (live test R6 passed; maximize/taskbar, maximized-resize state, horizontal scroll follow-up):**
+- **Observed:** drag, Aero Snap, double-click, controls guard, normal resize, border removal, and minimum size all passed. New failures: maximized window covered the non-autohide taskbar; custom top resize remained active while maximized and corrupted the remembered restore/maximize geometry; Dashboard's narrow-window data grid exposed only vertical scrolling.
+- **Taskbar root cause + fix (`web/js_api.py`):** `WM_NCCALCSIZE` removed the frame and manually inset only the client rectangle, but the top-level maximized window still used monitor bounds and could cover the taskbar. The frameless WndProc now handles `WM_GETMINMAXINFO`: it first chains to WinForms (preserving `min_size`), then sets `ptMaxPosition`/`ptMaxSize` from the active monitor's `rcWork` rather than `rcMonitor`. This supports taskbars on any edge and offset secondary monitors. `WM_NCCALCSIZE` now only removes the frame; no double inset.
+- **Maximized-resize root cause + fix:** eight transparent resize zones were always mounted, including while maximized, and `_win_hit_drag` accepted resize HT codes in that state. `TitleBar.svelte` now reports its backend-sourced state to `App.svelte`; App removes resize zones while maximized. Backend also rejects resize HT codes when the real WinForms state is Maximized, while HTCAPTION drag remains allowed for standard drag-down restore.
+- **Horizontal-scroll root cause + fix (`styles.css`):** at 960 px, `.project-table` had `clientWidth=928` and internal `scrollWidth=1166`, but `width:100%; overflow:hidden` trapped that overflow so `.table-scroll` incorrectly remained `scrollWidth=928`. The table now uses `width:max-content; min-width:100%; overflow:visible`; browser verification shows `.table-scroll clientWidth=928 / scrollWidth=1166`, so its existing horizontal scrollbar owns the wide grid. No global/body scrollbar added.
+- **Regression:** backend work-area geometry + WndProc/resize guard contracts were RED, then `14 passed`; frontend resize-state + Dashboard overflow contracts were RED, then `41 passed`. `svelte-check` = 0 errors / 13 known warnings. Production build = clean, 256 modules transformed after confirming the app was closed.
+- **Files this round:** `web/js_api.py`, `frontend/src/App.svelte`, `frontend/src/lib/components/TitleBar.svelte`, `frontend/src/styles.css`, `tests/test_phase_c_js_api_contract.py`, `frontend/tests/components.test.mjs`, `frontend/tests/dashboard-inline-edit.test.mjs`, `_docs/session-notes.md`.
+- **Next R7:** restart and live-test maximized taskbar/work area, no resize cursor/action while maximized, drag-down restore, repeated maximize/restore geometry, and Dashboard horizontal scrollbar at minimum width. Work remains uncommitted.
+
+**Round 8 (R7 live test passed; merge approved):**
+- User confirmed every final shell check passes: taskbar remains visible when maximized; resize cursor/action is absent while maximized; drag-down restore and repeated double-click/button maximize↔restore preserve the correct normal rectangle; Dashboard exposes horizontal scrolling at minimum width. Earlier passing behavior remains intact: empty-chrome drag + Aero Snap, interactive guards, native edge/corner resize, 960×640 minimum, hidden top frame, and Win11 caption controls.
+- Final architecture is locked in D-0015: Svelte emits guarded caption/resize intent, `web/js_api.py` owns WinForms/Win32 interop, and Windows owns move/resize/Snap/restore geometry. `-webkit-app-region: drag` and JavaScript coordinate resizing are explicitly not the supported path.
+- Related references synced: PRD responsive + TitleBar rules, D-0005/D-0015, TECH_STACK desktop shell, ARCHITECTURE desktop-window boundary, DESIGN_RULES minimum/responsive/table behavior, PROGRESS tracking, and this ledger.
+- **Final gate 2026-07-11:** targeted backend window contracts 14 passed; full frontend suite 188 passed; svelte-check 0 errors / 13 known a11y warnings; `web/js_api.py` compiles; production build clean (256 modules) after confirming the app was closed; `git diff --check` clean before staging.
+- **Next R8:** commit `general/window-responsive-fixes`; merge to `main`; push `main`. Preserve unrelated local memory/Headroom/automation-doc changes outside the commit. Branch remains after merge per user rule.
+
+**active_menu:** general (window infra, cross-menu)
+
+---
+
+## 2026-07-10 (Window management + responsive fixes — branch `general/window-responsive-fixes`)
+
+**Status:** initial implementation snapshot; superseded by Native window Rounds 1–8 above. Final behavior passed user live verification and is approved for merge.
+
+**Initial implementation:** 5 requested fixes implemented + 1 extra found during audit on `general/window-responsive-fixes` (branched from `main`):
+- `web/js_api.py` `win_toggle_maximize`: now takes `current_state: str` param (frontend's already-accurate `winState`, synced via existing `register_win_events`/`pywin-state` event) as source of truth instead of stale `w.maximized` on pywebview 6.2.1.
+- `frontend/src/lib/bridge.ts` `winToggleMaximize(currentState: string)` forwards it.
+- `TitleBar.svelte`: new `handleTitlebarDoubleClick` guards `target.closest("button, input, select, textarea, nav, a, [role='button']")` before toggling, bound via `ondblclick` on `.titlebar` root (task claimed a duplicate binding at two line numbers — actual code only had one).
+- Dead breakpoints bumped above `min_size=(960,640)` (app_web.py) to 1024px: `TitleBar.svelte` (was 900px), `ProjectDetails.svelte` (was 700px), plus `CICDBrowser.svelte` (was 959px — found via grep audit, not in original task).
+- `styles.css` `.project-table` + `Dashboard.svelte` `.dashboard-project-table`: removed fixed `min-width` (1540px/1450px), grid columns converted to `minmax(floor, fr)` fluid tracks, containers `width:100%`.
+- `App.svelte` + `styles.css`: deleted all 8 fake `.resize-edge*` divs/CSS (cursor-only, no real hit-test resize logic).
+
+**Task claim discrepancies (verified against source, not assumed):** the "820px email dialog" dead breakpoint named in the task does not exist anywhere in `frontend/src` (grepped, zero matches) — skipped as fictional.
+
+**Verify:** svelte-check 0 errors (4 pre-existing unrelated a11y warnings); `npm run build` succeeded clean. Runtime app launch NOT verified — Bash-tool background launch runs in a non-interactive Windows session ("Services", not "Console"), so WebView2 fails with `Invalid window handle` (0x80070578). This is an environment/session-isolation limitation, not a code defect from these changes. User must run `D:/Ibrahim/Projects/project_tracker/.venv/Scripts/python.exe -m main` from their own interactive terminal to manually verify maximize/restore, titlebar dblclick guard, breakpoint reflow near 960–1024px, table fluidity 960–1449px, and that resize-edge removal doesn't break existing drag-resize behavior.
+
+**Outcome:** later native-window rounds restored real edge/corner resizing, drag/Aero Snap, taskbar-safe maximization, stable restore geometry, and owned horizontal table scrolling. See Rounds 1–8 above; merge approved.
+
+**active_menu:** general (window/responsive infra, cross-menu)
+
+---
+
 ## 2026-07-09 (Piece D — CICD Bitbucket integration — branch `general/cicd-bitbucket`)
 
 **Now:** Piece D implemented + verified on `general/cicd-bitbucket` (branched from `main`; the Automation epic Slices 1–5 were merged to main as `5257da05` before this branch, so main already had Logs as the 8th nav). 4 tasks, 4 commits:

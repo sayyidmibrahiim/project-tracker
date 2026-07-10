@@ -730,13 +730,40 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="WIN_MINIMIZE_FAILED")
 
-    def win_toggle_maximize(self) -> dict[str, object]:
+    def win_toggle_maximize(self, current_state: str = "normal") -> dict[str, object]:
         try:
             import webview  # noqa: PLC0415
-            if webview.windows:
-                w = webview.windows[0]
-                w.maximize() if not w.maximized else w.restore()
-            return ok()
+            if not webview.windows:
+                return ok({"state": "normal"})
+            win = webview.windows[0]
+            # Root of the stale-toggle bug: don't trust the frontend's winState or
+            # pywebview's flaky wrapper — read the real WinForms.WindowState, flip
+            # it on the UI thread, and return the resulting state so the frontend
+            # syncs from truth.
+            try:
+                from webview.platforms.winforms import BrowserView, WinForms  # noqa: PLC0415
+                from System import Action  # noqa: PLC0415
+
+                form = BrowserView.instances.get(win.uid)
+                if form is not None:
+                    is_max = form.WindowState == WinForms.FormWindowState.Maximized
+
+                    def _apply() -> None:
+                        form.WindowState = (
+                            WinForms.FormWindowState.Normal if is_max
+                            else WinForms.FormWindowState.Maximized
+                        )
+
+                    form.BeginInvoke(Action(_apply))
+                    return ok({"state": "normal" if is_max else "maximized"})
+            except Exception:
+                pass
+            # Fallback (non-winforms / import failure): pywebview wrapper.
+            if current_state == "maximized":
+                win.restore()
+                return ok({"state": "normal"})
+            win.maximize()
+            return ok({"state": "maximized"})
         except Exception as exc:
             return fail(str(exc), code="WIN_TOGGLE_MAXIMIZE_FAILED")
 
@@ -748,6 +775,65 @@ class JsApi:
             return ok()
         except Exception as exc:
             return fail(str(exc), code="WIN_CLOSE_FAILED")
+
+    def _win_hit_drag(self, hit: int) -> dict[str, object]:
+        """Hand a frameless move/resize to the native Windows modal loop.
+
+        Sends WM_NCLBUTTONDOWN with a hit-test code on the UI thread so Windows
+        runs its own move/resize loop. That loop is what CSS ``-webkit-app-region:
+        drag`` can't give us: real edge/corner resizing and Aero Snap (snap
+        layouts + the translucent snap-preview shadow). Windows-only; a no-op
+        (ok) on any other platform or before the window exists.
+
+        ponytail: relies on the standard ReleaseCapture + WM_NCLBUTTONDOWN idiom
+        marshalled to the WinForms UI thread. If a WebView2 capture ever fights
+        it, the fallback is manual move/resize via SetWindowPos (no snap).
+        """
+        try:
+            import webview  # noqa: PLC0415
+            if not webview.windows:
+                return ok()
+            win = webview.windows[0]
+            from webview.platforms.winforms import BrowserView, WinForms  # noqa: PLC0415
+            form = BrowserView.instances.get(win.uid)
+            if form is None:
+                return ok()
+            hwnd = form.Handle.ToInt32()
+
+            import ctypes  # noqa: PLC0415
+            from System import Action  # noqa: PLC0415
+
+            WM_NCLBUTTONDOWN = 0x00A1
+
+            def _begin() -> None:
+                if (
+                    hit != 2
+                    and form.WindowState == WinForms.FormWindowState.Maximized
+                ):
+                    return
+                user32 = ctypes.windll.user32
+                user32.ReleaseCapture()
+                user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, hit, 0)
+
+            form.BeginInvoke(Action(_begin))
+            return ok()
+        except Exception as exc:
+            return fail(str(exc), code="WIN_HITTEST_FAILED")
+
+    def win_start_drag(self) -> dict[str, object]:
+        """Begin a native window move (HTCAPTION) — enables Aero Snap."""
+        return self._win_hit_drag(2)  # HTCAPTION
+
+    def win_start_resize(self, direction: str) -> dict[str, object]:
+        """Begin a native edge/corner resize from the given direction."""
+        hits = {
+            "left": 10, "right": 11, "top": 12, "topleft": 13, "topright": 14,
+            "bottom": 15, "bottomleft": 16, "bottomright": 17,
+        }  # HTLEFT..HTBOTTOMRIGHT
+        hit = hits.get(str(direction))
+        if hit is None:
+            return fail(f"Unknown resize direction: {direction}", code="WIN_RESIZE_BAD_DIR")
+        return self._win_hit_drag(hit)
 
     def util_validate_windows_folder_name(self, name: str) -> dict[str, object]:
         """Validate Windows-safe folder name without filesystem mutation."""
@@ -2575,11 +2661,174 @@ def _push_js_state(w: object, state: str) -> None:
         pass
 
 
+# Keep the ctypes WNDPROC callback (and the original proc) alive for the app's
+# lifetime. If the callback object is GC'd, Windows calls freed memory → crash.
+_frameless_wndproc_ref: object | None = None
+_frameless_wndproc_orig: object | None = None
+
+
+def _maximized_work_area_bounds(
+    monitor: tuple[int, int, int, int],
+    work: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Return maximized position/size relative to the monitor origin."""
+    monitor_left, monitor_top, _, _ = monitor
+    work_left, work_top, work_right, work_bottom = work
+    return (
+        work_left - monitor_left,
+        work_top - monitor_top,
+        work_right - work_left,
+        work_bottom - work_top,
+    )
+
+
+def _install_frameless_wndproc(hwnd: int) -> None:
+    """Subclass the window to zero the non-client frame (no visible border).
+
+    ``_enable_native_snap`` adds WS_THICKFRAME | WS_MAXIMIZEBOX so Windows treats
+    the window as sizable (edge resize via our forwarded WM_NCLBUTTONDOWN). That
+    also makes Windows reserve and draw a thin non-client frame — the "top
+    border". Handling WM_NCCALCSIZE and returning 0 (client rect == the whole
+    proposed window rect) removes that frame while keeping the window sizable —
+    the standard borderless technique (Chrome/VS Code/Electron do the same).
+
+    Uses a raw ctypes GWLP_WNDPROC subclass (chained to the original proc via
+    CallWindowProc) rather than a pythonnet NativeWindow override, because the
+    managed override did not reliably intercept the message. Idempotent: installs
+    once (module-global guard). Best-effort: any failure leaves the window
+    untouched (border stays, app stable).
+    """
+    global _frameless_wndproc_ref, _frameless_wndproc_orig
+    if _frameless_wndproc_ref is not None:
+        return
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        user32 = ctypes.windll.user32
+        GWLP_WNDPROC = -4
+        WM_GETMINMAXINFO = 0x0024
+        WM_NCCALCSIZE = 0x0083
+        MONITOR_DEFAULTTONEAREST = 2
+
+        class MINMAXINFO(ctypes.Structure):
+            _fields_ = [
+                ("ptReserved", wintypes.POINT),
+                ("ptMaxSize", wintypes.POINT),
+                ("ptMaxPosition", wintypes.POINT),
+                ("ptMinTrackSize", wintypes.POINT),
+                ("ptMaxTrackSize", wintypes.POINT),
+            ]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        is64 = ctypes.sizeof(ctypes.c_void_p) == 8
+        LRESULT = ctypes.c_longlong if is64 else ctypes.c_long
+        WNDPROC = ctypes.WINFUNCTYPE(
+            LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        )
+        set_ptr = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+        set_ptr.restype = ctypes.c_void_p
+        set_ptr.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+        user32.CallWindowProcW.restype = LRESULT
+        user32.CallWindowProcW.argtypes = [
+            ctypes.c_void_p, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
+        ]
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
+
+        def _proc(h_wnd, msg, wparam, lparam):  # type: ignore[no-untyped-def]
+            if msg == WM_GETMINMAXINFO:
+                # Let WinForms populate minimum tracking size first, then replace
+                # only maximized geometry with this monitor's taskbar-aware work area.
+                result = user32.CallWindowProcW(
+                    _frameless_wndproc_orig, h_wnd, msg, wparam, lparam
+                )
+                monitor = user32.MonitorFromWindow(h_wnd, MONITOR_DEFAULTTONEAREST)
+                info = MONITORINFO()
+                info.cbSize = ctypes.sizeof(info)
+                if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                    x, y, width, height = _maximized_work_area_bounds(
+                        (
+                            info.rcMonitor.left,
+                            info.rcMonitor.top,
+                            info.rcMonitor.right,
+                            info.rcMonitor.bottom,
+                        ),
+                        (
+                            info.rcWork.left,
+                            info.rcWork.top,
+                            info.rcWork.right,
+                            info.rcWork.bottom,
+                        ),
+                    )
+                    minmax = MINMAXINFO.from_address(ctypes.c_size_t(lparam).value)
+                    minmax.ptMaxPosition.x = x
+                    minmax.ptMaxPosition.y = y
+                    minmax.ptMaxSize.x = width
+                    minmax.ptMaxSize.y = height
+                return result
+            if msg == WM_NCCALCSIZE and wparam:
+                return 0  # client area == whole window → no frame drawn
+            return user32.CallWindowProcW(
+                _frameless_wndproc_orig, h_wnd, msg, wparam, lparam
+            )
+
+        _frameless_wndproc_ref = WNDPROC(_proc)  # module-global: never GC'd
+        _frameless_wndproc_orig = set_ptr(
+            hwnd, GWLP_WNDPROC, ctypes.cast(_frameless_wndproc_ref, ctypes.c_void_p)
+        )
+    except Exception:  # noqa: BLE001 — border removal is best-effort; never crash startup
+        _frameless_wndproc_ref = None
+
+
+def _enable_native_snap(w: object) -> None:
+    """Make the frameless window sizable, then hide the frame those styles draw.
+
+    Adds WS_MAXIMIZEBOX | WS_THICKFRAME on the raw HWND so the window is sizable
+    (edge/corner resize via forwarded WM_NCLBUTTONDOWN), then installs the
+    WM_NCCALCSIZE subclass so the reserved non-client frame is not drawn.
+    """
+    try:
+        import ctypes  # noqa: PLC0415
+        from webview.platforms.winforms import BrowserView  # noqa: PLC0415
+
+        form = BrowserView.instances.get(w.uid)
+        if form is None:
+            return
+        hwnd = form.Handle.ToInt32()
+        GWL_STYLE = -16
+        WS_THICKFRAME = 0x00040000
+        WS_MAXIMIZEBOX = 0x00010000
+        user32 = ctypes.windll.user32
+        style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+        user32.SetWindowLongW(hwnd, GWL_STYLE, style | WS_THICKFRAME | WS_MAXIMIZEBOX)
+        # Subclass BEFORE SWP_FRAMECHANGED so the first WM_NCCALCSIZE (fired by the
+        # frame recalculation) is already intercepted.
+        _install_frameless_wndproc(hwnd)
+        # SWP_FRAMECHANGED re-evaluates the (now sizable, frameless) window.
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)
+    except Exception:  # noqa: BLE001 — snap is best-effort; never break startup
+        pass
+
+
 def register_win_events(w: object) -> None:
     """Hook pywebview window events to sync state to frontend."""
     w.events.maximized += lambda: _push_js_state(w, "maximized")
     w.events.restored += lambda: _push_js_state(w, "normal")
     w.events.minimized += lambda: _push_js_state(w, "minimized")
+    try:
+        w.events.shown += lambda: _enable_native_snap(w)
+    except Exception:  # noqa: BLE001 — no 'shown' event → skip snap enablement
+        pass
 
 
 def _to_frontend_safe(value: object) -> object:

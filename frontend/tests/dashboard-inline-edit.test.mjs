@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DASHBOARD = readFileSync(resolve(__dirname, "../src/lib/components/Dashboard.svelte"), "utf8");
 const PROJECT_DETAILS = readFileSync(resolve(__dirname, "../src/lib/components/ProjectDetails.svelte"), "utf8");
+const STYLES = readFileSync(resolve(__dirname, "../src/styles.css"), "utf8");
 
 function extractFunction(source, name) {
   const re = new RegExp(`function\\s+${name}\\s*\\(`);
@@ -143,4 +144,11 @@ test("TitleBar renders notification state in the chrome", () => {
   assert.match(TITLE_BAR, /unreadCount/);
   assert.match(TITLE_BAR, /notif-badge/);
   assert.match(TITLE_BAR, /Notifications/);
+});
+
+test("Dashboard wide grid exposes horizontal overflow to its scroll container", () => {
+  assert.match(
+    STYLES,
+    /\.project-table\s*\{[^}]*width:\s*max-content;[^}]*min-width:\s*100%;[^}]*overflow:\s*visible;/s,
+  );
 });

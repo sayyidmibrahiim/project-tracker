@@ -1552,7 +1552,7 @@
   .pd-inline-create .pd-control { flex:1; }
   .pd-meta-edit { display:flex; flex-direction:column; gap:6px; }
   .pd-meta-datetime-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  @media (max-width:700px) { .pd-meta-datetime-row { grid-template-columns:1fr; } }
+  @media (max-width:1024px) { .pd-meta-datetime-row { grid-template-columns:1fr; } }
   .pd-meta-field { display:flex; flex-direction:column; gap:5px; min-width:0; }
   .pd-meta-label { font-size:9.5px; font-weight:600; color:#6B7280; text-transform:uppercase; letter-spacing:0.05em; }
   .pd-history-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; }

@@ -84,29 +84,18 @@ body {
 }
 .app-shell { -webkit-app-region: no-drag; }
 
-/* ── Frameless window resize edge ── */
-.resize-edge {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-}
-.resize-edge-top,
-.resize-edge-bottom { height: 4px; position: absolute; left: 0; right: 0; pointer-events: auto; }
-.resize-edge-top { top: 0; cursor: n-resize; }
-.resize-edge-bottom { bottom: 0; cursor: s-resize; }
-.resize-edge-left,
-.resize-edge-right { width: 4px; position: absolute; top: 0; bottom: 0; pointer-events: auto; }
-.resize-edge-left { left: 0; cursor: w-resize; }
-.resize-edge-right { right: 0; cursor: e-resize; }
-.resize-edge-tl,
-.resize-edge-tr,
-.resize-edge-bl,
-.resize-edge-br { width: 8px; height: 8px; position: absolute; z-index: 1; pointer-events: auto; }
-.resize-edge-tl { top: 0; left: 0; cursor: nw-resize; }
-.resize-edge-tr { top: 0; right: 0; cursor: ne-resize; }
-.resize-edge-bl { bottom: 0; left: 0; cursor: sw-resize; }
-.resize-edge-br { bottom: 0; right: 0; cursor: se-resize; }
+/* Frameless window resize handles — thin transparent OS-drag zones. z above
+   titlebar (1000) so top edge/corners win over caption drag. */
+.resize-edge { position: fixed; z-index: 1100; -webkit-app-region: no-drag; }
+.re-top    { top: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize; }
+.re-bottom { bottom: 0; left: 12px; right: 12px; height: 5px; cursor: ns-resize; }
+.re-left   { left: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize; }
+.re-right  { right: 0; top: 12px; bottom: 12px; width: 5px; cursor: ew-resize; }
+.re-tl { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.re-tr { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.re-bl { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.re-br { bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+
 button, input, select, textarea { font-family: inherit; font-size: inherit; }
 button { cursor: pointer; }
 ::-webkit-scrollbar { width: 4px; height: 6px; }
@@ -205,11 +194,11 @@ button { cursor: pointer; }
 .table-card-head { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-weight: 900; color: var(--text-strong); }
 .table-card-head .icon, .table-head-icon { color: var(--primary-red); }
 .table-scroll { flex: 1; min-height: 0; overflow: auto; background: #fff; border: 1px solid var(--text-strong); border-radius: 10px; box-shadow: var(--shadow-inner); padding: 8px; }
-.project-table { min-width: 1540px; border: 1px solid var(--text-strong); border-radius: 8px; overflow: hidden; background: #fff; }
-.project-grid, .table-header-row { display: grid; grid-template-columns: 42px 140px minmax(300px, 1fr) 150px 150px 245px 150px 210px 185px 48px; }
+.project-table { width: max-content; min-width: 100%; border: 1px solid var(--text-strong); border-radius: 8px; overflow: visible; background: #fff; }
+.project-grid, .table-header-row { display: grid; grid-template-columns: 42px minmax(110px,1fr) minmax(260px,2.4fr) minmax(110px,1fr) minmax(110px,1fr) minmax(190px,2fr) minmax(110px,1fr) minmax(160px,1.6fr) minmax(140px,1.4fr) 48px; }
 .table-header-cell { min-height: 30px; background: var(--text-strong); color: #fff; text-transform: uppercase; font-size: 9px; letter-spacing: .2px; font-weight: 900; display: flex; align-items: center; justify-content: center; text-align: center; padding: 7px 6px; border-right: 1px solid var(--text-strong); white-space: nowrap; }
 .table-header-cell:last-child { border-right: 0; }
-.project-row { display:grid; grid-template-columns: 42px 140px minmax(300px, 1fr) 150px 150px 245px 150px 210px 185px 48px; border-top: 1px solid var(--text-strong); align-items: stretch; min-height: 154px; background: #fff; }
+.project-row { display:grid; grid-template-columns: 42px minmax(110px,1fr) minmax(260px,2.4fr) minmax(110px,1fr) minmax(110px,1fr) minmax(190px,2fr) minmax(110px,1fr) minmax(160px,1.6fr) minmax(140px,1.4fr) 48px; border-top: 1px solid var(--text-strong); align-items: stretch; min-height: 154px; background: #fff; }
 .project-row.alt { background: var(--row-alt); min-height: 86px; }
 .project-row.selected { outline: 2px solid var(--primary-red); outline-offset: -2px; }
 .table-cell { border-right: 1px solid var(--text-strong); padding: 8px; display: flex; min-width: 0; align-items: center; overflow: hidden; }

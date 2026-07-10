@@ -6,7 +6,9 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `main`. Piece D CICD Workbench v2 merged to `main` 2026-07-09 (user manual check passed). Automation System epic (Slices 1–5) merged to `main` 2026-07-08.
+Active branch: `general/window-responsive-fixes` (from `main`). Native frameless-window + responsive fixes passed user live verification on 2026-07-10 and are approved for merge. Piece D CICD Workbench v2 merged to `main` 2026-07-09; Automation System epic (Slices 1–5) merged to `main` 2026-07-08.
+
+**Native window + responsive fixes (`general/window-responsive-fixes`)**: user-verified, merge approved. Empty titlebar chrome now enters the Windows native caption loop for reliable drag + Aero Snap; second click and caption button toggle the real WinForms maximize/restore state; interactive chrome remains guarded. Edge/corner resize stays OS-owned with a 960×640 minimum and is disabled while maximized. Frameless `WM_NCCALCSIZE` removes the top frame, while `WM_GETMINMAXINFO` uses the active monitor's work area so maximization never covers a non-autohide taskbar. Responsive shell breakpoints align at ≤1024px. Dashboard's wide grid exposes panel-owned horizontal scrolling at minimum width without body overflow. D-0015.
 
 Active work: **Automation System epic** (Outlook + General Automation). Spec: `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. 5 slices, PD-box-first; Piece C folded in (backend kept, PD UI replaced). Slices: 1 PD 3-group section · 2 PlaceholderResolver + Template per-CR + editor + Test · 3 Rules Engine goal-wizard + wire no-op actions + conflict detect + pre-seeded · 4 Auto Update CR State + Create Drone (Jenkins stub) + Teams followup · 5 Logs top-level menu + right-sidebar + retention.
 
@@ -32,6 +34,21 @@ Piece B RTE format-aware follow-up: **user-verified and merged 2026-07-04** (`.m
 
 Previous completed area remains fixed: frameless titlebar, Dashboard, and Project Details layout decisions are implemented and should not be overwritten by `_reference/`.
 
+## Verification (latest — Native window + responsive fixes, 2026-07-10/11)
+
+```
+targeted backend window contracts: 14 passed
+full frontend suite: 188 passed / 0 failed
+svelte-check: 0 errors, 13 known a11y warnings
+web/js_api.py compile: ✓
+production build: ✓ (256 modules; app confirmed closed; fresh 2026-07-11)
+browser narrow-width table check: .table-scroll clientWidth=928 / scrollWidth=1166
+user live Windows check: ✓ all pass (drag/Aero Snap, double-click + button maximize/restore,
+  interaction guards, edge/corner resize + 960×640 minimum, hidden top frame,
+  taskbar-safe maximize, maximized resize guard, repeated restore geometry,
+  Dashboard horizontal scrollbar)
+```
+
 ## Roadmap to 100% (approved 2026-07-04)
 
 Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md`.
@@ -43,14 +60,15 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | ✅ Merged 2026-07-06 (incl. fix round v2 steps 0–7) |
 | 3 | `automations/approval-polling` | Piece C approval automation + Automation System epic Slices 1–5 | ✅ Merged 2026-07-08 |
 | 4 | `general/cicd-bitbucket` | Piece D CICD Workbench v2 (link-only clone, editing, safe git) | Merged to `main` 2026-07-09 (manual check passed) |
-| 5 | `general/professional-polish` | Color hygiene, a11y floor, responsive table, Phase D test debt, avatar initials | Planned |
+| 4a | `general/window-responsive-fixes` | Native frameless window behavior + responsive/table overflow fixes | ✅ User-verified 2026-07-10; merge approved |
+| 5 | `general/professional-polish` | Remaining color hygiene, a11y floor, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
 
 Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeline), python-docx exporter (free/offline — office network blocks paid/online deps), red header removed (page-header is the only header), sequence pipeline → C → D.
 
 ## Active Blockers
 
-- Windows-only runtime (Outlook COM, Teams pyautogui, os.startfile, PyInstaller) not yet verified — requires manual Windows testing.
+- Windows-only integrations (Outlook COM, Teams pyautogui, os.startfile, PyInstaller) not yet verified — requires separate manual Windows testing. Native shell/window behavior is verified.
 - Avatar initials show "A" (single-part Windows username) instead of "AA" (Azzahra Ara) — Outlook COM not fully configured.
 
 ## Pending
@@ -64,7 +82,7 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
 | Piece B CR docs RTE | ✅ User-verified + merged 2026-07-04 |
-| Windows verify      | Not started (needs real Windows) |
+| Windows integrations verify | Not started (needs separate live checks) |
 | Packaging           | Not started |
 
 ## Last 4 Completed Slices
@@ -74,7 +92,7 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 3. **UX feature pack** (2026-07-01, branch `general/ux-features`): Toast system, GlobalPlan/Report/SecondBrain inline feedback → toast store, Settings autosave, Undo toasts, TitleBar keyboard-shortcut popover, WelcomeGuide overlay.
 4. **Production-readiness pass** (2026-07-01, branch `general/global-plan`): cross-menu fix sweep. Global Plan, Scheduler, Rules, Report, Second Brain, Link Bank, Settings improvements.
 
-## Verification (latest — Automation System Slice 5, 2026-07-08)
+## Verification — Automation System Slice 5 (2026-07-08)
 
 ```
 svelte-check: 0 errors, 4 warnings (a11y autocomplete <li> — cosmetic)
