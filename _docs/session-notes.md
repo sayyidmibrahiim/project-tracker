@@ -87,7 +87,7 @@ Verify R4: svelte-check 0 errors (12 cosmetic warnings); build clean (fresh bund
 - Final architecture is locked in D-0015: Svelte emits guarded caption/resize intent, `web/js_api.py` owns WinForms/Win32 interop, and Windows owns move/resize/Snap/restore geometry. `-webkit-app-region: drag` and JavaScript coordinate resizing are explicitly not the supported path.
 - Related references synced: PRD responsive + TitleBar rules, D-0005/D-0015, TECH_STACK desktop shell, ARCHITECTURE desktop-window boundary, DESIGN_RULES minimum/responsive/table behavior, PROGRESS tracking, and this ledger.
 - **Final gate 2026-07-11:** targeted backend window contracts 14 passed; full frontend suite 188 passed; svelte-check 0 errors / 13 known a11y warnings; `web/js_api.py` compiles; production build clean (256 modules) after confirming the app was closed; `git diff --check` clean before staging.
-- **Next R8:** commit `general/window-responsive-fixes`; merge to `main`; push `main`. Preserve unrelated local memory/Headroom/automation-doc changes outside the commit. Branch remains after merge per user rule.
+- **Merge R8:** feature commit `bf2014e1`; merged to `main` as `18859d1b` on 2026-07-11. Branch kept per user rule. Post-merge sequence: record this tracking update, verify merged tree, push `main`, then restore unrelated local memory/Headroom/automation-doc changes per path.
 
 **active_menu:** general (window infra, cross-menu)
 

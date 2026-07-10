@@ -6,9 +6,9 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `general/window-responsive-fixes` (from `main`). Native frameless-window + responsive fixes passed user live verification on 2026-07-10 and are approved for merge. Piece D CICD Workbench v2 merged to `main` 2026-07-09; Automation System epic (Slices 1–5) merged to `main` 2026-07-08.
+Active branch: `main`. Native frameless-window + responsive fixes passed user live verification on 2026-07-10 and merged to `main` on 2026-07-11 (`bf2014e1`, merge `18859d1b`; feature branch kept). Piece D CICD Workbench v2 merged 2026-07-09; Automation System epic (Slices 1–5) merged 2026-07-08.
 
-**Native window + responsive fixes (`general/window-responsive-fixes`)**: user-verified, merge approved. Empty titlebar chrome now enters the Windows native caption loop for reliable drag + Aero Snap; second click and caption button toggle the real WinForms maximize/restore state; interactive chrome remains guarded. Edge/corner resize stays OS-owned with a 960×640 minimum and is disabled while maximized. Frameless `WM_NCCALCSIZE` removes the top frame, while `WM_GETMINMAXINFO` uses the active monitor's work area so maximization never covers a non-autohide taskbar. Responsive shell breakpoints align at ≤1024px. Dashboard's wide grid exposes panel-owned horizontal scrolling at minimum width without body overflow. D-0015.
+**Native window + responsive fixes (`general/window-responsive-fixes`)**: user-verified and merged to `main` 2026-07-11. Empty titlebar chrome now enters the Windows native caption loop for reliable drag + Aero Snap; second click and caption button toggle the real WinForms maximize/restore state; interactive chrome remains guarded. Edge/corner resize stays OS-owned with a 960×640 minimum and is disabled while maximized. Frameless `WM_NCCALCSIZE` removes the top frame, while `WM_GETMINMAXINFO` uses the active monitor's work area so maximization never covers a non-autohide taskbar. Responsive shell breakpoints align at ≤1024px. Dashboard's wide grid exposes panel-owned horizontal scrolling at minimum width without body overflow. D-0015.
 
 Active work: **Automation System epic** (Outlook + General Automation). Spec: `_docs/specs/superpowers/specs/2026-07-08-automation-system-design.md`. 5 slices, PD-box-first; Piece C folded in (backend kept, PD UI replaced). Slices: 1 PD 3-group section · 2 PlaceholderResolver + Template per-CR + editor + Test · 3 Rules Engine goal-wizard + wire no-op actions + conflict detect + pre-seeded · 4 Auto Update CR State + Create Drone (Jenkins stub) + Teams followup · 5 Logs top-level menu + right-sidebar + retention.
 
@@ -60,7 +60,7 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 2 | `project-details/tiptap-docx-pipeline` | flow-tiptap: docx source.json + python-docx export + image assets (paste Win+Shift+S) | ✅ Merged 2026-07-06 (incl. fix round v2 steps 0–7) |
 | 3 | `automations/approval-polling` | Piece C approval automation + Automation System epic Slices 1–5 | ✅ Merged 2026-07-08 |
 | 4 | `general/cicd-bitbucket` | Piece D CICD Workbench v2 (link-only clone, editing, safe git) | Merged to `main` 2026-07-09 (manual check passed) |
-| 4a | `general/window-responsive-fixes` | Native frameless window behavior + responsive/table overflow fixes | ✅ User-verified 2026-07-10; merge approved |
+| 4a | `general/window-responsive-fixes` | Native frameless window behavior + responsive/table overflow fixes | ✅ Merged 2026-07-11 (user-verified; branch kept) |
 | 5 | `general/professional-polish` | Remaining color hygiene, a11y floor, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
 
