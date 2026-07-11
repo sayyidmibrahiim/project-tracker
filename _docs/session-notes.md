@@ -20,7 +20,7 @@
 
 **Manual gate:** passed 2026-07-11. Repeated empty-titlebar/live-clock maximize↔restore no longer selects clock/search/body/table text; prior drag/Snap/maximize and interactive controls remain intact. User approved commit → merge `main` → push. Branch remains after merge per user rule.
 
-**Next:** commit branch, merge to `main`, verify merged tree, push `main`.
+**Merge:** feature commit `24e48159`; merged to `main` as `ce27568c` on 2026-07-11. Branch kept per user rule. Post-merge sequence: record tracking update, verify merged tree, push `main`, restore unrelated local changes.
 
 **active_menu:** general (window infra)
 
