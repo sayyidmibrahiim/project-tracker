@@ -70,3 +70,63 @@ def test_rewrite_settings_paths_preserves_none():
     result = rewrite_settings_paths(settings, Path("D:/old"), Path("C:/new"))
     assert result.root_folder is None
     assert result.second_brain_folder is None
+
+
+# ── Task 3: rewrite_appcode_configs ─────────────────────────────────────────
+
+import json
+
+from core.models import AppCodeConfig
+from services.bootstrap_service import rewrite_appcode_configs
+
+
+def test_rewrite_appcode_configs_updates_cicd_shared_path(tmp_path):
+    old = tmp_path / "old_root"
+    new = tmp_path / "new_root"
+    appcode_dir = new / "MYAPP"
+    appcode_dir.mkdir(parents=True)
+    config = AppCodeConfig(
+        display_name="MYAPP",
+        cicd_location="shared_root",
+        cicd_shared_path=old / "SharedCICD",
+    )
+    (appcode_dir / "appcode.json").write_text(
+        json.dumps(config.to_dict()), encoding="utf-8"
+    )
+    count = rewrite_appcode_configs(new, old)
+    assert count == 1
+    data = json.loads((appcode_dir / "appcode.json").read_text(encoding="utf-8"))
+    assert data["cicd_shared_path"] == str(new / "SharedCICD")
+
+
+def test_rewrite_appcode_configs_skips_per_appcode_mode(tmp_path):
+    old = tmp_path / "old_root"
+    new = tmp_path / "new_root"
+    appcode_dir = new / "MYAPP"
+    appcode_dir.mkdir(parents=True)
+    config = AppCodeConfig(display_name="MYAPP", cicd_location="per_appcode")
+    (appcode_dir / "appcode.json").write_text(
+        json.dumps(config.to_dict()), encoding="utf-8"
+    )
+    count = rewrite_appcode_configs(new, old)
+    assert count == 0
+
+
+def test_rewrite_appcode_configs_skips_external_path(tmp_path):
+    old = tmp_path / "old_root"
+    new = tmp_path / "new_root"
+    appcode_dir = new / "MYAPP"
+    appcode_dir.mkdir(parents=True)
+    external = tmp_path / "external_cicd"
+    config = AppCodeConfig(
+        display_name="MYAPP",
+        cicd_location="shared_root",
+        cicd_shared_path=external,
+    )
+    (appcode_dir / "appcode.json").write_text(
+        json.dumps(config.to_dict()), encoding="utf-8"
+    )
+    count = rewrite_appcode_configs(new, old)
+    assert count == 0
+    data = json.loads((appcode_dir / "appcode.json").read_text(encoding="utf-8"))
+    assert data["cicd_shared_path"] == str(external)

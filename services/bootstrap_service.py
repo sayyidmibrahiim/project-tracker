@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
-from core.models import AppSettings
+from core.models import AppCodeConfig, AppSettings
 
 DEFAULT_ROOT_NAME = "Project Tracker"
 
@@ -49,3 +50,34 @@ def rewrite_settings_paths(settings: AppSettings, old_root: Path, new_root: Path
             rewritten.append(auto)
         result.teams.automations = rewritten
     return result
+
+
+def rewrite_appcode_configs(new_root: Path, old_root: Path) -> int:
+    """Walk {new_root}/*/appcode.json, rewrite cicd_shared_path if inside old_root.
+
+    Returns the number of configs modified.
+    """
+    if not new_root.is_dir():
+        return 0
+    modified = 0
+    for child in sorted(new_root.iterdir()):
+        if not child.is_dir():
+            continue
+        config_path = child / "appcode.json"
+        if not config_path.is_file():
+            continue
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        config = AppCodeConfig.from_dict(data)
+        if config.cicd_shared_path is None:
+            continue
+        rewritten = rewrite_path(config.cicd_shared_path, old_root, new_root)
+        if rewritten != config.cicd_shared_path:
+            config.cicd_shared_path = rewritten
+            config_path.write_text(
+                json.dumps(config.to_dict(), indent=2), encoding="utf-8"
+            )
+            modified += 1
+    return modified
