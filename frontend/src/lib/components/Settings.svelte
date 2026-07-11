@@ -21,7 +21,6 @@
   let originalRaw: Record<string, unknown> = $state({});
 
   const FORM_FIELDS: { key: string; card: "general" | "behavior" | "paths" }[] = [
-    { key: "root_folder", card: "paths" },
     { key: "display_name", card: "general" },
     { key: "language", card: "general" },
     { key: "datetime_format", card: "general" },
@@ -37,11 +36,11 @@
   // Folder picker — backed by the util_choose_folder bridge (native OS dialog).
   // Falls back gracefully when the picker is unavailable (Linux dev/headless):
   // the input stays editable so the user can still type a path manually.
-  let browseBusy: "" | "root_folder" | "second_brain_folder" | "file_template_folder" = $state("");
+  let browseBusy: "" | "second_brain_folder" | "file_template_folder" = $state("");
   let browseError: string = $state("");
 
   async function browseFolder(
-    key: "root_folder" | "second_brain_folder" | "file_template_folder",
+    key: "second_brain_folder" | "file_template_folder",
   ) {
     browseError = "";
     if (!isPywebviewReady()) {
@@ -135,15 +134,6 @@
       addToast(saveError, "error", 5000);
       return;
     }
-    if (form["root_folder"] && typeof form["root_folder"] === "string" && form["root_folder"].trim()) {
-      const trimmed = form["root_folder"].trim();
-      if (/[/\\]$/.test(trimmed)) {
-        saveState = "error";
-        saveError = "Root Folder must not end with a trailing slash.";
-        addToast(saveError, "error", 5000);
-        return;
-      }
-    }
 
     const payload: Record<string, unknown> = { ...originalRaw };
     for (const f of FORM_FIELDS) payload[f.key] = form[f.key];
@@ -226,7 +216,6 @@
         <div class="panel-card accent">
           <div class="panel-title-row"><span class="panel-title-icon">▤</span><span class="panel-title">Paths</span></div>
           <div class="form-grid one-col">
-            <label class="field"><span>Root Folder</span><div class="field-row"><input class="input" value={String(form["root_folder"] ?? "")} oninput={(e) => handleFieldChange("root_folder", (e.target as HTMLInputElement).value)} placeholder="D:\WORK\CR" /><button class="btn-secondary" onclick={() => browseFolder("root_folder")} disabled={browseBusy === "root_folder"}>{browseBusy === "root_folder" ? "…" : "Browse"}</button></div></label>
             <label class="field"><span>Second Brain Folder</span><div class="field-row"><input class="input" value={String(form["second_brain_folder"] ?? "")} oninput={(e) => handleFieldChange("second_brain_folder", (e.target as HTMLInputElement).value)} placeholder="%APPDATA%\ProjectTrackerDBS\SecondBrain" /><button class="btn-secondary" onclick={() => browseFolder("second_brain_folder")} disabled={browseBusy === "second_brain_folder"}>{browseBusy === "second_brain_folder" ? "…" : "Browse"}</button></div></label>
             <label class="field"><span>File Template Folder</span><div class="field-row"><input class="input" value={String(form["file_template_folder"] ?? "")} oninput={(e) => handleFieldChange("file_template_folder", (e.target as HTMLInputElement).value)} placeholder="Optional template folder path" /><button class="btn-secondary" onclick={() => browseFolder("file_template_folder")} disabled={browseBusy === "file_template_folder"}>{browseBusy === "file_template_folder" ? "…" : "Browse"}</button></div></label>
             {#if browseError}<span class="browse-error">⚠ {browseError}</span>{/if}
@@ -234,7 +223,7 @@
         </div>
 
         <div class="toolbar right"><button class="btn-primary" disabled={loadState !== "loaded" || saveState === "saving" || !dirty} onclick={handleSave}>{saveState === "saving" ? "Saving…" : dirty ? "Save Now" : "Saved"}</button></div>
-        {#if saveState === "idle" && !dirty}<p class="restart-note">▸ Saved. Some changes (root folder, startup behavior) require an app restart to take full effect.</p>{/if}
+                {#if saveState === "idle" && !dirty}<p class="restart-note">▸ Saved. Some changes (startup behavior) require an app restart to take full effect.</p>{/if}
         {#if saveState === "error"}<p class="restart-note" style="color:var(--primary-red);">⚠ {saveError}</p>{/if}
       </div>
     </div>

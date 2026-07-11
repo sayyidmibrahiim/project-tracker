@@ -8,6 +8,22 @@
 
 ---
 
+## 2026-07-11 (Root folder bootstrap + appcode first-run — branch `general/root-folder-bootstrap`)
+
+**Now:** User verified full fresh-install flow and approved merge to `main`.
+
+**Implemented:** backend `bootstrap_root()` creates or force-migrates root to `Path.home()/Documents/Project Tracker` before `create_js_api`; rewrites in-root absolute paths in settings/appcode configs/SQLite (`notifications`, `approval_polling_jobs`) and clears/rescans rebuildable cache tables. `SettingsStore.write()` no longer creates legacy `{root}/{year}/{states}` folders.
+
+**Frontend:** `FirstRunSetup.svelte` removed. `AppcodeSetup.svelte` blocks the app until at least one appcode exists; [Add] calls existing `appcode_add`, which creates `appcode.json`, `CICD/`, and the full `{YEAR}/CR/{5 states}/Non-CR/` worktree. Root Folder field removed from Settings. `WelcomeGuide.svelte` deleted after user reported it overlapped/got in the way of first-run setup.
+
+**Verify:** `test_bootstrap_service.py` 17 passed; related backend 23 passed; frontend 188 passed; svelte-check 0 errors / 13 known warnings; production build clean (pre-existing chunk-size warning only). User manually confirmed fresh install, appcode popup, generated folder tree, Settings cleanup, and no welcome overlay all pass.
+
+**Next:** commit docs, merge `general/root-folder-bootstrap` to `main`, keep branch per user rule.
+
+**active_menu:** general (startup/filesystem)
+
+---
+
 ## 2026-07-11 (Titlebar text-selection leak — branch `general/window-titlebar-selection`)
 
 **Observed:** maximize↔restore via empty-titlebar double-click still worked, but the gesture sometimes selected text after reflow — commonly live datetime, search placeholder, Dashboard heading, or first-table content. Functional window behavior was unaffected.

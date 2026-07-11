@@ -9,8 +9,7 @@
   import Automations from "./lib/components/Automations.svelte";
   import Logs from "./lib/components/Logs.svelte";
   import CICDBrowser from "./lib/components/CICDBrowser.svelte";
-  import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
-  import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
+  import AppcodeSetup from "./lib/components/AppcodeSetup.svelte";
   import Toast from "./lib/components/Toast.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady, winStartResize } from "./lib/bridge";
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
@@ -53,8 +52,8 @@
   // Years for the dashboard header dropdown (from year_list).
   let years: string[] = $state([]);
 
-  // First-Run Setup (PRD §11.3): shown when root_folder is unset.
-  let rootUnset: boolean = $state(false);
+  // Appcode Setup: shown when no appcodes exist in root_folder.
+  let needsAppcode: boolean = $state(false);
   let interactionLocks: Set<string> = $state(new Set());
   let interactionLocked = $derived(interactionLocks.size > 0);
   const INTERACTION_LOCK_WATCHDOG_MS = 10_000;
@@ -202,17 +201,16 @@
     return null;
   }
 
-  async function checkRoot() {
+  async function checkAppcode() {
     if (!isPywebviewReady()) return;
-    const r = await callBridge<Record<string, unknown>>("settings_get");
-    if (r.ok && r.data) {
-      const root = r.data["root_folder"];
-      rootUnset = !root || String(root).trim() === "";
+    const r = await callBridge<unknown[]>("appcode_list");
+    if (r.ok) {
+      needsAppcode = !r.data || r.data.length === 0;
     }
   }
 
-  function onRootConfigured() {
-    rootUnset = false;
+  function onAppcodeDone() {
+    needsAppcode = false;
     loadYears();
     refreshKey++;
   }
@@ -227,7 +225,7 @@
     window.addEventListener("app:interaction-lock", onInteractionLock);
     loadNotifications();
     loadYears();
-    checkRoot();
+    checkAppcode();
     startPolling();
   });
 
@@ -286,10 +284,9 @@
       {/key}
     </div>
   </main>
-  {#if rootUnset}
-    <FirstRunSetup onSaved={onRootConfigured} />
+  {#if needsAppcode}
+    <AppcodeSetup onDone={onAppcodeDone} />
   {/if}
-  <WelcomeGuide />
 </div>
 
 <Toast />
