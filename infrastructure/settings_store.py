@@ -48,12 +48,6 @@ class SettingsStore:
 
     def write(self, settings: AppSettings) -> None:
         atomic_write_json(self.path, settings.to_dict())
-        if settings.root_folder is not None:
-            from datetime import datetime
-
-            from infrastructure.filesystem import ensure_year_structure
-
-            ensure_year_structure(settings.root_folder, datetime.now().year)
 
     def ensure_exists(self) -> AppSettings:
         settings = self.read()

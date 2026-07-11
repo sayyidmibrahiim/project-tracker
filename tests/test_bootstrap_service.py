@@ -203,3 +203,128 @@ def test_migrate_cache_deletes_rebuildable_tables(tmp_path):
     with db._connect() as conn:
         count = conn.execute("SELECT COUNT(*) FROM project_index").fetchone()[0]
     assert count == 0
+
+
+# ── Task 5: bootstrap_root ──────────────────────────────────────────────────
+
+from infrastructure.settings_store import SettingsStore
+from infrastructure.metadata_store import MetadataStore
+from services.scanner_service import ScannerService
+from services.bootstrap_service import BootstrapResult, bootstrap_root
+
+
+def test_bootstrap_creates_default_root_when_none(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    db = CacheDb(tmp_path / "db1.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "created"
+    expected = fake_home / "Documents" / "Project Tracker"
+    assert expected.exists()
+    assert store.read().root_folder == expected
+
+
+def test_bootstrap_none_action_when_already_default(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    expected = fake_home / "Documents" / "Project Tracker"
+    expected.mkdir(parents=True)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = expected
+    store.write(settings)
+    db = CacheDb(tmp_path / "db2.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "none"
+
+
+def test_bootstrap_migrates_existing_root(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    old_root = tmp_path / "old_cr"
+    old_root.mkdir()
+    (old_root / "MYAPP").mkdir()
+    (old_root / "MYAPP" / "appcode.json").write_text(
+        '{"display_name":"MYAPP","cicd_location":"per_appcode","cicd_shared_path":"","created_at":null}',
+        encoding="utf-8",
+    )
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = old_root
+    store.write(settings)
+    db = CacheDb(tmp_path / "db3.db")
+    db.initialize()
+    scanner = ScannerService(db, MetadataStore())
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "migrated"
+    expected = fake_home / "Documents" / "Project Tracker"
+    assert expected.exists()
+    assert (expected / "MYAPP" / "appcode.json").exists()
+    assert not old_root.exists()
+    assert store.read().root_folder == expected
+
+
+def test_bootstrap_orphan_old_root_missing(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = tmp_path / "nonexistent"
+    store.write(settings)
+    db = CacheDb(tmp_path / "db4.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "created_orphan"
+    expected = fake_home / "Documents" / "Project Tracker"
+    assert expected.exists()
+    assert store.read().root_folder == expected
+
+
+def test_bootstrap_migration_failure_rollback(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    old_root = tmp_path / "old_cr"
+    old_root.mkdir()
+    (old_root / "MYAPP").mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = old_root
+    store.write(settings)
+    db = CacheDb(tmp_path / "db5.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    # Pre-create the default root so direct move target exists,
+    # then sabotage move to force failure.
+    expected = fake_home / "Documents" / "Project Tracker"
+    expected.mkdir(parents=True)
+    (expected / "blocker").mkdir()
+    import services.bootstrap_service as bs
+
+    def fail_move(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(bs.shutil, "move", fail_move)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "failed"
+    assert old_root.exists()  # old data preserved

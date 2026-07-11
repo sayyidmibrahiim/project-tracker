@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from core.models import AppCodeConfig, AppSettings
 from infrastructure.cache_db import CacheDb
+from infrastructure.settings_store import SettingsStore
 
 DEFAULT_ROOT_NAME = "Project Tracker"
+
+logger = logging.getLogger(__name__)
 
 
 def default_root() -> Path:
@@ -106,3 +112,85 @@ def migrate_cache(cache_db: CacheDb, old_root: Path, new_root: Path) -> None:
         connection.execute("DELETE FROM project_index")
         connection.execute("DELETE FROM drone_tickets")
         connection.execute("DELETE FROM scan_warnings")
+
+
+@dataclass(frozen=True, slots=True)
+class BootstrapResult:
+    action: str  # "created" | "none" | "migrated" | "created_orphan" | "failed"
+    old: Path | None = None
+    new: Path | None = None
+    error: str | None = None
+
+
+def bootstrap_root(
+    settings_store: SettingsStore,
+    cache_db: CacheDb,
+    scanner: object,
+) -> BootstrapResult:
+    """Ensure root_folder is at the default path, migrating if needed.
+
+    Called from app_web.run() before webview.start().
+    """
+    target = default_root()
+    settings = settings_store.read()
+    current = settings.root_folder
+
+    # Case 1: no root set — create default.
+    if current is None:
+        target.mkdir(parents=True, exist_ok=True)
+        settings.root_folder = target
+        settings_store.write(settings)
+        return BootstrapResult(action="created", new=target)
+
+    current_resolved = current.resolve()
+    target_resolved = target.resolve()
+
+    # Case 2: already at default — nothing to do.
+    if current_resolved == target_resolved:
+        return BootstrapResult(action="none", new=target)
+
+    # Case 3: old root missing — create empty default, clear cache.
+    if not current.exists():
+        target.mkdir(parents=True, exist_ok=True)
+        settings.root_folder = target
+        settings_store.write(settings)
+        with cache_db._connect() as conn:
+            conn.execute("DELETE FROM project_index")
+            conn.execute("DELETE FROM drone_tickets")
+            conn.execute("DELETE FROM scan_warnings")
+            conn.execute("DELETE FROM notifications")
+            conn.execute("DELETE FROM approval_polling_jobs")
+        return BootstrapResult(action="created_orphan", old=current, new=target)
+
+    # Case 4: migrate old root to default.
+    try:
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(current), str(target))
+            new_root = target
+        else:
+            for item in current.iterdir():
+                shutil.move(str(item), str(target / item.name))
+            current.rmdir()
+            new_root = target
+    except (OSError, shutil.Error) as exc:
+        logger.error("Root migration failed, keeping old root: %s", exc)
+        return BootstrapResult(action="failed", old=current, new=current, error=str(exc))
+
+    settings = rewrite_settings_paths(settings, current, new_root)
+    rewrite_appcode_configs(new_root, current)
+    migrate_cache(cache_db, current, new_root)
+
+    try:
+        for appcode_child in sorted(new_root.iterdir()):
+            if not appcode_child.is_dir():
+                continue
+            for year_child in sorted(appcode_child.iterdir()):
+                if year_child.is_dir() and year_child.name.isdigit():
+                    scanner.rebuild_year(year_child)
+    except Exception:  # noqa: BLE001 — scan failure must not block startup
+        logger.warning("Cache rescan after migration failed; cache will rebuild on next access")
+
+    settings.root_folder = new_root
+    settings_store.write(settings)
+    return BootstrapResult(action="migrated", old=current, new=new_root)
