@@ -113,6 +113,9 @@
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("button, input, select, textarea, a, [role='button'], .search-box, .notif-popover, .help-popover")) return;
+    // Maximize/restore reflows content under the pointer; suppress WebView's
+    // default double-click text selection before that layout shift happens.
+    event.preventDefault();
     if (event.detail >= 2) {
       toggleMaximize();
       return;
