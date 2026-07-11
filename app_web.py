@@ -2258,6 +2258,19 @@ def run(*, dev: bool = False, start_webview: bool = True) -> None:
             }
         },
     )
+    # Bootstrap root folder before creating JsApi so cache is correct.
+    from services.bootstrap_service import bootstrap_root  # noqa: PLC0415
+    from services.scanner_service import ScannerService  # noqa: PLC0415
+
+    _bootstrap_settings = SettingsStore()
+    _bootstrap_cache = CacheDb(app_config_dir() / "project_tracker_cache.db")
+    _bootstrap_cache.initialize()
+    _bootstrap_scanner = ScannerService(_bootstrap_cache)
+    try:
+        bootstrap_root(_bootstrap_settings, _bootstrap_cache, _bootstrap_scanner)
+    except Exception:  # noqa: BLE001 — bootstrap must never block startup
+        logger.warning("root folder bootstrap failed; continuing with current state")
+
     js_api = create_js_api(db_path=app_config_dir() / "project_tracker_cache.db")
     # Slice 3: seed pre-seeded rules (DISABLED) idempotently at real app start.
     try:
