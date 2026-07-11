@@ -32,7 +32,7 @@ const NEW_PROJECT_FORM = "../src/lib/components/NewProjectForm.svelte";
 const SUB_PROJECT_TABLE = "../src/lib/components/DroneTable.svelte";
 const DASHBOARD = "../src/lib/components/Dashboard.svelte";
 const DASHBOARD_ROW_MENU = "../src/lib/components/DashboardRowMenu.svelte";
-const FIRST_RUN_SETUP = "../src/lib/components/FirstRunSetup.svelte";
+const APPCODE_SETUP = "../src/lib/components/AppcodeSetup.svelte";
 const PROJECT_DETAILS_SRC = "../src/lib/components/ProjectDetails.svelte";
 const CICD_SRC = "../src/lib/components/CICDBrowser.svelte";
 
@@ -360,11 +360,12 @@ test("DashboardRowMenu source carries only Details + Delete — no transitions o
   assert.doesNotMatch(src, /project_open_folder/);
 });
 
-test("FirstRunSetup renders the root-folder setup dialog (PRD §11.3)", async () => {
-  const body = await renderViaLoader(FIRST_RUN_SETUP, { onSaved: () => {} });
-  assert.match(body, /First-Run Setup/);
-  assert.match(body, /root folder/i);
-  assert.match(body, /Continue/);
+test("AppcodeSetup renders the appcode setup popup (min 1 required)", async () => {
+  const body = await renderViaLoader(APPCODE_SETUP, { onDone: () => {} });
+  assert.match(body, /Set up your appcodes/);
+  assert.match(body, /appcode name/i);
+  assert.match(body, /Add/);
+  assert.match(body, /Done/);
 });
 
 // --- Project Details: MVP-1 date/plan editor (P1-6, P1-12) ------------------
