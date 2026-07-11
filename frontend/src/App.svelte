@@ -10,7 +10,6 @@
   import Logs from "./lib/components/Logs.svelte";
   import CICDBrowser from "./lib/components/CICDBrowser.svelte";
   import AppcodeSetup from "./lib/components/AppcodeSetup.svelte";
-  import WelcomeGuide from "./lib/components/WelcomeGuide.svelte";
   import Toast from "./lib/components/Toast.svelte";
   import { callBridge, isPywebviewReady, waitForPywebviewReady, winStartResize } from "./lib/bridge";
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
@@ -288,7 +287,6 @@
   {#if needsAppcode}
     <AppcodeSetup onDone={onAppcodeDone} />
   {/if}
-  <WelcomeGuide />
 </div>
 
 <Toast />
