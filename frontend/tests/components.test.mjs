@@ -75,10 +75,15 @@ test("App + TitleBar register the CICD page", () => {
 test("TitleBar starts native drag on empty-area mousedown and preserves double-click maximize", () => {
   const bar = readFileSync(fileURLToPath(new URL("../src/lib/components/TitleBar.svelte", import.meta.url)), "utf8");
   const dragGuard = bar.match(/target\.closest\("([^"]+)"\)/)?.[1] ?? "";
+  const handler = bar.match(/function handleTitlebarMouseDown\(event: MouseEvent\) \{[\s\S]*?\n  \}/)?.[0] ?? "";
+  const preventDefaultIndex = handler.indexOf("event.preventDefault()");
+  const doubleClickIndex = handler.indexOf("event.detail >= 2");
   assert.match(bar, /winStartDrag/);
   assert.match(bar, /function handleTitlebarMouseDown\(event: MouseEvent\)/);
   assert.match(bar, /event\.button !== 0/);
   assert.match(bar, /event\.detail >= 2/);
+  assert.ok(preventDefaultIndex >= 0, "caption mousedown must suppress browser text selection");
+  assert.ok(preventDefaultIndex < doubleClickIndex, "selection must be suppressed before maximize reflows content");
   assert.match(bar, /onmousedown=\{handleTitlebarMouseDown\}/);
   assert.doesNotMatch(dragGuard, /(^|,\s*)nav(?=,|$)|\.titlebar-nav|\.titlebar-right/);
   assert.match(dragGuard, /button/);

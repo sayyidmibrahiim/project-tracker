@@ -8,6 +8,24 @@
 
 ---
 
+## 2026-07-11 (Titlebar text-selection leak — branch `general/window-titlebar-selection`)
+
+**Observed:** maximize↔restore via empty-titlebar double-click still worked, but the gesture sometimes selected text after reflow — commonly live datetime, search placeholder, Dashboard heading, or first-table content. Functional window behavior was unaffected.
+
+**Root cause:** `handleTitlebarMouseDown` guarded real controls and toggled maximize on `event.detail >= 2`, but never canceled the WebView's default mousedown action. Global CSS explicitly permits text selection. When maximize/restore changed layout under the fixed screen pointer, WebView2 could complete a double-click selection against newly positioned content.
+
+**Fix:** after the interactive-child guard and before the double-click branch, caption mousedown now calls `event.preventDefault()`. This suppresses selection only for caption gestures; buttons, search input, form controls, links, and popovers return through the guard first and retain normal interaction.
+
+**Regression:** `frontend/tests/components.test.mjs` locks that `preventDefault()` exists before `event.detail >= 2`. Test observed RED on old handler, then GREEN: 27 passed. Full frontend = 188 passed; `svelte-check` = 0 errors / 13 known warnings; production build clean (256 modules); `git diff --check` clean.
+
+**Manual gate:** passed 2026-07-11. Repeated empty-titlebar/live-clock maximize↔restore no longer selects clock/search/body/table text; prior drag/Snap/maximize and interactive controls remain intact. User approved commit → merge `main` → push. Branch remains after merge per user rule.
+
+**Next:** commit branch, merge to `main`, verify merged tree, push `main`.
+
+**active_menu:** general (window infra)
+
+---
+
 ## 2026-07-10 (Native window resize + Aero Snap — branch `general/window-responsive-fixes`)
 
 **Now:** frameless window now gets real edge/corner resizing AND Windows Aero Snap via the native OS modal loop (`WM_NCLBUTTONDOWN` + hit-test codes). Replaces the inert cursor-only resize-edges a prior session on this branch deleted (see block below) — these are functional, not decorative.

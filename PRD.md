@@ -818,7 +818,7 @@ Notifications are **not** a separate page — they are opened from the custom Ti
 - Active nav item: `#231112` background + `#DC2626` icon color + small red indicator bar under the icon (non-color cue).
 - Live clock in the right cluster: `ddd, dd MMM yyyy HH:mm:ss` (en-GB, ticking; hidden below 1100px width).
 - Notification bell with unread badge opens a compact popover (newest first, per-item dismiss + dismiss all).
-- Empty non-interactive chrome behaves as a native Windows caption: click-drag moves the window and participates in top/side/corner Aero Snap; controls, search, navigation buttons, links, and popovers never drag the window.
+- Empty non-interactive chrome behaves as a native Windows caption: click-drag moves the window and participates in top/side/corner Aero Snap; caption gestures suppress browser text selection; controls, search, navigation buttons, links, and popovers never drag the window.
 - A second click in empty chrome and the maximize/restore button both toggle the real WinForms window state. Repeated maximize/restore preserves the normal restore rectangle; drag-down from maximized follows standard Windows behavior.
 - Edge/corner resizing uses the Windows native hit-test loop, keeps native cursor/geometry behavior, and cannot shrink below 960×640. Resize hit targets are disabled while maximized.
 - Frameless maximization uses the active monitor work area, so a non-autohide taskbar stays visible on any monitor/taskbar edge; the top frame remains visually absent.
