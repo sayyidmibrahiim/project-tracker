@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from core.models import AppCodeConfig, AppSettings
+from infrastructure.cache_db import CacheDb
 
 DEFAULT_ROOT_NAME = "Project Tracker"
 
@@ -81,3 +82,27 @@ def rewrite_appcode_configs(new_root: Path, old_root: Path) -> int:
             )
             modified += 1
     return modified
+
+
+def migrate_cache(cache_db: CacheDb, old_root: Path, new_root: Path) -> None:
+    """Rewrite non-rebuildable path columns + delete rebuildable rows.
+
+    Non-rebuildable (preserve user state): notifications, approval_polling_jobs.
+    Rebuildable (will be rescanned): project_index, drone_tickets, scan_warnings.
+    """
+    old_prefix = str(old_root)
+    new_prefix = str(new_root)
+    with cache_db._connect() as connection:
+        connection.execute(
+            "UPDATE notifications SET project_path = REPLACE(project_path, ?, ?) "
+            "WHERE project_path LIKE ?",
+            (old_prefix, new_prefix, old_prefix + "%"),
+        )
+        connection.execute(
+            "UPDATE approval_polling_jobs SET project_path = REPLACE(project_path, ?, ?) "
+            "WHERE project_path LIKE ?",
+            (old_prefix, new_prefix, old_prefix + "%"),
+        )
+        connection.execute("DELETE FROM project_index")
+        connection.execute("DELETE FROM drone_tickets")
+        connection.execute("DELETE FROM scan_warnings")
