@@ -133,16 +133,6 @@ class SchedulerServiceProtocol(Protocol):
         """Trigger one scheduler entry now."""
 
 
-class GlobalPlanServiceProtocol(Protocol):
-    """Global plan service surface used by JsApi."""
-
-    def get_plan(self) -> object:
-        """Return global project plan."""
-
-    def save_plan(self, data: dict[str, object]) -> object:
-        """Persist global project plan."""
-
-
 class YearServiceProtocol(Protocol):
     """Year service surface used by JsApi."""
 
@@ -631,7 +621,6 @@ class JsApi:
         rules_service: RulesServiceProtocol | None = None,
         outlook_service: OutlookServiceProtocol | None = None,
         teams_service: TeamsServiceProtocol | None = None,
-        global_plan_service: GlobalPlanServiceProtocol | None = None,
         appcode_service: AppCodeServiceProtocol | None = None,
         approval_service: ApprovalServiceProtocol | None = None,
         cicd_service: CicdServiceProtocol | None = None,
@@ -653,7 +642,6 @@ class JsApi:
         self._second_brain_service = second_brain_service
         self._outlook_service = outlook_service
         self._teams_service = teams_service
-        self._global_plan_service = global_plan_service
         self._appcode_service = appcode_service
         self._approval_service = approval_service
         self._cicd_service = cicd_service
@@ -2226,24 +2214,6 @@ class JsApi:
         except Exception as exc:
             log_backend_event("bridge.export_to_docx.failed", {"suggested_name": suggested_name, "source_format": source_format, "error": str(exc)})
             return fail(str(exc), code="DOCX_EXPORT_FAILED")
-
-    def global_plan_get(self) -> dict[str, object]:
-        """Return global app plan."""
-        try:
-            if self._global_plan_service is None:
-                return fail("global_plan_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._global_plan_service.get_plan()))
-        except Exception as exc:
-            return fail(str(exc), code="GLOBAL_PLAN_GET_FAILED")
-
-    def global_plan_save(self, data: dict[str, object]) -> dict[str, object]:
-        """Persist global app plan."""
-        try:
-            if self._global_plan_service is None:
-                return fail("global_plan_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._global_plan_service.save_plan(dict(data or {}))))
-        except Exception as exc:
-            return fail(str(exc), code="GLOBAL_PLAN_SAVE_FAILED")
 
     def settings_get(self) -> dict[str, object]:
         """Return settings through injected dependency."""

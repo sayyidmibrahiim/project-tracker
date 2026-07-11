@@ -19,7 +19,6 @@
         <div class="wg-step"><span class="wg-step-num">1</span><div><strong>Dashboard or Project Details</strong><p>Track every project's CR link, state, and Drone tickets. Inline edits are instant with undo.</p></div></div>
         <div class="wg-step"><span class="wg-step-num">2</span><div><strong>Second Brain</strong><p>Link bank for bookmarks, docs, and reference links plus a notes editor for freeform markdown.</p></div></div>
         <div class="wg-step"><span class="wg-step-num">3</span><div><strong>Automations</strong><p>Schedule Outlook emails, Teams messages, and custom rules on a timer.</p></div></div>
-        <div class="wg-step"><span class="wg-step-num">4</span><div><strong>Global Plan</strong><p>Kanban-style Now/Next/Backlog for high-level task tracking across projects.</p></div></div>
       </div>
       <p class="wg-tip"><strong>Tip:</strong> Use <kbd>Ctrl+Shift+D</kbd> through <kbd>Ctrl+Shift+</kbd> to jump between pages. Press <kbd>?</kbd> in the titlebar for all shortcuts.</p>
     </div>
