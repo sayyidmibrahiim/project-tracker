@@ -57,6 +57,7 @@ core      → nothing (pure domain, no imports from other layers)
 
 | What                 | Where               | Rule                                             |
 | -------------------- | ------------------- | ------------------------------------------------ |
+| Root folder          | Filesystem + settings | Fixed to `Path.home()/Documents/Project Tracker`; `bootstrap_root()` creates or force-migrates at startup |
 | Project existence    | Filesystem          | Folder exists = project exists                   |
 | Appcode              | Filesystem          | Folder with `appcode.json` under root = appcode  |
 | Project type         | Path + metadata     | Under `CR/` = CR, under `Non-CR/` = NON_CR       |

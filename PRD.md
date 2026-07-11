@@ -311,11 +311,13 @@ Scrollbars:   thin (4px), pink accent handle
 
 ### 7.1 Root Folder
 
-User selects one root folder. All project data lives here.
+Root folder is fixed by the app and is not user-configurable:
 
 ```
-D:\\WORK\\
+C:\\Users\\<user>\\Documents\\Project Tracker\\
 ```
+
+On startup, the backend creates this folder when missing. If an older `root_folder` is configured elsewhere, startup force-migrates its data into this folder, rewrites in-root absolute path references in settings/appcode configs/SQLite cache, then rebuilds the cache. All project data lives under this root.
 
 ### 7.2 Appcode Folders
 
@@ -519,7 +521,7 @@ Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTra
 
 ```json
 {
-  "root_folder": "D:\\WORK\\CR",
+  "root_folder": "C:\\Users\\<user>\\Documents\\Project Tracker",
   "display_name": "",
   "language": "en",
   "datetime_format": "ddd, dd MMM yyyy HH:mm:ss",
@@ -857,8 +859,13 @@ Project Table (full height; vertical + owned horizontal scroll at narrow widths)
 
 ```
 App opens
+  → Run backend root bootstrap
+    → If root_folder unset → create Documents\\Project Tracker and save settings
+    → If root_folder points elsewhere → force-migrate data to Documents\\Project Tracker and rewrite path references
   → Load settings.json
-    → If root_folder unset → show First Run Setup dialog (choose root folder)
+  → Check appcodes under root
+    → If no appcode exists → show AppcodeSetup popup (min 1 appcode, no skip)
+    → appcode_add creates appcode.json, CICD/, and {YEAR}/CR/{5 states}/Non-CR/
   → Read last_selected_year from settings.ui
   → Scan filesystem for year folders
   → Populate year dropdown
@@ -2572,10 +2579,12 @@ On first run:
 
 1. Create `%APPDATA%\ProjectTrackerDBS\` directory if not exists.
 1. Create default `settings.json`.
+1. Set `root_folder` to `C:\Users\<user>\Documents\Project Tracker\` and create that folder.
 1. Create default `link_bank.json`.
 1. Create `SecondBrain\` directory.
 1. Create `cache.db` SQLite database.
-1. Show First Run Setup dialog: choose root folder.
+1. Show AppcodeSetup popup until at least one appcode is added.
+1. For each added appcode, create `appcode.json`, `CICD\`, and `{YEAR}\CR\{UAT_PREPARE, PROD_READY, IMPLEMENTED, POSTPONED, CANCELED}\` plus `{YEAR}\Non-CR\`.
 
 ---
 
@@ -2714,7 +2723,7 @@ Cover:
 - Settings form: General, Behavior, Paths.
 - Help Center: search + topic cards.
 - Settings save/validate/persist.
-- First Run Setup dialog.
+- Root bootstrap + AppcodeSetup first-run popup (min 1 appcode).
 - PyInstaller build on Windows including `web/static/` and `assets/`.
 - Fresh Windows machine installation test.
 
