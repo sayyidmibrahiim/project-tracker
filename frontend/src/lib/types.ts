@@ -184,29 +184,6 @@ export interface FileRow {
   path: string;
 }
 
-// ── Global Plan DTOs ──
-
-export type GlobalPlanStatus = "backlog" | "ready" | "doing" | "review" | "done";
-
-export interface GlobalPlanItem {
-  id: string;
-  title: string;
-  menu: string;
-  branch_desc: string;
-  status: GlobalPlanStatus;
-  goal: string;
-  acceptance_checks: string[];
-  notes: string;
-  blocked_reason: string;
-  updated_at: string;
-}
-
-export interface GlobalPlan {
-  schema: number;
-  loop_rule: string[];
-  items: GlobalPlanItem[];
-}
-
 // ── Automation DTOs — match Python automation_list_rules / evaluate shapes ──
 
 /** Mirrors automation rule returned by automation_list_rules. */

@@ -786,10 +786,9 @@ Action:
 3. Second Brain  (contains: Notes, Link Bank)
 4. Report
 5. Automations   (contains: Outlook, Teams, Scheduler, Rules Engine)
-6. Global Plan
-7. Logs
-8. CICD
-9. Settings
+6. Logs
+7. CICD
+8. Settings
 ```
 
 Notifications are **not** a separate page — they are opened from the custom TitleBar notification button/popover and remain reachable on all pages.
@@ -814,7 +813,7 @@ Notifications are **not** a separate page — they are opened from the custom Ti
 ### 10.3 TitleBar Navigation Rules (D-0005)
 
 - Navigation lives in the frameless custom TitleBar (dark chrome `#0A0A0B`), not a sidebar or dock.
-- 9 icon nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Global Plan, Logs, CICD, Settings. Each has an `aria-label` and a tooltip on hover.
+- 8 icon nav buttons: Dashboard, Project Details, Second Brain, Report, Automations, Logs, CICD, Settings. Each has an `aria-label` and a tooltip on hover.
 - Active nav item: `#231112` background + `#DC2626` icon color + small red indicator bar under the icon (non-color cue).
 - Live clock in the right cluster: `ddd, dd MMM yyyy HH:mm:ss` (en-GB, ticking; hidden below 1100px width).
 - Notification bell with unread badge opens a compact popover (newest first, per-item dismiss + dismiss all).

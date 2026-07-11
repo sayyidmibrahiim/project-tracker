@@ -4,7 +4,6 @@ import type {
   ApprovalTemplateSummary,
   BridgeResponse,
   DocxExportResult,
-  GlobalPlan,
   PywebviewApi,
   RteDocumentPayload,
   RteExportState,
@@ -285,16 +284,6 @@ export function onWinStateChange(cb: WinStateCallback): () => void {
 
 export function getUserProfile(): Promise<BridgeResponse<{ name: string; initials: string; _debug?: string }>> {
   return callBridge("get_user_profile");
-}
-
-// ── Global Plan ──
-
-export function globalPlanGet(): Promise<BridgeResponse<GlobalPlan>> {
-  return callBridge("global_plan_get");
-}
-
-export function globalPlanSave(plan: GlobalPlan): Promise<BridgeResponse<GlobalPlan>> {
-  return callBridge("global_plan_save", plan);
 }
 
 // ── CR Docs RTE (Piece B) ──

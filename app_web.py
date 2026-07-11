@@ -38,7 +38,6 @@ from infrastructure.settings_store import SettingsStore, app_config_dir
 from services.automation_service import AutomationService
 from services.approval_polling_service import ApprovalPollingService, register_approval_polling_service
 from services.dashboard_service import DashboardService
-from services.global_plan_service import GlobalPlanService
 from services.download_email_service import DownloadEmailService
 from services.email_service import (
     EmailService,
@@ -262,7 +261,6 @@ def create_js_api(
         items_provider=_second_brain_items_provider,
         folder_provider=lambda: _settings_store.read().second_brain_folder,
     )
-    global_plan_svc = GlobalPlanService()
     email_svc = EmailService()
     approval_svc = ApprovalPollingService(
         settings_store=_settings_store,
@@ -2210,7 +2208,6 @@ def create_js_api(
             _settings_store,
             TeamsService(),
         ),
-        global_plan_service=global_plan_svc,
         approval_service=approval_svc,
         cicd_service=_cicd_adapter,
     )

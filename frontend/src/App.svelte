@@ -7,7 +7,6 @@
   import SecondBrain from "./lib/components/SecondBrain.svelte";
   import ProjectDetails from "./lib/components/ProjectDetails.svelte";
   import Automations from "./lib/components/Automations.svelte";
-  import GlobalPlan from "./lib/components/GlobalPlan.svelte";
   import Logs from "./lib/components/Logs.svelte";
   import CICDBrowser from "./lib/components/CICDBrowser.svelte";
   import FirstRunSetup from "./lib/components/FirstRunSetup.svelte";
@@ -17,7 +16,7 @@
   import { installGlobalActivityLogging, logActivity } from "./lib/activityLogger";
   import type { NotificationItem } from "./lib/types";
 
-  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "global-plan" | "logs" | "cicd" | "settings";
+  type PageId = "dashboard" | "project-detail" | "second-brain" | "report" | "automations" | "logs" | "cicd" | "settings";
 
   // All pages have real components — no placeholder needed.
 
@@ -89,7 +88,7 @@
   }
 
   function navigate(id: string) {
-    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "global-plan", "logs", "cicd"];
+    const validPages = ["dashboard", "report", "settings", "second-brain", "project-detail", "automations", "logs", "cicd"];
     logActivity({ source: "App.navigate", kind: "navigation", event: "start", from: currentPage, to: id, valid: validPages.includes(id) });
     if (validPages.includes(id)) {
       if (id !== "project-detail") {
@@ -279,8 +278,6 @@
           <ProjectDetails initialPath={pendingProjectPath} startNew={startNewProject} onNavigateDashboard={() => navigate("dashboard")} onNavigateAutomations={(kind, goal) => { pendingTemplateKind = kind ?? null; pendingRuleGoal = goal ?? null; navigate("automations"); }} onNavigateLogs={(crId) => { pendingLogCrId = crId ?? ""; navigate("logs"); }} />
         {:else if currentPage === "automations"}
           <Automations initialTemplateKind={pendingTemplateKind} initialRuleGoal={pendingRuleGoal} onConsumedTemplateKind={() => { pendingTemplateKind = null; }} onConsumedRuleGoal={() => { pendingRuleGoal = null; }} />
-        {:else if currentPage === "global-plan"}
-          <GlobalPlan />
         {:else if currentPage === "logs"}
           <Logs initialCrId={pendingLogCrId} />
         {:else if currentPage === "cicd"}
