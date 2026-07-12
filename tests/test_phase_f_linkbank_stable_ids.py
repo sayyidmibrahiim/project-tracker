@@ -351,6 +351,31 @@ class TestLinkAndCategoryArchiveRestore:
             service.category_rename("missing", "new")
 
 
+# ── Fix Round 1, Finding 2: reserved rail keywords rejected ─────────────
+
+
+class TestReservedCategoryNames:
+    """category_create/category_rename must reject rail keywords (all/pinned/
+    favorites/archived) case-insensitively so a category can never collide
+    with the rail's literal filter dispatch."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    @pytest.mark.parametrize("reserved", ["all", "ALL", "Pinned", "FAVORITES", "Archived"])
+    def test_category_create_rejects_reserved_names(self, tmp_path: Path, reserved: str):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="reserved"):
+            service.category_create(reserved)
+
+    @pytest.mark.parametrize("reserved", ["all", "ALL", "Pinned", "FAVORITES", "Archived"])
+    def test_category_rename_rejects_reserved_new_names(self, tmp_path: Path, reserved: str):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.example.com", "category": "ops"})
+        with pytest.raises(ValueError, match="reserved"):
+            service.category_rename("ops", reserved)
+
+
 # ── Task 6: case-insensitive category merge on import ──────────────────
 
 

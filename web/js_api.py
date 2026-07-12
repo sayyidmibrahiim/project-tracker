@@ -532,6 +532,12 @@ class SecondBrainServiceProtocol(Protocol):
     def refresh(self) -> object:
         """Force a full reindex and return the fresh workspace."""
 
+    def record_activity(self, item_id: str, action: str) -> object:
+        """Record a capped recent-activity entry (dedupe by item_id+action)."""
+
+    def list_activity(self, item_id: str = "") -> object:
+        """Return recent activity rows, optionally filtered to one item."""
+
 
 class OutlookServiceProtocol(Protocol):
     """Outlook service surface used by JsApi.
@@ -2790,6 +2796,25 @@ class JsApi:
             return ok(_to_frontend_safe(self._second_brain_service.refresh()))
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_REFRESH_FAILED")
+
+    def second_brain_activity_record(self, item_id: str, action: str) -> dict[str, object]:
+        """Record a recent-activity entry (opened/opened_externally from the frontend)."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            recorded = self._second_brain_service.record_activity(item_id, action)
+            return ok(_to_frontend_safe(recorded))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_ACTIVITY_RECORD_FAILED")
+
+    def second_brain_activity_list(self, item_id: str = "") -> dict[str, object]:
+        """Return recent Second Brain activity, optionally filtered to one item."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.list_activity(item_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_ACTIVITY_LIST_FAILED")
 
     def report_filter_projects(
         self,

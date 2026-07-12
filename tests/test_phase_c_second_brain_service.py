@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from core.exceptions import FileTargetExistsError
+from infrastructure.cache_db import CacheDb
 from services.second_brain_service import (
     SecondBrainItem,
     SecondBrainService,
@@ -398,3 +400,206 @@ def test_public_invalidate_rebuilds_provider_cache():
     service.invalidate()
 
     assert len(service.list_items()) == 3
+
+
+# ── Task 5: capped recent-activity ledger ───────────────────────────────────
+
+
+def _activity_cache(tmp_path: Path) -> CacheDb:
+    cache = CacheDb(tmp_path / "activity_cache.sqlite3")
+    cache.initialize()
+    return cache
+
+
+def test_record_activity_rejects_unsupported_action(tmp_path: Path):
+    service = SecondBrainService(items_provider=_items, cache=_activity_cache(tmp_path))
+
+    with pytest.raises(ValueError, match="Unsupported Second Brain activity action"):
+        service.record_activity("note-1", "deleted")
+
+
+def test_record_activity_is_noop_without_cache():
+    service = SecondBrainService(items_provider=_items)
+
+    assert service.record_activity("note-1", "opened") is None
+    assert service.list_activity() == []
+
+
+def test_record_activity_returns_none_for_unknown_item(tmp_path: Path):
+    service = SecondBrainService(items_provider=_items, cache=_activity_cache(tmp_path))
+
+    assert service.record_activity("missing", "opened") is None
+
+
+def test_record_activity_persists_and_list_activity_reads_back(tmp_path: Path):
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(items_provider=_items, cache=cache)
+
+    recorded = service.record_activity("note-1", "opened")
+
+    assert recorded is not None
+    assert recorded.item_id == "note-1"
+    assert recorded.action == "opened"
+    assert recorded.title == "Deployment Notes"
+    listed = service.list_activity("note-1")
+    assert [row.action for row in listed] == ["opened"]
+
+
+def test_record_activity_dedupes_repeated_opens_for_same_item(tmp_path: Path):
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(items_provider=_items, cache=cache)
+
+    service.record_activity("note-1", "opened")
+    service.record_activity("note-2", "opened")
+    service.record_activity("note-1", "opened")
+
+    all_rows = service.list_activity()
+    assert len(all_rows) == 2
+    assert all_rows[0].item_id == "note-1"  # repeated open moved back to newest
+
+
+def test_list_activity_without_cache_returns_empty():
+    service = SecondBrainService(items_provider=_items)
+
+    assert service.list_activity() == []
+
+
+def test_create_note_records_created_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    service.create_note(folder, "todo.md", content="hello")
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["created"]
+    assert rows[0].title == "todo"
+
+
+def test_create_note_existing_target_does_not_record_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / "todo.md").write_text("existing", encoding="utf-8")
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    with pytest.raises(FileTargetExistsError):
+        service.create_note(folder, "todo.md")
+
+    assert cache.list_second_brain_activity() == []
+
+
+def test_create_folder_records_created_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    service.create_folder(folder, "Projects")
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["created"]
+    assert rows[0].title == "Projects"
+
+
+def test_create_file_records_created_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    service.create_file(folder, "notes.txt")
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["created"]
+
+
+def test_rename_item_records_renamed_activity_under_new_identity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    target = folder / "old.md"
+    target.write_text("content", encoding="utf-8")
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+    original_item = next(item for item in service.list_items() if item.path == target)
+
+    renamed = service.rename_item(target, "new.md")
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["renamed"]
+    assert rows[0].item_id == renamed.id
+    assert rows[0].item_id != original_item.id
+    assert rows[0].title == "new"
+
+
+def test_rename_item_failure_does_not_record_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    target = folder / "old.md"
+    target.write_text("content", encoding="utf-8")
+    (folder / "new.md").write_text("dup", encoding="utf-8")
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    with pytest.raises(FileTargetExistsError):
+        service.rename_item(target, "new.md")
+
+    assert cache.list_second_brain_activity() == []
+
+
+def test_recycle_item_records_recycled_activity(tmp_path: Path, monkeypatch):
+    import os
+
+    import send2trash
+
+    monkeypatch.setattr(send2trash, "send2trash", lambda path: os.remove(path))
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    target = folder / "gone.md"
+    target.write_text("content", encoding="utf-8")
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    service.recycle_item(target)
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["recycled"]
+    assert rows[0].title == "gone"
+
+
+def test_recycle_item_rejects_project_item_without_recording_activity(tmp_path: Path):
+    project_item = SecondBrainItem(
+        id="proj-1",
+        title="Proj file",
+        path=tmp_path / "proj.md",
+        item_type="note",
+        source="project",
+    )
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(
+        items_provider=lambda: [project_item], folder_provider=lambda: folder, cache=cache
+    )
+
+    with pytest.raises(ValueError, match="Only Personal items can be recycled"):
+        service.recycle_item(project_item.path)
+
+    assert cache.list_second_brain_activity() == []
+
+
+def test_mark_saved_records_edited_activity(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    target = folder / "note.md"
+    target.write_text("content", encoding="utf-8")
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+    service.list_items()  # warm index before save
+
+    service.mark_saved(target)
+
+    rows = cache.list_second_brain_activity()
+    assert [row.action for row in rows] == ["edited"]
+    assert rows[0].title == "note"

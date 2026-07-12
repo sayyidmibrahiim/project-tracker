@@ -232,6 +232,7 @@ def create_js_api(
         root_provider=lambda: _settings_store.read().root_folder,
         metadata_store=_metadata_store,
         folder_setter=_set_second_brain_folder,
+        cache=cache_db,
     )
     email_svc = EmailService()
     approval_svc = ApprovalPollingService(

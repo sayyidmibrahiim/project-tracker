@@ -26,6 +26,12 @@ from urllib.parse import urlsplit, urlunsplit
 from core.models import local_now
 from infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_bool, _normalize_link
 
+#: Rail keywords the category rail dispatches on literally (LinkBank.svelte
+#: `isCategoryRow`/`selectCategory`). A category sharing one of these names
+#: would be indistinguishable from the built-in filter, so the backend
+#: rejects them case-insensitively at creation/rename (Fix Round 1, Finding 2).
+RESERVED_CATEGORY_NAMES = {"all", "pinned", "favorites", "archived"}
+
 #: CSV column order (Task 6 rule 2 / design doc §15.3).
 CSV_COLUMNS = [
     "id",
@@ -157,6 +163,8 @@ class LinkBankService:
         category = str(name).strip()
         if not category:
             raise ValueError("Category name is required")
+        if category.casefold() in RESERVED_CATEGORY_NAMES:
+            raise ValueError(f"Category name '{category}' is reserved for the rail filters")
         bank = self._store.read()
         if self._find_category(bank.categories, category) is not None:
             return bank.to_dict()
@@ -172,6 +180,8 @@ class LinkBankService:
         new = str(new_name).strip()
         if not old or not new:
             raise ValueError("Old and new category names are required")
+        if new.casefold() in RESERVED_CATEGORY_NAMES:
+            raise ValueError(f"Category name '{new}' is reserved for the rail filters")
         bank = self._store.read()
         old_active = self._find_category(bank.categories, old)
         old_archived = self._find_category(bank.archived_categories, old)

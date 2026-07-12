@@ -205,6 +205,27 @@ def test_migrate_cache_deletes_rebuildable_tables(tmp_path):
     assert count == 0
 
 
+# ── Task 5: migrate_cache clears disposable Second Brain activity ─────────
+
+
+def test_migrate_cache_clears_second_brain_activity(tmp_path):
+    from infrastructure.cache_db import SecondBrainActivityRow
+
+    old = tmp_path / "old_root"
+    new = tmp_path / "new_root"
+    old.mkdir()
+    new.mkdir()
+    db = CacheDb(tmp_path / "test_cache_activity.db")
+    db.initialize()
+    db.append_second_brain_activity(
+        SecondBrainActivityRow(item_id="note-1", path=old / "note.md", title="note", action="opened")
+    )
+
+    migrate_cache(db, old, new)
+
+    assert db.list_second_brain_activity() == []
+
+
 # ── Task 5: bootstrap_root ──────────────────────────────────────────────────
 
 from infrastructure.settings_store import SettingsStore
@@ -302,6 +323,31 @@ def test_bootstrap_orphan_old_root_missing(tmp_path, monkeypatch):
     expected = fake_home / "Documents" / "Project Tracker"
     assert expected.exists()
     assert store.read().root_folder == expected
+
+
+def test_bootstrap_orphan_old_root_missing_clears_second_brain_activity(tmp_path, monkeypatch):
+    from infrastructure.cache_db import SecondBrainActivityRow
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = tmp_path / "nonexistent"
+    store.write(settings)
+    db = CacheDb(tmp_path / "db4b.db")
+    db.initialize()
+    db.append_second_brain_activity(
+        SecondBrainActivityRow(item_id="note-1", path=tmp_path / "note.md", title="note", action="opened")
+    )
+    scanner = ScannerService(db)
+
+    result = bootstrap_root(store, db, scanner)
+
+    assert result.action == "created_orphan"
+    assert db.list_second_brain_activity() == []
 
 
 def test_bootstrap_migration_failure_rollback(tmp_path, monkeypatch):

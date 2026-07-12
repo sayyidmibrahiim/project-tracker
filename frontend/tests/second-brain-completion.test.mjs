@@ -592,6 +592,23 @@ test("Buttons define default/hover/focus/active/disabled states", () => {
   assert.match(style, /\.lb-btn:disabled/);
 });
 
+// --- Task 9 review fix round 1: rename escape-blur race ----------------------
+
+test("cancelRenameCategory clears renameCategoryValue (escape-blur race guard)", () => {
+  const body = fnBody(LINKBANK, "cancelRenameCategory");
+  assert.match(body, /renamingCategory\s*=\s*false/);
+  assert.match(body, /renameCategoryValue\s*=\s*""/);
+});
+
+test("commitRenameCategory guards re-entry on renamingCategory BEFORE the bridge call (escape-blur race)", () => {
+  const body = fnBody(LINKBANK, "commitRenameCategory");
+  const guardIdx = body.search(/if\s*\(\s*!renamingCategory\s*\)\s*return/);
+  const bridgeIdx = body.search(/await callBridge<LinkBankData>\(\s*"linkbank_category_rename"/);
+  assert.ok(guardIdx >= 0, "commitRenameCategory must guard re-entry when renamingCategory is already false");
+  assert.ok(bridgeIdx >= 0, "commitRenameCategory must call linkbank_category_rename");
+  assert.ok(guardIdx < bridgeIdx, "the renamingCategory guard must run before the bridge call");
+});
+
 // --- Task 10: SecondBrain.svelte thin shell source contracts -----------------
 
 test("Shell imports only the two workspace components (thin child imports)", () => {

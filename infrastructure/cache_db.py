@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -18,6 +18,9 @@ from core.models import (
 from core.rules import extract_cr_number, extract_drone_ticket, validate_t10
 
 NON_CR_FOLDER_STATE = "NON_CR"
+#: Task 5: capped recent-activity ledger — newest ``SECOND_BRAIN_ACTIVITY_CAP``
+#: rows retained, oldest trimmed after every append.
+SECOND_BRAIN_ACTIVITY_CAP = 200
 from infrastructure.filesystem import ScannedProject, scan_appcode_year, scan_year
 from infrastructure.metadata_store import MetadataStore
 
@@ -79,6 +82,24 @@ class AutomationLogRow:
     timestamp: datetime | None = None
     event_type: str = ""  # e.g. APPROVAL_TEST_DRAFT_OPENED, AUTO_UPDATE_CR_STATE
     detail: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SecondBrainActivityRow:
+    """Task 5: capped recent-activity ledger entry for Second Brain items.
+
+    Deduped by ``(item_id, action)`` — a repeat of the same action on the
+    same item updates the existing row's path/title/source/timestamp instead
+    of accumulating a duplicate.
+    """
+
+    id: int = 0
+    item_id: str = ""
+    path: Path = Path("")
+    title: str = ""
+    source: str = "personal"
+    action: str = ""
+    timestamp: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +228,7 @@ class CacheDb:
                 "automation_rule_logs",
                 "approval_polling_jobs",
                 "automation_logs",
+                "second_brain_activity",
             }
             and invalid_project_states is None
             and invalid_cr_states is None
@@ -566,6 +588,116 @@ class CacheDb:
             cursor = connection.execute("DELETE FROM automation_logs")
         return int(cursor.rowcount or 0)
 
+    # ── Task 5: second_brain_activity (capped recent-activity ledger) ──────
+    def append_second_brain_activity(self, row: SecondBrainActivityRow) -> SecondBrainActivityRow:
+        """Append one activity row, deduped by ``(item_id, action)``.
+
+        A repeat of the same item+action updates the existing row in place
+        (path/title/source/timestamp) so it moves to the newest position on
+        the next read instead of creating a duplicate. The table is trimmed
+        to the newest ``SECOND_BRAIN_ACTIVITY_CAP`` rows after every write.
+        """
+        item_id, path, title, source, action, timestamp = self._activity_values(row)
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM second_brain_activity WHERE item_id = ? AND action = ?",
+                (item_id, action),
+            ).fetchone()
+            if existing is not None:
+                row_id = int(existing[0])
+                connection.execute(
+                    """
+                    UPDATE second_brain_activity
+                    SET path = ?, title = ?, source = ?, timestamp = ?
+                    WHERE id = ?
+                    """,
+                    (path, title, source, timestamp, row_id),
+                )
+            else:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO second_brain_activity (item_id, path, title, source, action, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (item_id, path, title, source, action, timestamp),
+                )
+                row_id = int(cursor.lastrowid or 0)
+            stale_ids = [
+                stale_row[0]
+                for stale_row in connection.execute(
+                    "SELECT id FROM second_brain_activity ORDER BY timestamp DESC, id DESC LIMIT -1 OFFSET ?",
+                    (SECOND_BRAIN_ACTIVITY_CAP,),
+                ).fetchall()
+            ]
+            if stale_ids:
+                connection.executemany(
+                    "DELETE FROM second_brain_activity WHERE id = ?",
+                    [(stale_id,) for stale_id in stale_ids],
+                )
+        return replace(row, id=row_id)
+
+    def list_second_brain_activity(
+        self, *, item_id: str = "", limit: int = SECOND_BRAIN_ACTIVITY_CAP
+    ) -> list[SecondBrainActivityRow]:
+        """Return activity rows newest-first (timestamp then id).
+
+        Filtered to one item when ``item_id`` is given; otherwise the full
+        capped ledger up to ``limit``.
+        """
+        cols = "id, item_id, path, title, source, action, timestamp"
+        with self._connect() as connection:
+            if item_id:
+                rows = connection.execute(
+                    f"""
+                    SELECT {cols} FROM second_brain_activity
+                    WHERE item_id = ?
+                    ORDER BY timestamp DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (item_id, int(limit)),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    SELECT {cols} FROM second_brain_activity
+                    ORDER BY timestamp DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (int(limit),),
+                ).fetchall()
+        return [self._activity_from_row(row) for row in rows]
+
+    def clear_second_brain_activity(self) -> int:
+        """Delete all second_brain_activity rows (disposable/rebuildable state)."""
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM second_brain_activity")
+        return int(cursor.rowcount or 0)
+
+    @staticmethod
+    def _activity_values(row: SecondBrainActivityRow) -> tuple[str, str, str, str, str, str | None]:
+        return (
+            row.item_id,
+            str(row.path),
+            row.title,
+            row.source,
+            row.action,
+            datetime_to_json(row.timestamp),
+        )
+
+    @staticmethod
+    def _activity_from_row(
+        row: tuple[int, str, str, str, str, str, str | None],
+    ) -> SecondBrainActivityRow:
+        return SecondBrainActivityRow(
+            id=int(row[0]),
+            item_id=row[1],
+            path=Path(row[2]),
+            title=row[3],
+            source=row[4],
+            action=row[5],
+            timestamp=datetime_from_json(row[6]),
+        )
+
     def insert_notification(self, notification: Notification) -> None:
         """Persist a notification keyed by its id.
 
@@ -777,6 +909,19 @@ class CacheDb:
                 timestamp TEXT,
                 event_type TEXT NOT NULL DEFAULT '',
                 detail TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS second_brain_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL DEFAULT '',
+                path TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                action TEXT NOT NULL DEFAULT '',
+                timestamp TEXT
             )
             """
         )

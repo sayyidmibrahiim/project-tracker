@@ -15,8 +15,9 @@ from json import JSONDecodeError
 from pathlib import Path, PurePosixPath
 
 from core.enums import ProjectState, ProjectType
-from core.models import ProjectMetadata
+from core.models import ProjectMetadata, local_now
 
+from infrastructure.cache_db import CacheDb, SecondBrainActivityRow
 from infrastructure.filesystem import (
     ScannedProject,
     assert_within,
@@ -58,6 +59,11 @@ IMAGE_MIME_TYPES = {
     ".bmp": "image/bmp",
 }
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+
+#: Task 5: supported Second Brain recent-activity actions.
+ACTIVITY_ACTIONS = frozenset(
+    {"opened", "created", "edited", "renamed", "recycled", "opened_externally"}
+)
 
 
 @dataclass(frozen=True)
@@ -106,12 +112,14 @@ class SecondBrainService:
         root_provider: Callable[[], Path | None] | None = None,
         metadata_store: MetadataStore | None = None,
         folder_setter: Callable[[Path], None] | None = None,
+        cache: CacheDb | None = None,
     ) -> None:
         self._items_provider = items_provider
         self._folder_provider = folder_provider
         self._root_provider = root_provider
         self._metadata_store = metadata_store or MetadataStore()
         self._folder_setter = folder_setter
+        self._cache = cache
         self._items_by_id: dict[str, SecondBrainItem] | None = None
         self._full_text_by_id: dict[str, str] | None = None
         self._warnings: list[str] = []
@@ -263,6 +271,7 @@ class SecondBrainService:
         folder = self._require_folder()
         target = create_file(folder, parent / filename, content=content)
         self._invalidate()
+        self._record_created(target)
         return target
 
     def create_folder(self, parent: Path, name: str) -> Path:
@@ -279,6 +288,7 @@ class SecondBrainService:
             raise FileExistsError(f"Second Brain folder already exists: {target}")
         result = create_directory(folder, target)
         self._invalidate()
+        self._record_created(result)
         return result
 
     #: Text-like extensions the in-app editor can open and edit (Req 13.1).
@@ -301,6 +311,7 @@ class SecondBrainService:
             )
         target = create_file(folder, parent / filename, content=content)
         self._invalidate()
+        self._record_created(target)
         return target
 
     def write_note(self, filepath: Path, content: str) -> Path:
@@ -366,6 +377,7 @@ class SecondBrainService:
         renamed = self._find_by_path(destination)
         if renamed is None:
             raise RuntimeError(f"Renamed item vanished from index: {destination}")
+        self.record_activity(renamed.id, "renamed")
         return renamed
 
     def recycle_item(self, filepath: Path) -> None:
@@ -393,6 +405,7 @@ class SecondBrainService:
             )
 
         delete_target(item.path, base=folder)
+        self.record_activity(item.id, "recycled")
         self._drop_persisted(stale_ids)
         self._invalidate()
 
@@ -423,6 +436,9 @@ class SecondBrainService:
         """
         self._invalidate()
         self._items()
+        item = self._find_by_path(filepath)
+        if item is not None:
+            self.record_activity(item.id, "edited")
 
     def use_default_folder(self) -> Path:
         """Create ``<root>/Second Brain`` (if needed) and persist it as active.
@@ -444,6 +460,48 @@ class SecondBrainService:
         """Force a full reindex and return the fresh workspace (manual refresh)."""
         self._invalidate()
         return self.workspace()
+
+    # ── recent activity (Task 5) ────────────────────────────────────────
+    def record_activity(self, item_id: str, action: str) -> SecondBrainActivityRow | None:
+        """Best-effort capped recent-activity ledger entry.
+
+        No-op (returns ``None``) when no cache is wired, when ``item_id``
+        no longer resolves in the index, or when persisting fails — a
+        ledger write must never break the mutation that already succeeded.
+        Dedupe/cap/ordering live in ``CacheDb.append_second_brain_activity``.
+        """
+        if action not in ACTIVITY_ACTIONS:
+            raise ValueError(f"Unsupported Second Brain activity action: {action}")
+        if self._cache is None:
+            return None
+        item = self.get_item(item_id)
+        if item is None:
+            return None
+        row = SecondBrainActivityRow(
+            item_id=item.id,
+            path=item.path,
+            title=item.title,
+            source=item.source,
+            action=action,
+            timestamp=local_now(),
+        )
+        try:
+            return self._cache.append_second_brain_activity(row)
+        except Exception:
+            # ponytail: activity is a convenience ledger, not source of truth;
+            # swallow write failures rather than fail the caller's mutation.
+            return None
+
+    def list_activity(self, item_id: str = "") -> list[SecondBrainActivityRow]:
+        """Return recent activity, optionally filtered to one item."""
+        if self._cache is None:
+            return []
+        return self._cache.list_second_brain_activity(item_id=item_id)
+
+    def _record_created(self, target: Path) -> None:
+        created = self._find_by_path(target)
+        if created is not None:
+            self.record_activity(created.id, "created")
 
     # ── internals ─────────────────────────────────────────────────────
     def _items(self) -> list[SecondBrainItem]:

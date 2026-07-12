@@ -132,6 +132,7 @@ def migrate_cache(cache_db: CacheDb, old_root: Path, new_root: Path) -> None:
         connection.execute("DELETE FROM project_index")
         connection.execute("DELETE FROM drone_tickets")
         connection.execute("DELETE FROM scan_warnings")
+        connection.execute("DELETE FROM second_brain_activity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +185,7 @@ def bootstrap_root(
             conn.execute("DELETE FROM scan_warnings")
             conn.execute("DELETE FROM notifications")
             conn.execute("DELETE FROM approval_polling_jobs")
+            conn.execute("DELETE FROM second_brain_activity")
         return BootstrapResult(action="created_orphan", old=current, new=target)
 
     # Case 4: migrate old root to default.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.enums import CRState, DroneState, ProjectState
@@ -80,6 +80,7 @@ def test_initialize_creates_expected_tables(tmp_path: Path) -> None:
         "automation_rule_logs",
         "approval_polling_jobs",
         "automation_logs",
+        "second_brain_activity",
     }
 
 
@@ -268,6 +269,7 @@ def test_reset_recreates_corrupt_db(tmp_path: Path) -> None:
         "automation_rule_logs",
         "approval_polling_jobs",
         "automation_logs",
+        "second_brain_activity",
     }
 
 
@@ -475,3 +477,153 @@ def test_approval_polling_jobs_persist_and_resume(tmp_path):
     latest = cache.latest_approval_job(row["project_path"], "uat")
     assert latest["status"] == "completed"
     assert latest["reply_received_at"] == "2026-07-06T11:00:00"
+
+
+# ── Task 5: second_brain_activity (capped recent-activity ledger) ──────────
+
+from infrastructure.cache_db import SECOND_BRAIN_ACTIVITY_CAP, SecondBrainActivityRow  # noqa: E402
+
+
+def _activity_row(
+    *,
+    item_id: str,
+    action: str,
+    ts: datetime,
+    path: str = "notes/a.md",
+    title: str = "A",
+    source: str = "personal",
+) -> SecondBrainActivityRow:
+    return SecondBrainActivityRow(
+        item_id=item_id,
+        path=Path(path),
+        title=title,
+        source=source,
+        action=action,
+        timestamp=ts,
+    )
+
+
+def test_append_second_brain_activity_round_trips_fields(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    ts = datetime(2026, 7, 12, 9, 0, tzinfo=timezone.utc)
+
+    persisted = cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="opened", ts=ts)
+    )
+
+    assert persisted.id > 0
+    listed = cache.list_second_brain_activity()
+    assert len(listed) == 1
+    assert listed[0].item_id == "note-1"
+    assert listed[0].action == "opened"
+    assert listed[0].path == Path("notes/a.md")
+    assert listed[0].title == "A"
+    assert listed[0].source == "personal"
+    assert listed[0].timestamp == ts
+
+
+def test_list_second_brain_activity_orders_newest_first_by_timestamp_then_id(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="created", ts=datetime(2026, 7, 10, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-2", action="created", ts=datetime(2026, 7, 12, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-3", action="created", ts=datetime(2026, 7, 11, tzinfo=timezone.utc))
+    )
+
+    ordered = [row.item_id for row in cache.list_second_brain_activity()]
+
+    assert ordered == ["note-2", "note-3", "note-1"]
+
+
+def test_append_second_brain_activity_dedupes_same_item_and_action_and_moves_to_newest(
+    tmp_path: Path,
+) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="opened", ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-2", action="opened", ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
+    )
+
+    # note-1 opened again, later than note-2 — should update in place, not duplicate.
+    cache.append_second_brain_activity(
+        _activity_row(
+            item_id="note-1", action="opened", ts=datetime(2026, 7, 3, tzinfo=timezone.utc), title="A renamed"
+        )
+    )
+
+    rows = cache.list_second_brain_activity()
+    assert [row.item_id for row in rows] == ["note-1", "note-2"]
+    assert len(rows) == 2
+    assert rows[0].title == "A renamed"
+
+
+def test_append_second_brain_activity_keeps_distinct_actions_for_same_item(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="created", ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="opened", ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
+    )
+
+    rows = cache.list_second_brain_activity(item_id="note-1")
+
+    assert {row.action for row in rows} == {"created", "opened"}
+    assert len(rows) == 2
+
+
+def test_append_second_brain_activity_caps_at_200_newest_rows(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(SECOND_BRAIN_ACTIVITY_CAP + 10):
+        cache.append_second_brain_activity(
+            _activity_row(item_id=f"note-{i}", action="opened", ts=base + timedelta(minutes=i))
+        )
+
+    rows = cache.list_second_brain_activity(limit=SECOND_BRAIN_ACTIVITY_CAP + 50)
+
+    assert len(rows) == SECOND_BRAIN_ACTIVITY_CAP
+    # Oldest 10 (note-0..note-9) trimmed; newest kept.
+    assert rows[0].item_id == f"note-{SECOND_BRAIN_ACTIVITY_CAP + 9}"
+    assert "note-0" not in {row.item_id for row in rows}
+    assert "note-9" not in {row.item_id for row in rows}
+    assert "note-10" in {row.item_id for row in rows}
+
+
+def test_list_second_brain_activity_filters_by_item_id(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="opened", ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-2", action="opened", ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
+    )
+
+    rows = cache.list_second_brain_activity(item_id="note-1")
+
+    assert [row.item_id for row in rows] == ["note-1"]
+
+
+def test_clear_second_brain_activity_deletes_all_rows(tmp_path: Path) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action="opened", ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    )
+
+    deleted = cache.clear_second_brain_activity()
+
+    assert deleted == 1
+    assert cache.list_second_brain_activity() == []

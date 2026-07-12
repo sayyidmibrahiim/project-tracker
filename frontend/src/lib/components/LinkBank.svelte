@@ -296,11 +296,17 @@
 
   function cancelRenameCategory() {
     renamingCategory = false;
+    renameCategoryValue = "";
   }
 
   async function commitRenameCategory() {
+    // Escape-cancel blur race: Escape → cancelRenameCategory() already cleared
+    // renamingCategory; the re-render removing the focused input then fires a
+    // native blur → this re-entrant call must no-op (mirrors commitCreate).
+    if (!renamingCategory) return;
     const next = renameCategoryValue.trim();
     renamingCategory = false;
+    renameCategoryValue = "";
     if (!next || next === categoryFilter) return;
     const resp = await callBridge<LinkBankData>("linkbank_category_rename", categoryFilter, next);
     if (!resp.ok) {

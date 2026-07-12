@@ -115,9 +115,38 @@ class FakeSecondBrainService:
             "personal_status": "ready",
         }
 
+    def record_activity(self, item_id: str, action: str) -> dict[str, object]:
+        self.calls.append(("record_activity", (item_id, action)))
+        return {
+            "id": 1,
+            "item_id": item_id,
+            "path": "/tmp/brain/deploy.md",
+            "title": "Deployment Notes",
+            "source": "personal",
+            "action": action,
+            "timestamp": "2026-01-02T03:04:05+00:00",
+        }
+
+    def list_activity(self, item_id: str = "") -> list[dict[str, object]]:
+        self.calls.append(("list_activity", (item_id,)))
+        return [
+            {
+                "id": 1,
+                "item_id": item_id or "note-1",
+                "path": "/tmp/brain/deploy.md",
+                "title": "Deployment Notes",
+                "source": "personal",
+                "action": "opened",
+                "timestamp": "2026-01-02T03:04:05+00:00",
+            }
+        ]
+
 
 class ExplodingSecondBrainService(FakeSecondBrainService):
     def list_items(self) -> list[FakeSecondBrainItem]:
+        raise RuntimeError("brain unavailable")
+
+    def record_activity(self, item_id: str, action: str) -> dict[str, object]:
         raise RuntimeError("brain unavailable")
 
 
@@ -311,6 +340,42 @@ def test_second_brain_refresh_returns_workspace():
     assert service.calls == [("refresh", ())]
 
 
+# ── Task 5: recent-activity bridge facades ──────────────────────────────
+
+
+def test_second_brain_activity_record_forwards_item_id_and_action():
+    service = FakeSecondBrainService()
+    api = JsApi(dashboard_service=None, second_brain_service=service)
+
+    response = api.second_brain_activity_record("note-1", "opened")
+
+    assert response["ok"] is True
+    assert response["data"]["item_id"] == "note-1"
+    assert response["data"]["action"] == "opened"
+    assert service.calls == [("record_activity", ("note-1", "opened"))]
+
+
+def test_second_brain_activity_list_forwards_item_id():
+    service = FakeSecondBrainService()
+    api = JsApi(dashboard_service=None, second_brain_service=service)
+
+    response = api.second_brain_activity_list("note-1")
+
+    assert response["ok"] is True
+    assert response["data"][0]["item_id"] == "note-1"
+    assert response["data"][0]["action"] == "opened"
+    assert service.calls == [("list_activity", ("note-1",))]
+
+
+def test_second_brain_activity_record_exception_returns_fail():
+    api = JsApi(dashboard_service=None, second_brain_service=ExplodingSecondBrainService())
+
+    response = api.second_brain_activity_record("note-1", "opened")
+
+    assert response["ok"] is False
+    assert response["error"]["code"] == "SECOND_BRAIN_ACTIVITY_RECORD_FAILED"
+
+
 @pytest.mark.parametrize(
     ("method", "args", "code"),
     [
@@ -323,6 +388,8 @@ def test_second_brain_refresh_returns_workspace():
         ("second_brain_mark_saved", ("/x.md",), "SERVICE_UNAVAILABLE"),
         ("second_brain_use_default_folder", (), "SERVICE_UNAVAILABLE"),
         ("second_brain_refresh", (), "SERVICE_UNAVAILABLE"),
+        ("second_brain_activity_record", ("note-1", "opened"), "SERVICE_UNAVAILABLE"),
+        ("second_brain_activity_list", ("note-1",), "SERVICE_UNAVAILABLE"),
     ],
 )
 def test_second_brain_new_facades_missing_service_returns_service_unavailable(method, args, code):
