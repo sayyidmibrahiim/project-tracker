@@ -222,10 +222,16 @@ def create_js_api(
         notification_service=notification_svc,
         project_provider=lambda: dashboard_svc.list_projects(),
     )
+    def _set_second_brain_folder(path: Path) -> None:
+        settings = _settings_store.read()
+        settings.second_brain_folder = path
+        _settings_store.write(settings)
+
     second_brain_svc = SecondBrainService(
         folder_provider=lambda: _settings_store.read().second_brain_folder,
         root_provider=lambda: _settings_store.read().root_folder,
         metadata_store=_metadata_store,
+        folder_setter=_set_second_brain_folder,
     )
     email_svc = EmailService()
     approval_svc = ApprovalPollingService(

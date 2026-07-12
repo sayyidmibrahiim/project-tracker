@@ -132,3 +132,55 @@ def test_bridge_second_brain_file_create_fails_when_service_missing():
     result = api.second_brain_file_create("/tmp", "x.md", "")
     assert result["ok"] is False
     assert result["error"]["code"] == "SERVICE_UNAVAILABLE"
+
+
+# ── Task 4: second_brain_create — Notes explorer "+ New" facade ─────────
+#
+# The Task 8 frontend (SecondBrainNotes.svelte) calls a single
+# ``second_brain_create(target, name)`` for its "+ New" note action (the
+# ``.md`` default is chosen in the frontend, not here). It reuses the same
+# guarded ``create_file`` as ``second_brain_file_create`` above, so the
+# text-like-extension allowlist and traversal/duplicate guards apply
+# identically; this is a new facade name, additive to (not replacing) the
+# legacy folder/file create bridges preserved above.
+
+
+def test_bridge_second_brain_create_exists_and_round_trips(tmp_path):
+    root = tmp_path / "sb"
+    root.mkdir()
+    svc = _service_with_root(root)
+    api = _api_with_service(svc)
+    assert callable(getattr(api, "second_brain_create", None))
+    result = api.second_brain_create(str(root), "todo.md")
+    assert result["ok"] is True
+    assert "todo.md" in str(result["data"])
+    assert (root / "todo.md").is_file()
+
+
+def test_bridge_second_brain_create_rejects_non_text_extension(tmp_path):
+    root = tmp_path / "sb"
+    root.mkdir()
+    svc = _service_with_root(root)
+    api = _api_with_service(svc)
+    result = api.second_brain_create(str(root), "payload.exe")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "SECOND_BRAIN_CREATE_FAILED"
+    assert not (root / "payload.exe").exists()
+
+
+def test_bridge_second_brain_create_rejects_existing_target(tmp_path):
+    root = tmp_path / "sb"
+    root.mkdir()
+    (root / "dup.md").write_text("original", encoding="utf-8")
+    svc = _service_with_root(root)
+    api = _api_with_service(svc)
+    result = api.second_brain_create(str(root), "dup.md")
+    assert result["ok"] is False
+    assert (root / "dup.md").read_text(encoding="utf-8") == "original"
+
+
+def test_bridge_second_brain_create_fails_when_service_missing():
+    api = JsApi(dashboard_service=None)  # no second_brain_service
+    result = api.second_brain_create("/tmp", "x.md")
+    assert result["ok"] is False
+    assert result["error"]["code"] == "SERVICE_UNAVAILABLE"

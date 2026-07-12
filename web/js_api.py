@@ -474,11 +474,21 @@ class SecondBrainServiceProtocol(Protocol):
     def list_items(self) -> object:
         """Return Second Brain items."""
 
-    def search(self, query: str) -> object:
-        """Search Second Brain items."""
+    def search(
+        self,
+        query: str,
+        date_filter: str = "",
+        sort: str = "newest",
+        type_filter: str = "all",
+        source_filter: str = "all",
+    ) -> object:
+        """Search Second Brain items with optional filters."""
 
     def get_item(self, item_id: str) -> object:
         """Return Second Brain item."""
+
+    def workspace(self) -> object:
+        """Return the complete cached Personal + Project workspace index."""
 
     def pin_item(self, item_id: str) -> object:
         """Pin Second Brain item."""
@@ -486,14 +496,41 @@ class SecondBrainServiceProtocol(Protocol):
     def favorite_item(self, item_id: str) -> object:
         """Favorite Second Brain item."""
 
+    def set_tags(self, item_id: str, tags: list[str]) -> object:
+        """Replace an item's tags."""
+
+    def related(self, item_id: str, limit: int = 20) -> object:
+        """Return related items ranked by wiki/tag/drone/project reasons."""
+
     def create_note(self, parent: Path, filename: str, content: str = "") -> object:
         """Create a new Second Brain note."""
+
+    def create_file(self, parent: Path, filename: str, content: str = "") -> object:
+        """Create a generic text-like Second Brain file."""
 
     def write_note(self, filepath: Path, content: str) -> object:
         """Write content to an existing Second Brain note."""
 
     def delete_note(self, filepath: Path) -> object:
         """Delete a Second Brain note."""
+
+    def rename_item(self, filepath: Path, new_name: str) -> object:
+        """Rename a Personal item (Personal-only guard)."""
+
+    def recycle_item(self, filepath: Path) -> object:
+        """Recycle a Personal item via send2trash (Personal-only guard)."""
+
+    def read_image(self, filepath: Path) -> object:
+        """Return a base64 preview for an indexed image item."""
+
+    def mark_saved(self, filepath: Path) -> object:
+        """Invalidate and reload the index after a shared RTE autosave."""
+
+    def use_default_folder(self) -> object:
+        """Create and persist the default Second Brain folder."""
+
+    def refresh(self) -> object:
+        """Force a full reindex and return the fresh workspace."""
 
 
 class OutlookServiceProtocol(Protocol):
@@ -2538,12 +2575,29 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_LIST_FAILED")
 
-    def second_brain_search(self, query: str) -> dict[str, object]:
-        """Search Second Brain items."""
+    def second_brain_search(
+        self, query: str, options: dict[str, object] | None = None
+    ) -> dict[str, object]:
+        """Search Second Brain items, optionally filtered by sort/source/type/date.
+
+        ``options`` mirrors the frontend command bar: ``{sort, source,
+        item_type, date}``. Omitted/``None`` preserves the legacy single-arg
+        call (query-only, service defaults apply).
+        """
         try:
             if self._second_brain_service is None:
                 return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._second_brain_service.search(query)))
+            if not options:
+                results = self._second_brain_service.search(query)
+            else:
+                results = self._second_brain_service.search(
+                    query,
+                    date_filter=str(options.get("date") or ""),
+                    sort=str(options.get("sort") or "newest"),
+                    type_filter=str(options.get("item_type") or "all"),
+                    source_filter=str(options.get("source") or "all"),
+                )
+            return ok(_to_frontend_safe(results))
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_SEARCH_FAILED")
 
@@ -2555,6 +2609,34 @@ class JsApi:
             return ok(_to_frontend_safe(self._second_brain_service.get_item(item_id)))
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_GET_FAILED")
+
+    def second_brain_workspace(self) -> dict[str, object]:
+        """Return the complete cached Personal + Project workspace index."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.workspace()))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_WORKSPACE_FAILED")
+
+    def second_brain_related(self, item_id: str) -> dict[str, object]:
+        """Return related items ranked by wiki/tag/drone/project reasons."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.related(item_id)))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_RELATED_FAILED")
+
+    def second_brain_tags(self, item_id: str, tags: list[str]) -> dict[str, object]:
+        """Replace an item's tags."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            updated = self._second_brain_service.set_tags(item_id, list(tags or []))
+            return ok(_to_frontend_safe(updated))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_TAGS_FAILED")
 
     def second_brain_pin(self, item_id: str) -> dict[str, object]:
         """Pin Second Brain item."""
@@ -2635,6 +2717,79 @@ class JsApi:
             return ok(None)
         except Exception as exc:
             return fail(str(exc), code="SECOND_BRAIN_NOTE_DELETE_FAILED")
+
+    def second_brain_create(self, target: str, name: str) -> dict[str, object]:
+        """Create a new Second Brain file ``target/name`` (Notes explorer "+ New").
+
+        Text-like extensions only; the frontend supplies the default ``.md``
+        when the user omits one. Routes through the same guarded
+        ``create_file`` as ``second_brain_file_create``.
+        """
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            created = self._second_brain_service.create_file(Path(target), name)
+            return ok(_to_frontend_safe(created))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_CREATE_FAILED")
+
+    def second_brain_rename(self, filepath: str, new_name: str) -> dict[str, object]:
+        """Rename a Personal item (file or folder); Project items reject."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            renamed = self._second_brain_service.rename_item(Path(filepath), new_name)
+            return ok(_to_frontend_safe(renamed))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_RENAME_FAILED")
+
+    def second_brain_recycle(self, filepath: str) -> dict[str, object]:
+        """Recycle a Personal item via send2trash; Project items reject."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._second_brain_service.recycle_item(Path(filepath))
+            return ok(None)
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_RECYCLE_FAILED")
+
+    def second_brain_image(self, filepath: str) -> dict[str, object]:
+        """Return a base64 data URI preview for an indexed image item."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.read_image(Path(filepath))))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_IMAGE_FAILED")
+
+    def second_brain_mark_saved(self, filepath: str) -> dict[str, object]:
+        """Invalidate and reload the index after a shared RTE autosave."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            self._second_brain_service.mark_saved(Path(filepath))
+            return ok(None)
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_MARK_SAVED_FAILED")
+
+    def second_brain_use_default_folder(self) -> dict[str, object]:
+        """Create and persist the default Second Brain folder."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            path = self._second_brain_service.use_default_folder()
+            return ok(_to_frontend_safe(path))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_USE_DEFAULT_FOLDER_FAILED")
+
+    def second_brain_refresh(self) -> dict[str, object]:
+        """Force a full reindex and return the fresh workspace."""
+        try:
+            if self._second_brain_service is None:
+                return fail("second_brain_service is not configured", code="SERVICE_UNAVAILABLE")
+            return ok(_to_frontend_safe(self._second_brain_service.refresh()))
+        except Exception as exc:
+            return fail(str(exc), code="SECOND_BRAIN_REFRESH_FAILED")
 
     def report_filter_projects(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import hashlib
 import os
@@ -24,9 +25,11 @@ from infrastructure.filesystem import (
     delete_target,
     discover_appcodes,
     discover_drone_paths,
+    rename_file,
     scan_appcode_year,
 )
 from infrastructure.metadata_store import MetadataStore, atomic_write_json
+from services.bootstrap_service import default_second_brain
 
 #: Sidecar index file persisted under the Second Brain folder. Chosen over the
 #: rebuildable Cache_Db so the pin/favorite metadata travels with the notes
@@ -47,6 +50,13 @@ TEXT_EXTENSIONS = frozenset(
     }
 )
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".bmp"})
+IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+}
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 
@@ -95,11 +105,13 @@ class SecondBrainService:
         folder_provider: Callable[[], Path | None] | None = None,
         root_provider: Callable[[], Path | None] | None = None,
         metadata_store: MetadataStore | None = None,
+        folder_setter: Callable[[Path], None] | None = None,
     ) -> None:
         self._items_provider = items_provider
         self._folder_provider = folder_provider
         self._root_provider = root_provider
         self._metadata_store = metadata_store or MetadataStore()
+        self._folder_setter = folder_setter
         self._items_by_id: dict[str, SecondBrainItem] | None = None
         self._full_text_by_id: dict[str, str] | None = None
         self._warnings: list[str] = []
@@ -314,6 +326,124 @@ class SecondBrainService:
         folder = self._require_folder()
         delete_target(filepath, base=folder)
         self._invalidate()
+
+    # ── guarded personal item ops ────────────────────────────────────────
+    def rename_item(self, filepath: Path, new_name: str) -> SecondBrainItem:
+        """Rename a Personal item (file or folder) in place.
+
+        Only ``source == "personal"`` items may be renamed; a Project item
+        rejects with a clear error (Project docs are never mutated here).
+        Windows filename validation, path-traversal, and duplicate-target
+        guards route through the existing ``rename_file`` helper. When the
+        renamed item is a folder, every descendant already in the index has
+        its persisted pin/favorite/tags entry remapped from the old relative
+        path to the new one so metadata survives the move.
+        """
+        folder = self._require_folder()
+        item = self._find_by_path(filepath)
+        if item is None:
+            raise KeyError(f"Second Brain item not found: {filepath}")
+        if item.source != "personal":
+            raise ValueError("Only Personal items can be renamed")
+
+        source = item.path
+        destination = source.with_name(new_name)
+        old_relative = item.relative_path
+        new_relative = self._sibling_relative(old_relative, new_name)
+
+        remap = {item.id: self._stable_id(f"personal/{new_relative}")}
+        if item.item_type == "folder":
+            prefix = f"{old_relative}/"
+            for other in self._items_by_id_map().values():
+                if other.source == "personal" and other.relative_path.startswith(prefix):
+                    suffix = other.relative_path[len(old_relative):]
+                    remap[other.id] = self._stable_id(f"personal/{new_relative}{suffix}")
+
+        rename_file(folder, source, destination)
+        self._remap_persisted(remap)
+        self._invalidate()
+
+        renamed = self._find_by_path(destination)
+        if renamed is None:
+            raise RuntimeError(f"Renamed item vanished from index: {destination}")
+        return renamed
+
+    def recycle_item(self, filepath: Path) -> None:
+        """Send a Personal item to the Recycle Bin via ``send2trash`` (Personal-only).
+
+        A Project item rejects with a clear error. Persisted pin/favorite/
+        tags entries for the removed item — and, for a folder, every indexed
+        descendant — are dropped so the sidecar never accumulates metadata
+        for paths that no longer exist.
+        """
+        folder = self._require_folder()
+        item = self._find_by_path(filepath)
+        if item is None:
+            raise KeyError(f"Second Brain item not found: {filepath}")
+        if item.source != "personal":
+            raise ValueError("Only Personal items can be recycled")
+
+        stale_ids = {item.id}
+        if item.item_type == "folder":
+            prefix = f"{item.relative_path}/"
+            stale_ids.update(
+                other.id
+                for other in self._items_by_id_map().values()
+                if other.source == "personal" and other.relative_path.startswith(prefix)
+            )
+
+        delete_target(item.path, base=folder)
+        self._drop_persisted(stale_ids)
+        self._invalidate()
+
+    def read_image(self, filepath: Path) -> dict[str, object]:
+        """Return a base64 data URI preview for an indexed image item only.
+
+        Guards against reading arbitrary files off disk: ``filepath`` must
+        match a currently indexed item whose ``open_mode`` is ``"image"``.
+        """
+        item = self._find_by_path(filepath)
+        if item is None or item.open_mode != "image":
+            raise ValueError(f"Not an indexed image item: {filepath}")
+        data = item.path.read_bytes()
+        encoded = base64.b64encode(data).decode("ascii")
+        mime = IMAGE_MIME_TYPES.get(item.path.suffix.casefold(), "application/octet-stream")
+        return {"data_uri": f"data:{mime};base64,{encoded}", "name": item.path.name}
+
+    def mark_saved(self, filepath: Path) -> None:
+        """Invalidate and eagerly rebuild the index after a shared RTE autosave.
+
+        The RTE save path writes directly to disk via the notes/rte services
+        (outside ``SecondBrainService``), so the cached index and full-content
+        search would otherwise keep serving the pre-save excerpt until the
+        next unrelated read. Rebuilding immediately means the very next
+        search already reflects the edit. ``filepath`` identifies the saved
+        item for callers/logging symmetry with the other guarded ops; a full
+        rebuild is the only granularity the cache supports today.
+        """
+        self._invalidate()
+        self._items()
+
+    def use_default_folder(self) -> Path:
+        """Create ``<root>/Second Brain`` (if needed) and persist it as active.
+
+        The folder is created on disk before the Settings update fires, so a
+        setter failure never leaves Settings pointing at a folder that does
+        not exist yet.
+        """
+        root = self._root()
+        if root is None:
+            raise RuntimeError("Root folder is not configured")
+        target = default_second_brain(root)
+        target.mkdir(parents=True, exist_ok=True)
+        if self._folder_setter is not None:
+            self._folder_setter(target)
+        return target
+
+    def refresh(self) -> dict[str, object]:
+        """Force a full reindex and return the fresh workspace (manual refresh)."""
+        self._invalidate()
+        return self.workspace()
 
     # ── internals ─────────────────────────────────────────────────────
     def _items(self) -> list[SecondBrainItem]:
@@ -954,6 +1084,49 @@ class SecondBrainService:
         updated = replace(item, **{flag: new_value})
         items[item_id] = updated
         return updated
+
+    def _find_by_path(self, filepath: Path) -> SecondBrainItem | None:
+        """Locate a currently indexed item by filesystem path (resolve-based)."""
+        resolved = Path(filepath).resolve()
+        for candidate in self._items_by_id_map().values():
+            if candidate.path.resolve() == resolved:
+                return candidate
+        return None
+
+    @staticmethod
+    def _sibling_relative(old_relative: str, new_name: str) -> str:
+        parent = PurePosixPath(old_relative).parent
+        return new_name if str(parent) == "." else (parent / new_name).as_posix()
+
+    def _remap_persisted(self, remap: dict[str, str]) -> None:
+        """Move persisted flags from old ids to new ids (rename support)."""
+        moves = {old: new for old, new in remap.items() if old in self._persisted}
+        if not moves:
+            return
+        prior = {key: dict(value) for key, value in self._persisted.items()}
+        updated = dict(self._persisted)
+        for old_id, new_id in moves.items():
+            updated[new_id] = updated.pop(old_id)
+        self._persisted = updated
+        try:
+            self._persist()
+        except Exception:
+            self._persisted = prior
+            raise
+
+    def _drop_persisted(self, item_ids: set[str]) -> None:
+        """Remove persisted flags for ids that no longer resolve (recycle support)."""
+        if not any(item_id in self._persisted for item_id in item_ids):
+            return
+        prior = {key: dict(value) for key, value in self._persisted.items()}
+        self._persisted = {
+            key: value for key, value in self._persisted.items() if key not in item_ids
+        }
+        try:
+            self._persist()
+        except Exception:
+            self._persisted = prior
+            raise
 
     def _folder(self) -> Path | None:
         if self._folder_provider is None:
