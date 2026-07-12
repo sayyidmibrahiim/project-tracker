@@ -13,6 +13,7 @@ from infrastructure.cache_db import CacheDb
 from infrastructure.settings_store import SettingsStore
 
 DEFAULT_ROOT_NAME = "Project Tracker"
+DEFAULT_SECOND_BRAIN_NAME = "Second Brain"
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,25 @@ logger = logging.getLogger(__name__)
 def default_root() -> Path:
     """The canonical data root: ~/Documents/Project Tracker."""
     return Path.home() / "Documents" / DEFAULT_ROOT_NAME
+
+
+def default_second_brain(root: Path) -> Path:
+    """The default Second Brain notes folder: <root>/Second Brain."""
+    return root / DEFAULT_SECOND_BRAIN_NAME
+
+
+def ensure_second_brain_folder(settings: AppSettings, root: Path) -> bool:
+    """Assign+create the default Second Brain folder if unset.
+
+    Leaves an existing ``settings.second_brain_folder`` (override or already
+    repaired default) untouched. Returns True if the default was assigned.
+    """
+    if settings.second_brain_folder is not None:
+        return False
+    target = default_second_brain(root)
+    target.mkdir(parents=True, exist_ok=True)
+    settings.second_brain_folder = target
+    return True
 
 
 def rewrite_path(path: Path | None, old_root: Path, new_root: Path) -> Path | None:
@@ -139,20 +159,24 @@ def bootstrap_root(
     if current is None:
         target.mkdir(parents=True, exist_ok=True)
         settings.root_folder = target
+        ensure_second_brain_folder(settings, target)
         settings_store.write(settings)
         return BootstrapResult(action="created", new=target)
 
     current_resolved = current.resolve()
     target_resolved = target.resolve()
 
-    # Case 2: already at default — nothing to do.
+    # Case 2: already at default — repair unset Second Brain folder only.
     if current_resolved == target_resolved:
+        if ensure_second_brain_folder(settings, target):
+            settings_store.write(settings)
         return BootstrapResult(action="none", new=target)
 
     # Case 3: old root missing — create empty default, clear cache.
     if not current.exists():
         target.mkdir(parents=True, exist_ok=True)
         settings.root_folder = target
+        ensure_second_brain_folder(settings, target)
         settings_store.write(settings)
         with cache_db._connect() as conn:
             conn.execute("DELETE FROM project_index")
@@ -191,6 +215,7 @@ def bootstrap_root(
     except Exception:  # noqa: BLE001 — scan failure must not block startup
         logger.warning("Cache rescan after migration failed; cache will rebuild on next access")
 
+    ensure_second_brain_folder(settings, new_root)
     settings.root_folder = new_root
     settings_store.write(settings)
     return BootstrapResult(action="migrated", old=current, new=new_root)

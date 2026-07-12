@@ -227,7 +227,10 @@ def test_bootstrap_creates_default_root_when_none(tmp_path, monkeypatch):
     assert result.action == "created"
     expected = fake_home / "Documents" / "Project Tracker"
     assert expected.exists()
-    assert store.read().root_folder == expected
+    saved = store.read()
+    assert saved.root_folder == expected
+    assert saved.second_brain_folder == expected / "Second Brain"
+    assert (expected / "Second Brain").is_dir()
 
 
 def test_bootstrap_none_action_when_already_default(tmp_path, monkeypatch):
@@ -275,7 +278,10 @@ def test_bootstrap_migrates_existing_root(tmp_path, monkeypatch):
     assert expected.exists()
     assert (expected / "MYAPP" / "appcode.json").exists()
     assert not old_root.exists()
-    assert store.read().root_folder == expected
+    saved = store.read()
+    assert saved.root_folder == expected
+    assert saved.second_brain_folder == expected / "Second Brain"
+    assert (expected / "Second Brain").is_dir()
 
 
 def test_bootstrap_orphan_old_root_missing(tmp_path, monkeypatch):
@@ -328,3 +334,82 @@ def test_bootstrap_migration_failure_rollback(tmp_path, monkeypatch):
     result = bootstrap_root(store, db, scanner)
     assert result.action == "failed"
     assert old_root.exists()  # old data preserved
+    assert store.read().second_brain_folder is None  # settings untouched on failure
+
+
+# ── Task 1: default_second_brain / ensure_second_brain_folder ──────────────
+
+from services.bootstrap_service import default_second_brain, ensure_second_brain_folder
+
+
+def test_default_second_brain_is_root_slash_second_brain(tmp_path):
+    root = tmp_path / "Project Tracker"
+    assert default_second_brain(root) == root / "Second Brain"
+
+
+def test_ensure_second_brain_folder_creates_default_when_unset(tmp_path):
+    root = tmp_path / "Project Tracker"
+    root.mkdir()
+    settings = AppSettings(root_folder=root, second_brain_folder=None)
+    changed = ensure_second_brain_folder(settings, root)
+    assert changed is True
+    assert settings.second_brain_folder == root / "Second Brain"
+    assert (root / "Second Brain").is_dir()
+
+
+def test_ensure_second_brain_folder_preserves_existing_override(tmp_path):
+    root = tmp_path / "Project Tracker"
+    root.mkdir()
+    override = tmp_path / "External" / "Notes"
+    settings = AppSettings(root_folder=root, second_brain_folder=override)
+    changed = ensure_second_brain_folder(settings, root)
+    assert changed is False
+    assert settings.second_brain_folder == override
+    assert not (root / "Second Brain").exists()
+
+
+def test_bootstrap_none_action_repairs_unset_second_brain_folder(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    expected = fake_home / "Documents" / "Project Tracker"
+    expected.mkdir(parents=True)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = expected
+    settings.second_brain_folder = None
+    store.write(settings)
+    db = CacheDb(tmp_path / "db6.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "none"
+    saved = store.read()
+    assert saved.second_brain_folder == expected / "Second Brain"
+    assert (expected / "Second Brain").is_dir()
+
+
+def test_bootstrap_none_action_preserves_second_brain_override(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    expected = fake_home / "Documents" / "Project Tracker"
+    expected.mkdir(parents=True)
+    override = tmp_path / "External" / "Notes"
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    store = SettingsStore(config_dir=config_dir)
+    settings = store.read()
+    settings.root_folder = expected
+    settings.second_brain_folder = override
+    store.write(settings)
+    db = CacheDb(tmp_path / "db7.db")
+    db.initialize()
+    scanner = ScannerService(db)
+    result = bootstrap_root(store, db, scanner)
+    assert result.action == "none"
+    saved = store.read()
+    assert saved.second_brain_folder == override
+    assert not (expected / "Second Brain").exists()
