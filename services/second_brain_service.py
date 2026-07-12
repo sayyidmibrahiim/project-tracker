@@ -494,22 +494,23 @@ class SecondBrainService:
             raise ValueError(f"Unsupported Second Brain activity action: {action}")
         if self._cache is None:
             return None
-        item = self.get_item(item_id)
-        if item is None:
-            return None
-        row = SecondBrainActivityRow(
-            item_id=item.id,
-            path=item.path,
-            title=item.title,
-            source=item.source,
-            action=action,
-            timestamp=local_now(),
-        )
         try:
+            item = self.get_item(item_id)
+            if item is None:
+                return None
+            row = SecondBrainActivityRow(
+                item_id=item.id,
+                path=item.path,
+                title=item.title,
+                source=item.source,
+                action=action,
+                timestamp=local_now(),
+            )
             return self._cache.append_second_brain_activity(row)
         except Exception:
             # ponytail: activity is a convenience ledger, not source of truth;
-            # swallow write failures rather than fail the caller's mutation.
+            # swallow lookup + write failures rather than fail the caller's
+            # mutation (both the get_item lookup and the append can throw).
             return None
 
     def list_activity(self, item_id: str = "") -> list[SecondBrainActivityRow]:
@@ -519,7 +520,13 @@ class SecondBrainService:
         return self._cache.list_second_brain_activity(item_id=item_id)
 
     def _record_created(self, target: Path) -> None:
-        created = self._find_by_path(target)
+        try:
+            created = self._find_by_path(target)
+        except Exception:
+            # ponytail: same best-effort contract as record_activity — a
+            # lookup failure here must not break the create that already
+            # succeeded on disk.
+            return
         if created is not None:
             self.record_activity(created.id, "created")
 

@@ -589,6 +589,46 @@ def test_recycle_item_rejects_project_item_without_recording_activity(tmp_path: 
     assert cache.list_second_brain_activity() == []
 
 
+def test_create_note_survives_activity_lookup_failure(tmp_path: Path, monkeypatch):
+    """record_activity's internal get_item lookup must be inside the best-effort
+    try, not just the cache append — else a lookup failure would surface as a
+    create_note failure even though the file already landed on disk."""
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    def _raise(_item_id: str):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(service, "get_item", _raise)
+
+    target = service.create_note(folder, "todo.md", content="hello")
+
+    assert target.exists()
+    assert cache.list_second_brain_activity() == []
+
+
+def test_create_note_survives_created_lookup_failure(tmp_path: Path, monkeypatch):
+    """_record_created's own _find_by_path lookup must be best-effort too —
+    else a lookup failure there would surface as a create_note failure even
+    though the file already landed on disk."""
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    cache = _activity_cache(tmp_path)
+    service = SecondBrainService(folder_provider=lambda: folder, cache=cache)
+
+    def _raise(_target: Path):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(service, "_find_by_path", _raise)
+
+    target = service.create_note(folder, "todo.md", content="hello")
+
+    assert target.exists()
+    assert cache.list_second_brain_activity() == []
+
+
 def test_mark_saved_records_edited_activity(tmp_path: Path):
     folder = tmp_path / "notes"
     folder.mkdir()
