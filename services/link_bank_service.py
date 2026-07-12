@@ -352,6 +352,8 @@ class LinkBankService:
         if existing is not None:
             return existing
         if create:
+            if category.casefold() in RESERVED_CATEGORY_NAMES:
+                raise ValueError(f"Category name '{category}' is reserved for the rail filters")
             bank.categories.append(category)
         return category
 
@@ -482,11 +484,15 @@ class LinkBankService:
         new_archived_categories_cf: dict[str, str] = {}
         for category in imported_categories:
             key = category.casefold()
+            if key in RESERVED_CATEGORY_NAMES:
+                continue
             if key not in canonical_categories_cf:
                 canonical_categories_cf[key] = category
                 new_categories_cf[key] = category
         for category in imported_archived_categories:
             key = category.casefold()
+            if key in RESERVED_CATEGORY_NAMES:
+                continue
             if key not in canonical_categories_cf:
                 canonical_categories_cf[key] = category
                 new_archived_categories_cf[key] = category
@@ -521,6 +527,13 @@ class LinkBankService:
 
             if not name or not _is_http_url(url):
                 invalid.append({"row": raw_row, "reason": "invalid name or url"})
+                continue
+
+            category_raw = str(row.get("category", "")).strip()
+            if category_raw and category_raw.casefold() not in canonical_categories_cf and (
+                category_raw.casefold() in RESERVED_CATEGORY_NAMES
+            ):
+                invalid.append({"row": raw_row, "reason": "reserved category name"})
                 continue
 
             row_id = str(row.get("id", "")).strip()

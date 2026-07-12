@@ -762,3 +762,99 @@ class TestOpenLinkOpener:
             service.open_link("bad")
 
         assert opened == []
+
+
+# ── Fix Round 2: reserved categories blocked at every creation path ─────
+
+
+class TestReservedCategoriesAllCreationPaths:
+    """Reviewer follow-up on b3a80f84: category_create/category_rename already
+    guard reserved rail keywords, but add_link/update_linkbank (via
+    _canonical_category(create=True)) and merge_import (via new_categories
+    appended unchecked) were sibling entry points that could still create a
+    reserved-named category. Creation is blocked everywhere; resolving an
+    EXISTING reserved-named category (legacy data) still works."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_add_link_rejects_new_reserved_category(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="reserved"):
+            service.add_link({"name": "A", "url": "https://a.example.com", "category": "Archived"})
+        bank = service.get_linkbank()
+        assert bank["links"] == []
+        assert "Archived" not in bank["categories"]
+
+    def test_update_linkbank_rejects_new_reserved_category(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link({"name": "A", "url": "https://a.example.com", "category": "ops"})
+        with pytest.raises(ValueError, match="reserved"):
+            service.update_linkbank({"id": link["id"], "category": "all"})
+        bank = service.get_linkbank()
+        assert bank["links"][0]["category"] == "ops"
+        assert "all" not in bank["categories"]
+
+    def test_merge_import_row_with_reserved_category_is_skipped_not_created(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        content = json.dumps(
+            {
+                "links": [
+                    {"name": "Bad", "url": "https://bad.example.com", "category": "all"},
+                    {"name": "Good", "url": "https://good.example.com", "category": "ops"},
+                ]
+            }
+        )
+
+        preview = service.preview_import("json", content)
+        assert preview["add"] == 1
+        assert preview["invalid"] == 1
+
+        result = service.merge_import("json", content)
+        assert result["added"] == 1
+        assert result["invalid"] == 1
+        bank = service.get_linkbank()
+        assert "all" not in bank["categories"]
+        assert "all" not in bank["archived_categories"]
+        assert len(bank["links"]) == 1
+        assert bank["links"][0]["name"] == "Good"
+
+    def test_merge_import_top_level_reserved_category_list_not_created(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        content = json.dumps(
+            {
+                "links": [{"name": "Good", "url": "https://good.example.com", "category": "ops"}],
+                "categories": ["Favorites"],
+            }
+        )
+
+        result = service.merge_import("json", content)
+
+        assert result["added"] == 1
+        bank = service.get_linkbank()
+        assert "Favorites" not in bank["categories"]
+
+    def test_legacy_bank_with_existing_reserved_named_category_still_resolves(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        store.write(
+            LinkBank(
+                links=[
+                    {
+                        "id": "legacy1",
+                        "name": "Legacy",
+                        "url": "https://legacy.example.com",
+                        "category": "Archived",
+                    }
+                ],
+                categories=["Archived"],
+            )
+        )
+        service = LinkBankService(store)
+
+        bank = service.get_linkbank()
+        assert bank["categories"] == ["Archived"]
+
+        added = service.add_link({"name": "New", "url": "https://new.example.com", "category": "archived"})
+        assert added["category"] == "Archived"
+        bank = service.get_linkbank()
+        assert bank["categories"].count("Archived") == 1
