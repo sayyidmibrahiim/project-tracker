@@ -103,6 +103,8 @@ class LinkBankService:
             updated["details"] = str(data["notes"])
         if "category" in data:
             updated["category"] = self._canonical_category(bank, str(data["category"]), create=True)
+            if self._find_category(bank.archived_categories, updated["category"]) is not None:
+                updated["archived"] = "true"
         for key in ("archived", "pinned", "favorite"):
             if key in data:
                 updated[key] = _normalize_bool(data[key])
@@ -483,6 +485,15 @@ class LinkBankService:
             category.casefold() for category in [*bank.archived_categories, *new_archived_categories_cf.values()]
         }
 
+        def resolve_row_category(row: dict[str, str]) -> None:
+            # ponytail: only called at classification-success points (add/update),
+            # so a conflicting row never registers its novel category (Finding A).
+            row["category"] = self._resolve_category(
+                str(row.get("category", "")), canonical_categories_cf, new_categories_cf
+            )
+            if row["category"].casefold() in archived_category_keys:
+                row["archived"] = "true"
+
         seen_ids: set[str] = set()
         seen_urls: set[str] = set()
 
@@ -512,17 +523,12 @@ class LinkBankService:
                 conflicts.append({"row": raw_row, "reason": "duplicate url in import"})
                 continue
 
-            row["category"] = self._resolve_category(
-                str(row.get("category", "")), canonical_categories_cf, new_categories_cf
-            )
-            if row["category"].casefold() in archived_category_keys:
-                row["archived"] = "true"
-
             if row_id and row_id in existing_by_id:
                 owner_id = existing_url_to_id.get(norm_url)
                 if owner_id is not None and owner_id != row_id:
                     conflicts.append({"row": raw_row, "reason": "url belongs to another id"})
                     continue
+                resolve_row_category(row)
                 to_update.append((row_id, row))
                 seen_ids.add(row_id)
                 seen_urls.add(norm_url)
@@ -531,6 +537,7 @@ class LinkBankService:
                 if owner_id is not None:
                     conflicts.append({"row": raw_row, "reason": "url exists under another id"})
                     continue
+                resolve_row_category(row)
                 to_add.append(row)
                 if row_id:
                     seen_ids.add(row_id)
@@ -604,8 +611,8 @@ class LinkBankService:
     def _apply_row(target: dict[str, str], row: dict[str, str], now: str) -> None:
         target["name"] = row.get("name") or target.get("name", "")
         target["url"] = row.get("url") or target.get("url", "")
-        target["category"] = row.get("category", target.get("category", ""))
-        target["tags"] = row.get("tags", target.get("tags", ""))
+        target["category"] = row.get("category") or target.get("category", "")
+        target["tags"] = row.get("tags") or target.get("tags", "")
         description = row.get("description", "")
         if description:
             target["notes"] = description

@@ -617,6 +617,93 @@ class TestPreviewMergeImport:
         assert bank["links"][0]["archived"] == "true"
 
 
+# ── Fix Round 2, Finding A: conflicting rows must not leak categories ───
+
+
+class TestMergeImportConflictCategoryLeak:
+    """A row discarded as a conflict must not register its novel category."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_url_belongs_to_another_id_conflict_does_not_leak_category(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        a = service.add_link({"name": "A", "url": "https://a.example.com"})
+        service.add_link({"name": "B", "url": "https://b.example.com"})
+        content = json.dumps(
+            {"links": [{"id": a["id"], "name": "A2", "url": "https://b.example.com", "category": "NovelCat"}]}
+        )
+
+        result = service.merge_import("json", content)
+
+        assert result["conflicts"] == 1
+        bank = service.get_linkbank()
+        assert "NovelCat" not in bank["categories"]
+        assert "NovelCat" not in bank["archived_categories"]
+
+    def test_url_exists_under_another_id_conflict_does_not_leak_category(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://dup.example.com"})
+        content = json.dumps(
+            {"links": [{"id": "other-id", "name": "Dup", "url": "https://dup.example.com", "category": "NovelCat"}]}
+        )
+
+        result = service.merge_import("json", content)
+
+        assert result["conflicts"] == 1
+        bank = service.get_linkbank()
+        assert "NovelCat" not in bank["categories"]
+        assert "NovelCat" not in bank["archived_categories"]
+
+
+# ── Fix Round 2, Finding B: merge-update must not wipe category/tags ─────
+
+
+class TestApplyRowPreservesCategoryAndTags:
+    """Merge-update with no category/tags in the source row keeps existing values."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_merge_update_without_category_or_tags_preserves_existing(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link(
+            {"name": "Old Name", "url": "https://example.com", "category": "ops", "tags": "a,b"}
+        )
+        content = json.dumps(
+            {"links": [{"id": link["id"], "name": "New Name", "url": "https://example.com"}]}
+        )
+
+        result = service.merge_import("json", content)
+
+        assert result["updated"] == 1
+        bank = service.get_linkbank()
+        updated = next(item for item in bank["links"] if item["id"] == link["id"])
+        assert updated["name"] == "New Name"
+        assert updated["category"] == "ops"
+        assert updated["tags"] == "a,b"
+
+
+# ── Fix Round 2, Finding C: update_linkbank archived-category parity ────
+
+
+class TestUpdateLinkbankArchivedCategoryParity:
+    """Editing a link into an archived category must archive it, like add_link does."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_editing_link_into_archived_category_archives_link(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "Ops Link", "url": "https://ops.example.com", "category": "ops"})
+        service.category_archive("ops")
+        link = service.add_link({"name": "Active Link", "url": "https://active.example.com", "category": "misc"})
+
+        updated = service.update_linkbank({"id": link["id"], "category": "ops"})
+
+        assert updated["archived"] == "true"
+
+
 # ── Task 6: OS browser open via injected opener ─────────────────────────
 
 
