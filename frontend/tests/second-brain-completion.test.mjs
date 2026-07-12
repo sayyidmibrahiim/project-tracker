@@ -672,6 +672,22 @@ test("Tab bar exposes accessible tablist/tab/tabpanel relationships", () => {
   assert.match(SHELL, /aria-labelledby=/);
 });
 
+test("selectTab guards against concurrent switches via switching boolean", () => {
+  const body = fnBody(SHELL, "selectTab");
+  // Guard check must run before the flush await.
+  const guardCheckIdx = body.search(/if\s*\(\s*switching\s*\|\|\s*tab\s*===\s*activeTab\s*\)\s*return/);
+  const flushIdx = body.search(/await notesRef\?\.flush\(\)/);
+  assert.ok(guardCheckIdx >= 0, "selectTab must guard on switching || tab === activeTab");
+  assert.ok(flushIdx >= 0, "selectTab must call flush");
+  assert.ok(guardCheckIdx < flushIdx, "guard check must run before the flush await");
+  // switching must be set to true before the flush await.
+  const guardSetIdx = body.search(/switching\s*=\s*true/);
+  assert.ok(guardSetIdx >= 0, "selectTab must set switching = true");
+  assert.ok(guardSetIdx < flushIdx, "switching must be set to true before the flush await");
+  // switching must be reset in a finally block.
+  assert.match(body, /finally\s*\{[\s\S]*?switching\s*=\s*false/);
+});
+
 test("No hard-coded hex colors in any of the three Second Brain components", () => {
   for (const [name, source] of [
     ["SecondBrain.svelte", SHELL],

@@ -21,17 +21,26 @@
   let notesRef: SecondBrainNotes | undefined = $state();
   let linkBankRef: LinkBank | undefined = $state();
 
+  // Guard: prevent concurrent tab switches during active flush.
+  // Not rendered ($state not needed), just guards re-entry.
+  let switching = false;
+
   async function selectTab(tab: TabId) {
-    if (tab === activeTab) return;
-    // Leaving Notes must flush its mounted editor first; a failed save
-    // aborts the switch and keeps the current document open (never destroy
-    // Notes' state to force this — it stays mounted regardless).
-    if (activeTab === "notes") {
-      const flushed = await notesRef?.flush();
-      if (flushed === false) return;
+    if (switching || tab === activeTab) return;
+    switching = true;
+    try {
+      // Leaving Notes must flush its mounted editor first; a failed save
+      // aborts the switch and keeps the current document open (never destroy
+      // Notes' state to force this — it stays mounted regardless).
+      if (activeTab === "notes") {
+        const flushed = await notesRef?.flush();
+        if (flushed === false) return;
+      }
+      if (tab === "linkbank") linkBankMounted = true;
+      activeTab = tab;
+    } finally {
+      switching = false;
     }
-    if (tab === "linkbank") linkBankMounted = true;
-    activeTab = tab;
   }
 
   async function refreshActive() {
