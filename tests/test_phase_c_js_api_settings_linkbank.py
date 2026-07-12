@@ -54,6 +54,30 @@ class FakeLinkBankDependency:
         self.calls.append(("archive_link", (link_id,)))
         return {"archived": True, "id": link_id}
 
+    def restore_link(self, link_id: str) -> dict[str, object]:
+        self.calls.append(("restore_link", (link_id,)))
+        return {"restored": True, "id": link_id}
+
+    def category_restore(self, name: str) -> dict[str, object]:
+        self.calls.append(("category_restore", (name,)))
+        return {"restored": True, "name": name}
+
+    def open_link(self, link_id: str) -> dict[str, object]:
+        self.calls.append(("open_link", (link_id,)))
+        return {"opened": True, "id": link_id}
+
+    def export_file(self, fmt: str) -> dict[str, object]:
+        self.calls.append(("export_file", (fmt,)))
+        return {"format": fmt, "content": "..."}
+
+    def preview_import(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(("preview_import", (payload,)))
+        return {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0, "skipped": []}
+
+    def merge_import(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(("merge_import", (payload,)))
+        return {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0, "skipped": []}
+
 
 class ExplodingSettingsDependency(FakeSettingsDependency):
     def get_settings(self) -> dict[str, object]:
@@ -135,6 +159,44 @@ def test_linkbank_store_alias_is_supported():
 
     assert response["ok"] is True
     assert store.calls == [("get_linkbank", ())]
+
+
+def test_linkbank_new_facades_delegate_and_convert_results():
+    service = FakeLinkBankDependency()
+    api = JsApi(dashboard_service=None, linkbank_service=service)
+
+    restored = api.linkbank_restore_link("l-1")
+    cat_restored = api.linkbank_category_restore("Ops")
+    opened = api.linkbank_open_link("l-1")
+    exported = api.linkbank_export_file("csv")
+    previewed = api.linkbank_preview_import({"format": "json", "content": "{}"})
+    merged = api.linkbank_merge_import({"format": "json", "content": "{}"})
+
+    assert restored == {"ok": True, "data": {"restored": True, "id": "l-1"}, "error": None}
+    assert cat_restored == {"ok": True, "data": {"restored": True, "name": "Ops"}, "error": None}
+    assert opened == {"ok": True, "data": {"opened": True, "id": "l-1"}, "error": None}
+    assert exported == {"ok": True, "data": {"format": "csv", "content": "..."}, "error": None}
+    assert previewed["data"]["added"] == 1
+    assert merged["data"]["added"] == 1
+    assert service.calls == [
+        ("restore_link", ("l-1",)),
+        ("category_restore", ("Ops",)),
+        ("open_link", ("l-1",)),
+        ("export_file", ("csv",)),
+        ("preview_import", ({"format": "json", "content": "{}"},)),
+        ("merge_import", ({"format": "json", "content": "{}"},)),
+    ]
+
+
+def test_linkbank_new_facades_missing_dependency_returns_service_unavailable():
+    api = JsApi(dashboard_service=None)
+
+    assert api.linkbank_restore_link("l-1")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_category_restore("Ops")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_open_link("l-1")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_export_file()["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_preview_import({})["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_merge_import({})["error"]["code"] == "SERVICE_UNAVAILABLE"
 
 
 def test_missing_dependencies_return_service_unavailable():

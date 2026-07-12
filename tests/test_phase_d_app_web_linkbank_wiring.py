@@ -45,3 +45,77 @@ def test_create_js_api_wires_linkbank_get_with_temp_store(tmp_path: Path) -> Non
     assert link["category"] == "Ops"
     assert link["archived"] == "false"
     assert link["id"]  # stable uuid generated on normalize
+
+
+def test_create_js_api_wires_linkbank_restore_and_category_restore(tmp_path: Path) -> None:
+    """Task 6: create_js_api wires the new restore_link/category_restore facades."""
+    from project_tracker import app_web
+    from infrastructure.link_bank_store import LinkBank, LinkBankStore
+
+    link_bank_path = tmp_path / "link_bank.json"
+    store = LinkBankStore(link_bank_path)
+    store.write(LinkBank(categories=["Ops"], links=[]))
+
+    api = app_web.create_js_api(
+        db_path=tmp_path / "cache.db",
+        linkbank_store=LinkBankStore(link_bank_path),
+    )
+
+    added = api.linkbank_add_link({"name": "Runbook", "url": "https://example.test/runbook", "category": "Ops"})
+    assert added["ok"] is True
+    link_id = added["data"]["id"]
+
+    archived = api.linkbank_archive_link(link_id)
+    assert archived["ok"] is True
+    assert archived["data"]["archived"] == "true"
+
+    restored = api.linkbank_restore_link(link_id)
+    assert restored["ok"] is True
+    assert restored["data"]["archived"] == "false"
+
+    cat_archived_result = api.linkbank_category_archive("Ops")
+    assert cat_archived_result["ok"] is True
+
+    cat_restored_result = api.linkbank_category_restore("Ops")
+    assert cat_restored_result["ok"] is True
+    assert "Ops" in cat_restored_result["data"]["categories"]
+
+
+def test_create_js_api_wires_linkbank_export_and_preview_merge(tmp_path: Path) -> None:
+    """Task 6: create_js_api wires export_file/preview_import/merge_import facades."""
+    import json
+
+    from project_tracker import app_web
+    from infrastructure.link_bank_store import LinkBankStore
+
+    link_bank_path = tmp_path / "link_bank.json"
+    api = app_web.create_js_api(
+        db_path=tmp_path / "cache.db",
+        linkbank_store=LinkBankStore(link_bank_path),
+    )
+
+    added = api.linkbank_add_link({"name": "Docs", "url": "https://docs.example.test", "category": "Ops"})
+    assert added["ok"] is True
+
+    exported = api.linkbank_export_file("csv")
+    assert exported["ok"] is True
+    assert exported["data"]["format"] == "csv"
+    assert (
+        "id,name,url,category,tags,description,pinned,favorite,archived,created_at,updated_at"
+        in exported["data"]["content"]
+    )
+
+    payload = {
+        "format": "json",
+        "content": json.dumps({"links": [{"name": "New", "url": "https://new.example.test"}]}),
+    }
+    preview = api.linkbank_preview_import(payload)
+    assert preview["ok"] is True
+    assert preview["data"]["added"] == 1
+
+    merged = api.linkbank_merge_import(payload)
+    assert merged["ok"] is True
+    assert merged["data"]["added"] == 1
+
+    final = api.linkbank_get()
+    assert len(final["data"]["links"]) == 2

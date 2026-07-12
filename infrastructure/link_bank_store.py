@@ -15,18 +15,26 @@ from infrastructure.settings_store import link_bank_path
 class LinkBank:
     categories: list[str] = field(default_factory=list)
     links: list[dict[str, str]] = field(default_factory=list)
+    #: Categories the user archived (Task 6). Missing on legacy files -> [].
+    archived_categories: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> LinkBank:
         categories = data.get("categories", [])
         links = data.get("links", [])
+        archived_categories = data.get("archived_categories", [])
         return cls(
             categories=[str(category) for category in categories if isinstance(category, str)],
             links=[_normalize_link(link) for link in links if isinstance(link, dict)],
+            archived_categories=[str(category) for category in archived_categories if isinstance(category, str)],
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"categories": self.categories, "links": self.links}
+        return {
+            "categories": self.categories,
+            "links": self.links,
+            "archived_categories": self.archived_categories,
+        }
 
     def search(self, query: str) -> list[dict[str, str]]:
         needle = query.casefold()

@@ -12,7 +12,6 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urlparse
 
 # pywebview is imported lazily in run() so app_web stays importable headless
 # (tests/CI have no window). Tests patch app_web.webview, so keep it a module attr.
@@ -44,6 +43,7 @@ from services.email_service import (
     TemplateConditionsNotMetError,
     UnresolvedPlaceholderError,
 )
+from services.link_bank_service import LinkBankService
 from services.notification_service import NotificationService
 from services.project_service import ProjectService
 from services.report_service import ReportService
@@ -175,6 +175,7 @@ def create_js_api(
 
     _settings_store = settings_store or SettingsStore()
     _linkbank_store = linkbank_store or LinkBankStore()
+    _linkbank_service = LinkBankService(_linkbank_store)
 
     def _second_brain_items_provider() -> list[SecondBrainItem]:
         """Read-only filesystem index from AppSettings.second_brain_folder."""
@@ -288,128 +289,6 @@ def create_js_api(
             settings = AppSettings.from_dict(current)
             self._store.write(settings)
             return {"ok": True, "settings": settings.to_dict()}
-
-    # ── link bank adapter (LinkBankStore.read() → get_linkbank()) ────
-    class _LinkBankAdapter:
-        """Thin adapter exposing LinkBankStore as read-only JsApi protocol."""
-
-        def __init__(self, store: LinkBankStore) -> None:
-            self._store = store
-
-        def get_linkbank(self) -> object:
-            return self._store.read().to_dict()
-
-        def update_linkbank(self, data: dict[str, object]) -> object:
-            """Update a single link's fields by id."""
-            link_id = str(data.get("id", ""))
-            if not link_id:
-                raise ValueError("Link id is required")
-            bank = self._store.read()
-            target = next((link for link in bank.links if link.get("id") == link_id), None)
-            if target is None:
-                raise ValueError(f"Link not found: {link_id}")
-            for key in ("name", "url", "notes", "details", "tags", "category", "archived", "pinned", "favorite"):
-                if key in data:
-                    target[key] = str(data[key])
-            if "details" in data and "notes" not in data:
-                target["notes"] = str(data["details"])
-            if "notes" in data and "details" not in data:
-                target["details"] = str(data["notes"])
-            old_category = target.get("category", "")
-            if old_category and old_category not in bank.categories:
-                bank.categories.append(old_category)
-            self._store.write(bank)
-            return dict(target)
-
-        def add_link(self, data: dict[str, object]) -> object:
-            """Create a new link with a stable uuid id and persist it."""
-            name = str(data.get("name", data.get("title", ""))).strip()
-            url = str(data.get("url", "")).strip()
-            if not name or not url:
-                raise ValueError("Link name and url are required")
-            parsed_url = urlparse(url)
-            if parsed_url.scheme not in {"http", "https"}:
-                raise ValueError("Link url must use http or https")
-            details = str(data.get("details", data.get("notes", "")))
-            bank = self._store.read()
-            link = {
-                "id": uuid.uuid4().hex,
-                "name": name,
-                "url": url,
-                "notes": details,
-                "details": details,
-                "tags": str(data.get("tags", "")),
-                "category": str(data.get("category", "")),
-                "archived": "false",
-                "pinned": str(data.get("pinned", "false")).lower(),
-                "favorite": str(data.get("favorite", "false")).lower(),
-            }
-            bank.links.append(link)
-            category = link["category"]
-            if category and category not in bank.categories:
-                bank.categories.append(category)
-            self._store.write(bank)
-            return dict(link)
-
-        def archive_link(self, link_id: str) -> object:
-            """Soft-archive a link by id."""
-            link_id = str(link_id)
-            if not link_id:
-                raise ValueError("Link id is required")
-            bank = self._store.read()
-            target = next((link for link in bank.links if link.get("id") == link_id), None)
-            if target is None:
-                raise ValueError(f"Link not found: {link_id}")
-            target["archived"] = "true"
-            self._store.write(bank)
-            return dict(target)
-
-        def category_create(self, name: str) -> object:
-            category = str(name).strip()
-            if not category:
-                raise ValueError("Category name is required")
-            bank = self._store.read()
-            if category not in bank.categories:
-                bank.categories.append(category)
-            self._store.write(bank)
-            return bank.to_dict()
-
-        def category_rename(self, old_name: str, new_name: str) -> object:
-            old = str(old_name).strip()
-            new = str(new_name).strip()
-            if not old or not new:
-                raise ValueError("Old and new category names are required")
-            bank = self._store.read()
-            bank.categories = [new if cat == old else cat for cat in bank.categories]
-            for link in bank.links:
-                if link.get("category") == old:
-                    link["category"] = new
-            if new not in bank.categories:
-                bank.categories.append(new)
-            self._store.write(bank)
-            return bank.to_dict()
-
-        def category_archive(self, name: str) -> object:
-            category = str(name).strip()
-            if not category:
-                raise ValueError("Category name is required")
-            bank = self._store.read()
-            for link in bank.links:
-                if link.get("category") == category:
-                    link["archived"] = "true"
-            bank.categories = [cat for cat in bank.categories if cat != category]
-            self._store.write(bank)
-            return bank.to_dict()
-
-        def export_json(self) -> object:
-            return self._store.read().to_dict()
-
-        def import_json(self, data: dict[str, object]) -> object:
-            from infrastructure.link_bank_store import LinkBank
-
-            bank = LinkBank.from_dict(data)
-            self._store.write(bank)
-            return bank.to_dict()
 
     # ── project service adapter (dashboard → project protocol) ────────
     class _ProjectServiceAdapter:
@@ -2188,7 +2067,7 @@ def create_js_api(
             notification_svc,
         ),
         settings_store=_SettingsAdapter(_settings_store),
-        linkbank_store=_LinkBankAdapter(_linkbank_store),
+        linkbank_service=_linkbank_service,
         automation_service=automation_svc,
         rules_service=rules_adapter,
         second_brain_service=second_brain_svc,

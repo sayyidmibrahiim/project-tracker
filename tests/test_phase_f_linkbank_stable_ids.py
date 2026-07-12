@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import tempfile
 from pathlib import Path
@@ -9,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_link
+from services.link_bank_service import LinkBankService
 
 
 # ── Unit: _normalize_link ──────────────────────────────────────────────
@@ -191,3 +194,370 @@ class TestUpdateLinkbank:
         result = js_api.linkbank_update({"id": "does_not_exist", "name": "X"})
         assert result["ok"] is False
         assert "not found" in result["error"]["message"].lower()
+
+
+# ── Task 6: LinkBank.archived_categories schema ────────────────────────
+
+
+class TestArchivedCategoriesSchema:
+    """LinkBank.archived_categories field + legacy-file normalization."""
+
+    def test_default_archived_categories_empty(self):
+        assert LinkBank().archived_categories == []
+
+    def test_legacy_file_without_archived_categories_loads(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        raw = {"categories": ["dev"], "links": []}
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(json.dumps(raw), encoding="utf-8")
+        loaded = store.read()
+        assert loaded.archived_categories == []
+
+    def test_roundtrip_preserves_archived_categories(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        bank = LinkBank(categories=["dev"], links=[], archived_categories=["legacy"])
+        store.write(bank)
+        loaded = store.read()
+        assert loaded.archived_categories == ["legacy"]
+
+    def test_from_dict_filters_non_string_archived_categories(self):
+        bank = LinkBank.from_dict({"archived_categories": ["ok", 5, None, "also-ok"]})
+        assert bank.archived_categories == ["ok", "also-ok"]
+
+
+# ── Task 6: LinkBankService CRUD parity with the former adapter ───────
+
+
+class TestLinkBankServiceCrudParity:
+    """LinkBankService reproduces the existing adapter CRUD contract."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_add_link_success(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link({"name": "Svelte", "url": "https://svelte.dev", "category": "frontend"})
+        assert link["name"] == "Svelte"
+        assert len(link["id"]) == 32
+        assert link["archived"] == "false"
+        assert link["created_at"]
+        assert link["updated_at"]
+
+    def test_add_link_requires_name_and_url(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="required"):
+            service.add_link({"name": "", "url": "https://x.com"})
+
+    def test_add_link_requires_http_scheme(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="http"):
+            service.add_link({"name": "FTP", "url": "ftp://files.example.com"})
+
+
+# ── Task 6: link/category archive + restore ────────────────────────────
+
+
+class TestLinkAndCategoryArchiveRestore:
+    """restore_link / category_restore reverse archive and update timestamps."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_restore_link_reverses_archive(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link({"name": "Docs", "url": "https://docs.example.com"})
+        archived = service.archive_link(link["id"])
+        assert archived["archived"] == "true"
+        restored = service.restore_link(link["id"])
+        assert restored["archived"] == "false"
+        assert restored["updated_at"]
+
+    def test_restore_link_nonexistent_raises(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="not found"):
+            service.restore_link("missing")
+
+    def test_category_archive_then_restore_reactivates_links(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.com", "category": "ops"})
+        service.add_link({"name": "B", "url": "https://b.com", "category": "ops"})
+
+        archived_bank = service.category_archive("ops")
+        assert "ops" not in archived_bank["categories"]
+        assert "ops" in archived_bank["archived_categories"]
+        assert all(link["archived"] == "true" for link in archived_bank["links"] if link["category"] == "ops")
+
+        restored_bank = service.category_restore("ops")
+        assert "ops" in restored_bank["categories"]
+        assert "ops" not in restored_bank["archived_categories"]
+        assert all(link["archived"] == "false" for link in restored_bank["links"] if link["category"] == "ops")
+
+
+# ── Task 6: case-insensitive category merge on import ──────────────────
+
+
+class TestCategoryCaseInsensitiveMerge:
+    """Rule 8: import category names merge case-insensitively, preserving spelling."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_merge_import_preserves_existing_category_spelling(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "Existing", "url": "https://existing.example.com", "category": "DevOps"})
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {"links": [{"name": "New", "url": "https://new.example.com", "category": "devops"}]}
+            ),
+        }
+        result = service.merge_import(payload)
+        assert result["added"] == 1
+        bank = service.get_linkbank()
+        assert bank["categories"].count("DevOps") == 1
+        assert "devops" not in bank["categories"]
+        new_link = next(link for link in bank["links"] if link["url"] == "https://new.example.com")
+        assert new_link["category"] == "DevOps"
+
+
+# ── Task 6: JSON/CSV export ─────────────────────────────────────────────
+
+
+class TestExportFormats:
+    """Rules 1-2: JSON/CSV complete export."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_export_json_is_complete_and_keeps_archived_state(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.com", "category": "x", "tags": "t1,t2"})
+        service.category_archive("x")
+
+        exported = service.export_file("json")
+        assert exported["format"] == "json"
+        data = json.loads(exported["content"])
+        assert data["archived_categories"] == ["x"]
+        assert data["links"][0]["archived"] == "true"
+
+    def test_export_csv_has_expected_columns(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link(
+            {"name": "A", "url": "https://a.com", "category": "x", "tags": "t1,t2", "details": "desc"}
+        )
+
+        exported = service.export_file("csv")
+        assert exported["format"] == "csv"
+        reader = csv.DictReader(io.StringIO(exported["content"]))
+        assert reader.fieldnames == [
+            "id",
+            "name",
+            "url",
+            "category",
+            "tags",
+            "description",
+            "pinned",
+            "favorite",
+            "archived",
+            "created_at",
+            "updated_at",
+        ]
+        row = next(reader)
+        assert row["name"] == "A"
+        assert row["description"] == "desc"
+        assert row["tags"] == "t1,t2"
+
+
+# ── Task 6: preview / merge import ──────────────────────────────────────
+
+
+class TestPreviewMergeImport:
+    """Rules 3-7, 10-11: preview/merge add, update, conflict, invalid, duplicate, no-write."""
+
+    def _service(self, tmp_path: Path) -> LinkBankService:
+        return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+    def test_preview_reports_counts_without_writing(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        existing = service.add_link({"name": "Existing", "url": "https://existing.example.com"})
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {
+                    "links": [
+                        {"id": existing["id"], "name": "Existing Updated", "url": "https://existing.example.com"},
+                        {"name": "Brand New", "url": "https://brand-new.example.com"},
+                        {"name": "", "url": "not-a-url"},
+                    ]
+                }
+            ),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["updated"] == 1
+        assert preview["added"] == 1
+        assert preview["invalid"] == 1
+        assert preview["conflicts"] == 0
+        assert len(preview["skipped"]) == 1
+        bank = service.get_linkbank()
+        assert len(bank["links"]) == 1
+        assert bank["links"][0]["name"] == "Existing"
+
+    def test_matching_id_updates_unless_url_owned_by_another_id(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        a = service.add_link({"name": "A", "url": "https://a.example.com"})
+        service.add_link({"name": "B", "url": "https://b.example.com"})
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {"links": [{"id": a["id"], "name": "A2", "url": "https://b.example.com"}]}
+            ),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["conflicts"] == 1
+        assert preview["updated"] == 0
+
+    def test_new_id_unique_url_adds(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {"links": [{"id": "brand-new-id", "name": "New", "url": "https://new.example.com"}]}
+            ),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["added"] == 1
+
+    def test_same_url_another_id_conflicts(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://dup.example.com"})
+        payload = {
+            "format": "json",
+            "content": json.dumps({"links": [{"id": "other-id", "name": "Dup", "url": "https://dup.example.com"}]}),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["conflicts"] == 1
+        assert preview["added"] == 0
+
+    def test_duplicate_ids_within_import_conflict(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {
+                    "links": [
+                        {"id": "dup-id", "name": "First", "url": "https://first.example.com"},
+                        {"id": "dup-id", "name": "Second", "url": "https://second.example.com"},
+                    ]
+                }
+            ),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["added"] == 1
+        assert preview["conflicts"] == 1
+
+    def test_duplicate_urls_within_import_conflict(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        payload = {
+            "format": "json",
+            "content": json.dumps(
+                {
+                    "links": [
+                        {"name": "First", "url": "https://same.example.com"},
+                        {"name": "Second", "url": "https://same.example.com"},
+                    ]
+                }
+            ),
+        }
+
+        preview = service.preview_import(payload)
+
+        assert preview["added"] == 1
+        assert preview["conflicts"] == 1
+
+    def test_malformed_json_performs_no_write(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.example.com"})
+        payload = {"format": "json", "content": "{not valid json"}
+
+        with pytest.raises(ValueError):
+            service.preview_import(payload)
+        with pytest.raises(ValueError):
+            service.merge_import(payload)
+
+        bank = service.get_linkbank()
+        assert len(bank["links"]) == 1
+
+    def test_confirmed_merge_writes_once_atomically(self, tmp_path: Path, monkeypatch):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.example.com"})
+        write_calls = []
+        original_write = LinkBankStore.write
+
+        def spy_write(self, bank):
+            write_calls.append(bank)
+            return original_write(self, bank)
+
+        monkeypatch.setattr(LinkBankStore, "write", spy_write)
+        payload = {
+            "format": "json",
+            "content": json.dumps({"links": [{"name": "New", "url": "https://new.example.com"}]}),
+        }
+
+        result = service.merge_import(payload)
+
+        assert result["added"] == 1
+        assert len(write_calls) == 1
+
+    def test_csv_import_preview_and_merge(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        csv_content = (
+            "id,name,url,category,tags,description,pinned,favorite,archived,created_at,updated_at\n"
+            ",CSV Link,https://csv.example.com,ops,tag1,CSV desc,false,false,false,,\n"
+        )
+        payload = {"format": "csv", "content": csv_content}
+
+        preview = service.preview_import(payload)
+        assert preview["added"] == 1
+
+        result = service.merge_import(payload)
+        assert result["added"] == 1
+
+        bank = service.get_linkbank()
+        link = next(link for link in bank["links"] if link["url"] == "https://csv.example.com")
+        assert link["name"] == "CSV Link"
+        assert link["category"] == "ops"
+        assert link["notes"] == "CSV desc"
+
+
+# ── Task 6: OS browser open via injected opener ─────────────────────────
+
+
+class TestOpenLinkOpener:
+    """OS browser open occurs only through the service with an injected opener."""
+
+    def test_open_link_calls_injected_opener(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        opened: list[str] = []
+        service = LinkBankService(store, opener=opened.append)
+        link = service.add_link({"name": "Docs", "url": "https://docs.example.com"})
+
+        result = service.open_link(link["id"])
+
+        assert opened == ["https://docs.example.com"]
+        assert result["id"] == link["id"]
+
+    def test_open_link_nonexistent_raises(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        service = LinkBankService(store, opener=lambda url: None)
+        with pytest.raises(ValueError, match="not found"):
+            service.open_link("missing")
