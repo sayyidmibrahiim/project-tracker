@@ -11,6 +11,7 @@ const APP = src("../src/App.svelte");
 const DASHBOARD = src("../src/lib/components/Dashboard.svelte");
 const PROJECT_DETAILS = src("../src/lib/components/ProjectDetails.svelte");
 const SECOND_BRAIN = src("../src/lib/components/SecondBrain.svelte");
+const SECOND_BRAIN_NOTES = src("../src/lib/components/SecondBrainNotes.svelte");
 const REPORT = src("../src/lib/components/Report.svelte");
 const AUTOMATIONS = src("../src/lib/components/Automations.svelte");
 const SETTINGS = src("../src/lib/components/Settings.svelte");
@@ -48,8 +49,14 @@ test("AS_IS page titles and core sections are present", () => {
   for (const label of ["Project Command Center", "Project Identity", "Schedule", "Drone Tickets", "Files", "Notes", "Activity History"]) {
     assert.match(PROJECT_DETAILS, new RegExp(label));
   }
-  for (const label of ["Second Brain", "Notes", "Link Bank", "Backlinks", "Recent Activity"]) {
+  // Second Brain split into a thin shell (title + tabs) plus the Notes
+  // workspace, which now owns the context shelf (Related/Activity replaced
+  // the old monolith's static Backlinks/Recent Activity placeholders).
+  for (const label of ["Second Brain", "Notes", "Link Bank"]) {
     assert.match(SECOND_BRAIN, new RegExp(label));
+  }
+  for (const label of ["Related", "Activity", "Pinned", "Favorites"]) {
+    assert.match(SECOND_BRAIN_NOTES, new RegExp(label));
   }
   for (const label of ["Total", "UAT Prepare", "Prod Ready", "Implemented", "Postponed"]) {
     assert.match(REPORT, new RegExp(label));

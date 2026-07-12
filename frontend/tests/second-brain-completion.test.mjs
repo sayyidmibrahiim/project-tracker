@@ -20,6 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const TYPES = readFileSync(resolve(__dirname, "../src/lib/types.ts"), "utf8");
 const NOTES = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrainNotes.svelte"), "utf8");
 const LINKBANK = readFileSync(resolve(__dirname, "../src/lib/components/LinkBank.svelte"), "utf8");
+const SHELL = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrain.svelte"), "utf8");
 
 /** Grab the `<style>…</style>` block of a Svelte component. */
 function styleBlock(source) {
@@ -589,4 +590,77 @@ test("Buttons define default/hover/focus/active/disabled states", () => {
   assert.match(style, /\.lb-btn:focus-visible/);
   assert.match(style, /\.lb-btn:active/);
   assert.match(style, /\.lb-btn:disabled/);
+});
+
+// --- Task 10: SecondBrain.svelte thin shell source contracts -----------------
+
+test("Shell imports only the two workspace components (thin child imports)", () => {
+  assert.match(SHELL, /import SecondBrainNotes from ["']\.\/SecondBrainNotes\.svelte["']/);
+  assert.match(SHELL, /import LinkBank from ["']\.\/LinkBank\.svelte["']/);
+});
+
+test("Shell has no business bridge calls or forked editor implementation", () => {
+  assert.doesNotMatch(SHELL, /callBridge/);
+  assert.doesNotMatch(SHELL, /<textarea/);
+  assert.doesNotMatch(SHELL, /insertMarkdown/);
+});
+
+test("Shell has no persistence of tab state (component-session-only)", () => {
+  assert.doesNotMatch(SHELL, /localStorage|sessionStorage/);
+});
+
+test("Default active tab is Notes", () => {
+  assert.match(SHELL, /activeTab[^=]*=\s*\$state\(\s*"notes"\s*\)/);
+});
+
+test("Notes workspace mounts exactly once outside any conditional (editor state never destroyed by tab switch)", () => {
+  const matches = SHELL.match(/<SecondBrainNotes\b/g) || [];
+  assert.equal(matches.length, 1, "SecondBrainNotes must be mounted exactly once");
+  assert.doesNotMatch(
+    SHELL,
+    /\{#if[^}]*\}[\s\S]{0,120}<SecondBrainNotes/,
+    "SecondBrainNotes must not be wrapped in a conditional block that would unmount it",
+  );
+});
+
+test("Link Bank lazy-mounts on first selection and then stays mounted (hidden, not destroyed)", () => {
+  assert.match(SHELL, /\{#if linkBankMounted\}[\s\S]*?<LinkBank\b/);
+  assert.match(SHELL, /linkBankMounted\s*=\s*true/);
+});
+
+test("Switching from Notes to Link Bank flushes the Notes child first and aborts the switch on failure", () => {
+  const body = fnBody(SHELL, "selectTab");
+  const flushIdx = body.search(/notesRef\?\.flush\(\)/);
+  const assignIdx = body.search(/activeTab\s*=\s*tab/);
+  assert.ok(flushIdx >= 0, "selectTab must flush the Notes child before switching");
+  assert.ok(assignIdx >= 0, "selectTab must assign the new active tab");
+  assert.ok(flushIdx < assignIdx, "flush must run before the tab switch is committed");
+  assert.match(body, /flushed === false/, "must abort the switch (return) when flush reports failure");
+});
+
+test("Refresh routes only to the active child", () => {
+  const body = fnBody(SHELL, "refreshActive");
+  assert.match(body, /activeTab === "notes"/);
+  assert.match(body, /notesRef\?\.refresh\(\)/);
+  assert.match(body, /linkBankRef\?\.refresh\(\)/);
+});
+
+test("Tab bar exposes accessible tablist/tab/tabpanel relationships", () => {
+  assert.match(SHELL, /role="tablist"/);
+  const tabMatches = SHELL.match(/role="tab"/g) || [];
+  assert.equal(tabMatches.length, 2, "exactly two role=\"tab\" buttons (Notes, Link Bank)");
+  assert.match(SHELL, /role="tabpanel"/);
+  assert.match(SHELL, /aria-selected=\{/);
+  assert.match(SHELL, /aria-controls=/);
+  assert.match(SHELL, /aria-labelledby=/);
+});
+
+test("No hard-coded hex colors in any of the three Second Brain components", () => {
+  for (const [name, source] of [
+    ["SecondBrain.svelte", SHELL],
+    ["SecondBrainNotes.svelte", NOTES],
+    ["LinkBank.svelte", LINKBANK],
+  ]) {
+    assert.doesNotMatch(source, /#[0-9a-fA-F]{3,8}\b/, `${name} must not contain raw hex colors`);
+  }
 });
