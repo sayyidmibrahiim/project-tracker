@@ -19,6 +19,7 @@ import { dirname, resolve } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TYPES = readFileSync(resolve(__dirname, "../src/lib/types.ts"), "utf8");
 const NOTES = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrainNotes.svelte"), "utf8");
+const LINKBANK = readFileSync(resolve(__dirname, "../src/lib/components/LinkBank.svelte"), "utf8");
 
 /** Grab the `<style>…</style>` block of a Svelte component. */
 function styleBlock(source) {
@@ -431,4 +432,161 @@ test("Related reason and Activity action labels use a global underscore-to-space
   );
   assert.match(NOTES, /row\.reason\.replaceAll\("_",\s*" "\)/);
   assert.match(NOTES, /row\.action\.replaceAll\("_",\s*" "\)/);
+});
+
+// --- Task 9: LinkBank.svelte source contracts --------------------------------
+
+test("LinkBank exposes the public refresh(): Promise<void> API", () => {
+  assert.match(LINKBANK, /export async function refresh\s*\(\s*\)\s*:\s*Promise<void>/);
+});
+
+test("LinkBank references every link-bank bridge facade by exact name", () => {
+  for (const method of [
+    "linkbank_get",
+    "linkbank_update",
+    "linkbank_add_link",
+    "linkbank_archive_link",
+    "linkbank_restore_link",
+    "linkbank_category_create",
+    "linkbank_category_rename",
+    "linkbank_category_archive",
+    "linkbank_category_restore",
+    "linkbank_open",
+    "linkbank_export_file",
+    "linkbank_import_preview",
+    "linkbank_import_merge",
+  ]) {
+    assert.match(LINKBANK, new RegExp(`"${method}"`), `LinkBank missing bridge call "${method}"`);
+  }
+  // Native save dialog for export.
+  assert.match(LINKBANK, /"util_save_file"/);
+});
+
+test("LinkBank has no delete action and no target-blank/window.open navigation", () => {
+  assert.doesNotMatch(LINKBANK, /\bDelete\b/, "no delete-labeled UI action anywhere");
+  assert.doesNotMatch(LINKBANK, /target\s*=\s*["']_blank["']/);
+  assert.doesNotMatch(LINKBANK, /window\.open\s*\(/);
+});
+
+test("Links open ONLY through linkbank_open (single call site)", () => {
+  const body = fnBody(LINKBANK, "openLink");
+  assert.match(body, /"linkbank_open"/);
+  const callCount = (LINKBANK.match(/"linkbank_open"/g) || []).length;
+  assert.equal(callCount, 1, "linkbank_open must be called from exactly one function");
+});
+
+test("Copy uses navigator.clipboard with a WebView (execCommand) fallback", () => {
+  assert.match(LINKBANK, /navigator\.clipboard/);
+  assert.match(LINKBANK, /execCommand\(\s*["']copy["']\s*\)/);
+});
+
+test("Pin/favorite route through the existing linkbank_update facade, not a dedicated pin/favorite bridge", () => {
+  const pinBody = fnBody(LINKBANK, "togglePin");
+  const favBody = fnBody(LINKBANK, "toggleFavorite");
+  assert.match(pinBody, /"linkbank_update"/);
+  assert.match(favBody, /"linkbank_update"/);
+});
+
+test("Add/Edit reuse the same detail-pane form (single save handler for both modes)", () => {
+  const body = fnBody(LINKBANK, "handleSaveLink");
+  assert.match(body, /"linkbank_add_link"/);
+  assert.match(body, /"linkbank_update"/);
+});
+
+test("Client-side validation requires name+url before any add/edit bridge call (backend stays authoritative)", () => {
+  const body = fnBody(LINKBANK, "handleSaveLink");
+  const nameCheckIdx = body.search(/!name\s*\|\|\s*!url/);
+  const bridgeIdx = Math.min(
+    ...["linkbank_add_link", "linkbank_update"]
+      .map((m) => body.indexOf(`"${m}"`))
+      .filter((i) => i >= 0),
+  );
+  assert.ok(nameCheckIdx >= 0, "handleSaveLink must guard on missing name/url");
+  assert.ok(nameCheckIdx < bridgeIdx, "name/url guard must run before the bridge call");
+});
+
+test("Archive/restore (link and category) are confirmation-gated: request* only stages, confirm* performs the bridge call", () => {
+  for (const requestFn of ["requestArchiveLink", "requestRestoreLink", "requestArchiveCategory", "requestRestoreCategory"]) {
+    const body = fnBody(LINKBANK, requestFn);
+    assert.doesNotMatch(
+      body,
+      /await callBridge/,
+      `${requestFn} must only stage a pending confirmation, not call the bridge directly`,
+    );
+  }
+  const confirmBody = fnBody(LINKBANK, "confirmPendingAction");
+  for (const method of ["linkbank_archive_link", "linkbank_restore_link", "linkbank_category_archive", "linkbank_category_restore"]) {
+    assert.match(confirmBody, new RegExp(`"${method}"`), `confirmPendingAction missing "${method}"`);
+  }
+});
+
+test("LinkBank mounts ConfirmModal for the gated archive/restore actions", () => {
+  assert.match(LINKBANK, /import ConfirmModal from "\.\/ConfirmModal\.svelte"/);
+  assert.match(LINKBANK, /<ConfirmModal\b/);
+});
+
+test("Import calls preview BEFORE any merge, and preview/merge come from separate functions", () => {
+  const previewBody = fnBody(LINKBANK, "handleImportFile");
+  assert.match(previewBody, /"linkbank_import_preview"/);
+  assert.doesNotMatch(previewBody, /"linkbank_import_merge"/, "the preview handler must never itself call merge");
+
+  const mergeBody = fnBody(LINKBANK, "confirmImportMerge");
+  assert.match(mergeBody, /"linkbank_import_merge"/);
+
+  const previewIdx = LINKBANK.indexOf('"linkbank_import_preview"');
+  const mergeIdx = LINKBANK.indexOf('"linkbank_import_merge"');
+  assert.ok(previewIdx >= 0 && mergeIdx >= 0, "both preview and merge calls must exist");
+  assert.ok(previewIdx < mergeIdx, "preview call site must appear before merge call site in source");
+});
+
+test("Cancelling an import clears the pending payload without ever calling merge", () => {
+  const body = fnBody(LINKBANK, "cancelImport");
+  assert.doesNotMatch(body, /await callBridge/, "cancelImport must not call the bridge (writes nothing)");
+  assert.match(body, /importPreview\s*=\s*null/);
+  assert.match(body, /pendingImportPayload\s*=\s*null/);
+});
+
+test("Hidden file input accepts JSON and CSV", () => {
+  assert.match(LINKBANK, /type="file"[^>]*accept="[^"]*\.json[^"]*\.csv[^"]*"/);
+});
+
+test("Export goes through linkbank_export_file for both json and csv, then the native util_save_file dialog", () => {
+  const body = fnBody(LINKBANK, "exportBank");
+  assert.match(body, /"linkbank_export_file"/);
+  assert.match(body, /"util_save_file"/);
+  assert.match(LINKBANK, /exportBank\(\s*["']json["']\s*\)/);
+  assert.match(LINKBANK, /exportBank\(\s*["']csv["']\s*\)/);
+});
+
+test("Category rail exposes All, Pinned, Favorites, Archived plus active/archived category rows", () => {
+  for (const label of ["All", "Pinned", "Favorites", "Archived"]) {
+    assert.ok(LINKBANK.includes(`>${label}<`) || LINKBANK.includes(`>${label} `), `rail missing "${label}" row`);
+  }
+  assert.match(LINKBANK, /activeCategories|bank\.categories/);
+  assert.match(LINKBANK, /archivedCategories|bank\.archived_categories/);
+});
+
+test("Responsive: at <=1200px the list/detail panel stacks, but the category rail is untouched by that breakpoint", () => {
+  const style = styleBlock(LINKBANK);
+  const mediaMatch = style.match(/@media\s*\(max-width:\s*1200px\)\s*\{([\s\S]*?)\n\s*\}\s*\n/);
+  assert.ok(mediaMatch, "expected an @media (max-width: 1200px) block");
+  const block = mediaMatch[1];
+  assert.match(block, /grid-template-columns:\s*1fr/, "list/detail panel must collapse to a single column");
+  assert.doesNotMatch(block, /\.lb-rail\b/, "the category rail must remain unaffected by the stack breakpoint");
+});
+
+test("Scoped CSS uses design tokens only (no raw hex) and supports reduced motion", () => {
+  const style = styleBlock(LINKBANK);
+  assert.doesNotMatch(style, /#[0-9a-fA-F]{3,8}\b/);
+  assert.match(style, /var\(--color-/);
+  assert.match(style, /prefers-reduced-motion/);
+});
+
+test("Buttons define default/hover/focus/active/disabled states", () => {
+  const style = styleBlock(LINKBANK);
+  assert.match(style, /\.lb-btn[^{]*\{/);
+  assert.match(style, /\.lb-btn:hover/);
+  assert.match(style, /\.lb-btn:focus-visible/);
+  assert.match(style, /\.lb-btn:active/);
+  assert.match(style, /\.lb-btn:disabled/);
 });
