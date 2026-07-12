@@ -162,6 +162,34 @@ test("LinkItem carries canonical details/notes plus legacy-compatible descriptio
   assert.match(body, /description\?:/);
 });
 
+test("LinkItem: pinned/favorite/archived must be literal \"true\" | \"false\", not bare string", () => {
+  const body = interfaceBody(TYPES, "LinkItem");
+  // All three booleans must be typed as literal string union, not bare `string`.
+  assert.match(body, /pinned:\s*"true"\s*\|\s*"false"/);
+  assert.match(body, /favorite:\s*"true"\s*\|\s*"false"/);
+  assert.match(body, /archived:\s*"true"\s*\|\s*"false"/);
+});
+
+test("LinkItem: tags/details/pinned/favorite/created_at/updated_at must be required (not optional)", () => {
+  const body = interfaceBody(TYPES, "LinkItem");
+  // These fields are always populated by _normalize_link, so no `?`.
+  assert.match(body, /tags:\s*string/);
+  assert.match(body, /details:\s*string/);
+  assert.match(body, /pinned:\s*"true"\s*\|\s*"false"/);
+  assert.match(body, /favorite:\s*"true"\s*\|\s*"false"/);
+  assert.match(body, /created_at:\s*string/);
+  assert.match(body, /updated_at:\s*string/);
+  // Verify none have the `?` optional marker.
+  const requiredFields = ["tags:", "details:", "created_at:", "updated_at:"];
+  for (const field of requiredFields) {
+    // Check that the field exists without `?` before the colon.
+    assert.ok(body.includes(field), `LinkItem missing required field ${field}`);
+    // Double-check: make sure there's no `${field}?:` variant.
+    const fieldWithOptional = field.replace(":", "?:");
+    assert.ok(!body.includes(fieldWithOptional), `LinkItem field ${field} should not be optional`);
+  }
+});
+
 test("LinkBankData adds archived_categories alongside categories/links", () => {
   const body = interfaceBody(TYPES, "LinkBankData");
   assert.match(body, /categories:\s*string\[\]/);

@@ -289,16 +289,16 @@ export interface LinkItem {
   name: string;
   url: string;
   category: string;
-  tags?: string;
+  tags: string;
   notes: string;
-  details?: string;
+  details: string;
   /** Legacy-compatible alias for details/notes — never the canonical store. */
   description?: string;
-  pinned?: string;
-  favorite?: string;
-  archived: string;
-  created_at?: string;
-  updated_at?: string;
+  pinned: "true" | "false";
+  favorite: "true" | "false";
+  archived: "true" | "false";
+  created_at: string;
+  updated_at: string;
 }
 
 /** Mirrors LinkBank.to_dict() plus Task 6's archived_categories addition. */
