@@ -205,7 +205,19 @@ export interface AutomationResult {
 
 // ── Second Brain DTOs — match Python second_brain_list/search/get shapes ──
 
-/** Mirrors SecondBrainItem from second_brain_list/search/get. */
+/** Personal Notes vs Project Documents (services.second_brain_service). */
+export type SecondBrainSource = "personal" | "project";
+
+/** How Second Brain opens an item — mirrors the Task 2 index classification. */
+export type SecondBrainOpenMode = "markdown" | "text" | "docx" | "image" | "external";
+
+/** Mirrors the `personal_status` reported by SecondBrainService.workspace(). */
+export type SecondBrainPersonalStatus = "ready" | "unset" | "missing" | "invalid" | "unreadable";
+
+/** Mirrors the `sort` parameter accepted by SecondBrainService.search() (default "newest"). */
+export type SecondBrainSort = "newest" | "oldest" | "az" | "type";
+
+/** Mirrors SecondBrainItem from second_brain_list/search/get/workspace. */
 export interface SecondBrainItem {
   id: string;
   title: string;
@@ -215,6 +227,110 @@ export interface SecondBrainItem {
   pinned: boolean;
   favorite: boolean;
   excerpt?: string;
+  source: SecondBrainSource;
+  relative_path: string;
+  tree_path: string;
+  parent_path: string | null;
+  open_mode: SecondBrainOpenMode;
+  file_format: string;
+  project_path: string | null;
+  project_state: string | null;
+  appcode: string | null;
+  year: string | null;
+  project_name: string | null;
+  drone_name: string | null;
+  locked: boolean;
+  tags: string[];
+  match_reason: string | null;
+}
+
+/** Mirrors SecondBrainService.workspace() — { items, warnings, personal_root, project_root, personal_status }. */
+export interface SecondBrainWorkspace {
+  items: SecondBrainItem[];
+  warnings: string[];
+  personal_root: string | null;
+  project_root: string | null;
+  personal_status: SecondBrainPersonalStatus;
+}
+
+/** Mirrors one row of SecondBrainService.related() — { item, reason, score }. */
+export interface SecondBrainRelated {
+  item: SecondBrainItem;
+  reason: "wiki_link" | "shared_tag" | "same_drone" | "same_project";
+  score: number;
+}
+
+/** Mirrors SecondBrainActivityRow(id, item_id, path, title, source, action, timestamp). */
+export interface SecondBrainActivity {
+  id: string;
+  item_id: string;
+  path: string;
+  title: string;
+  source: SecondBrainSource;
+  action: "opened" | "created" | "edited" | "renamed" | "recycled" | "opened_externally";
+  timestamp: string;
+}
+
+/** Mirrors SecondBrainService.read_image() — guarded preview for indexed image items. */
+export interface SecondBrainImage {
+  data_uri: string | null;
+  name: string | null;
+}
+
+// ── Link Bank DTOs — match services.link_bank_service shapes ──
+
+/**
+ * Mirrors one normalized link row from LinkBank (infrastructure.link_bank_store).
+ * Canonical storage uses `details`/`notes`; `description` is kept only as a
+ * legacy-compatible optional alias (e.g. CSV import/export column naming).
+ */
+export interface LinkItem {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+  tags?: string;
+  notes: string;
+  details?: string;
+  /** Legacy-compatible alias for details/notes — never the canonical store. */
+  description?: string;
+  pinned?: string;
+  favorite?: string;
+  archived: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Mirrors LinkBank.to_dict() plus Task 6's archived_categories addition. */
+export interface LinkBankData {
+  categories: string[];
+  archived_categories: string[];
+  links: LinkItem[];
+}
+
+/** Mirrors LinkBankService.preview_import() — counts + skipped rows, no write. */
+export interface LinkImportPreview {
+  add: number;
+  update: number;
+  conflict: number;
+  invalid: number;
+  skipped: Array<{ row: Record<string, unknown>; reason: string }>;
+}
+
+/** Mirrors LinkBankService.merge_import() — confirmed, atomic merge outcome. */
+export interface LinkImportResult {
+  add: number;
+  update: number;
+  conflict: number;
+  invalid: number;
+  bank: LinkBankData;
+}
+
+/** Mirrors LinkBankService.export_file() — payload for the native util_save_file dialog. */
+export interface LinkExportPayload {
+  filename: string;
+  content: string;
+  format: "json" | "csv";
 }
 
 // ── CR Docs RTE (Piece B) — mirror get_rte_file / save_rte_file shapes ──
