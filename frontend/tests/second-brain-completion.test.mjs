@@ -27,9 +27,9 @@ function styleBlock(source) {
   return match[1];
 }
 
-/** Grab the body of `async function name(` up to the matching brace column. */
+/** Grab the body of `[async] function name(` up to the matching brace column. */
 function fnBody(source, name) {
-  const start = source.search(new RegExp(`async function ${name}\\s*\\(`));
+  const start = source.search(new RegExp(`(?:async\\s+)?function ${name}\\s*\\(`));
   assert.ok(start >= 0, `function ${name} not found`);
   // Body runs from the first "{" after the signature to the first "\n  }" (2-space dedent).
   const open = source.indexOf("{", start);
@@ -378,4 +378,57 @@ test("Scoped CSS uses the approved explorer width clamp, design tokens, reduced 
 test("Scoped CSS uses tokens only — no raw hex literals", () => {
   const style = styleBlock(NOTES);
   assert.doesNotMatch(style, /#[0-9a-fA-F]{3,8}\b/);
+});
+
+// --- Task 8 review fix round 1: double-create / activity / tags / disabled / labels ---
+
+test("commitCreate clears creating + createName BEFORE the create bridge call (double-create guard)", () => {
+  const body = fnBody(NOTES, "commitCreate");
+  const creatingIdx = body.search(/creating\s*=\s*false/);
+  const nameIdx = body.search(/createName\s*=\s*""/);
+  const bridgeIdx = body.search(/await callBridge\(\s*"second_brain_create"/);
+  assert.ok(creatingIdx >= 0, "commitCreate must clear the creating guard");
+  assert.ok(nameIdx >= 0, "commitCreate must clear createName");
+  assert.ok(bridgeIdx >= 0, "commitCreate must call second_brain_create");
+  assert.ok(creatingIdx < bridgeIdx, "creating guard must clear before the bridge await (blur re-entry no-ops)");
+  assert.ok(nameIdx < bridgeIdx, "createName must clear before the bridge await (blur re-entry no-ops)");
+});
+
+test("recordOpen records \"opened\" for inline-loaded/previewed selections, nothing for external", () => {
+  const body = fnBody(NOTES, "recordOpen");
+  assert.match(body, /item\.open_mode === "external"/, "recordOpen must special-case external items");
+  assert.match(body, /"opened"/);
+  assert.doesNotMatch(body, /"opened_externally"/, "recordOpen must not itself record opened_externally");
+});
+
+test("openExternal is the only call site that records \"opened_externally\"", () => {
+  const body = fnBody(NOTES, "openExternal");
+  assert.match(body, /"opened_externally"/);
+  const externalCount = (NOTES.match(/"opened_externally"/g) || []).length;
+  assert.equal(externalCount, 1, "opened_externally must be recorded from exactly one call site (openExternal)");
+});
+
+test("saveTagsFromInput guards against Enter+blur double-fire (one commit per edit)", () => {
+  const body = fnBody(NOTES, "saveTagsFromInput");
+  const guardCheckIdx = body.search(/savingTags\)\s*return/);
+  const guardSetIdx = body.search(/savingTags\s*=\s*true/);
+  const bridgeIdx = body.search(/await callBridge\(\s*"second_brain_tags"/);
+  assert.ok(guardCheckIdx >= 0, "must bail early when a save is already in flight");
+  assert.ok(guardSetIdx >= 0, "must set the guard before the bridge call");
+  assert.ok(bridgeIdx >= 0, "must call second_brain_tags");
+  assert.ok(guardSetIdx < bridgeIdx, "guard must be set before the await (blur re-entry no-ops)");
+});
+
+test("+ New create button is disabled while the personal folder is not ready", () => {
+  assert.match(NOTES, /disabled=\{personalMissing\}[^>]*onclick=\{beginCreate\}/);
+});
+
+test("Related reason and Activity action labels use a global underscore-to-space replace", () => {
+  assert.doesNotMatch(
+    NOTES,
+    /\.replace\("_",\s*" "\)/,
+    "must use replaceAll (or a global regex), not single-shot replace, for underscore labels",
+  );
+  assert.match(NOTES, /row\.reason\.replaceAll\("_",\s*" "\)/);
+  assert.match(NOTES, /row\.action\.replaceAll\("_",\s*" "\)/);
 });

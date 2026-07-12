@@ -186,8 +186,11 @@
   }
 
   async function recordOpen(item: SecondBrainItem) {
-    const action = item.open_mode === "external" || item.open_mode === "image" ? "opened_externally" : "opened";
-    await callBridge("second_brain_activity_record", item.id, action);
+    // External items load nothing on selection — only a real openExternal()
+    // click earns an activity record. Images ARE opened (inline preview), so
+    // they still record here same as markdown/text/docx.
+    if (item.open_mode === "external") return;
+    await callBridge("second_brain_activity_record", item.id, "opened");
   }
 
   async function loadContext(item: SecondBrainItem, token: number) {
@@ -276,11 +279,14 @@
 
   async function commitCreate() {
     const name = createName.trim();
+    // Clear the guard + name synchronously BEFORE the await: unmounting the
+    // `{#if creating}` input fires its onblur → commitCreate re-entry, which
+    // must see an already-empty createName and no-op (mirrors commitRename).
     creating = false;
+    createName = "";
     if (!name) return;
     const target = personalCreateTarget ?? workspace?.personal_root ?? "";
     const resp = await callBridge("second_brain_create", target, name);
-    createName = "";
     if (!resp.ok) {
       addToast(resp.error.message, "error");
       return;
@@ -349,15 +355,24 @@
     await refresh();
   }
 
+  // Guard so Enter (which also calls .blur() to commit) doesn't double-fire
+  // with the resulting onblur re-entry: set true before the await, so the
+  // synchronous blur-triggered re-entry no-ops.
+  let savingTags = false;
   async function saveTagsFromInput(value: string) {
-    if (!selectedItem) return;
-    const tags = value.split(",").map((t) => t.trim()).filter(Boolean);
-    const resp = await callBridge("second_brain_tags", selectedItem.id, tags);
-    if (!resp.ok) {
-      addToast(resp.error.message, "error");
-      return;
+    if (!selectedItem || savingTags) return;
+    savingTags = true;
+    try {
+      const tags = value.split(",").map((t) => t.trim()).filter(Boolean);
+      const resp = await callBridge("second_brain_tags", selectedItem.id, tags);
+      if (!resp.ok) {
+        addToast(resp.error.message, "error");
+        return;
+      }
+      await refresh();
+    } finally {
+      savingTags = false;
     }
-    await refresh();
   }
 
   // ── Recovery: missing personal-root override ──
@@ -553,7 +568,7 @@
         <div class="sb-section">
           <div class="sb-section-head">
             <h3 class="sb-section-title">Personal Notes</h3>
-            <button class="sb-mini-btn" type="button" onclick={beginCreate} title="New note in the selected folder">+ New</button>
+            <button class="sb-mini-btn" type="button" disabled={personalMissing} onclick={beginCreate} title="New note in the selected folder">+ New</button>
           </div>
           {#if personalMissing}
             <div class="sb-recovery">
@@ -679,7 +694,7 @@
           {#each related as row}
             <button class="sb-row" type="button" onclick={() => selectItem(row.item)}>
               <span class="sb-row-title">{row.item.title}</span>
-              <span class="sb-row-reason">{row.reason.replace("_", " ")}</span>
+              <span class="sb-row-reason">{row.reason.replaceAll("_", " ")}</span>
             </button>
           {/each}
         {/if}
@@ -695,7 +710,7 @@
               {@const known = itemsByPath.has(row.path)}
               <li>
                 <button class="sb-activity-row" type="button" disabled={!known} title={known ? "Open" : "Target no longer available"} onclick={() => { const t = itemsByPath.get(row.path); if (t) selectItem(t); }}>
-                  <span class="sb-activity-action">{row.action.replace("_", " ")}</span>
+                  <span class="sb-activity-action">{row.action.replaceAll("_", " ")}</span>
                   <span class="sb-row-title">{row.title}</span>
                   <time>{row.timestamp}</time>
                 </button>
