@@ -377,6 +377,67 @@ def test_recycle_item_folder_drops_descendant_persisted_flags(tmp_path, monkeypa
     assert original_child.id not in service._persisted
 
 
+# ── Fix Round 1: sidecar persist failure must not undo the physical action ──
+
+
+def test_rename_item_survives_metadata_persist_failure(tmp_path, monkeypatch):
+    service = SecondBrainService(folder_provider=lambda: tmp_path)
+    folder = tmp_path / "ideas"
+    folder.mkdir()
+    child = folder / "child.md"
+    child.write_text("child body", encoding="utf-8")
+
+    original_child = next(item for item in service.list_items() if item.title == "child")
+    service.pin_item(original_child.id)
+    service.set_tags(original_child.id, ["roadmap"])
+
+    def boom(*_args, **_kwargs):
+        raise OSError("induced sidecar write failure")
+
+    # Fail only the sidecar write, after the physical rename has to happen.
+    monkeypatch.setattr(sbs_module, "atomic_write_json", boom)
+
+    renamed = service.rename_item(folder, "notions")
+
+    # Physical rename succeeded on disk despite the sidecar write failing.
+    assert not folder.exists()
+    assert (tmp_path / "notions" / "child.md").is_file()
+    assert renamed.path == tmp_path / "notions"
+
+    # Cache was invalidated: the next read reflects the renamed path, not
+    # the stale pre-rename state.
+    moved_child = next(
+        item for item in service.list_items() if item.path == tmp_path / "notions" / "child.md"
+    )
+    assert moved_child.title == "child"
+
+
+def test_recycle_item_survives_metadata_persist_failure(tmp_path, monkeypatch):
+    import send2trash
+
+    monkeypatch.setattr(send2trash, "send2trash", lambda path: os.remove(path))
+
+    service = SecondBrainService(folder_provider=lambda: tmp_path)
+    note = tmp_path / "alpha.md"
+    note.write_text("body", encoding="utf-8")
+
+    original = next(item for item in service.list_items() if item.title == "alpha")
+    service.favorite_item(original.id)
+
+    def boom(*_args, **_kwargs):
+        raise OSError("induced sidecar write failure")
+
+    monkeypatch.setattr(sbs_module, "atomic_write_json", boom)
+
+    service.recycle_item(note)
+
+    # Physical recycle succeeded on disk despite the sidecar write failing.
+    assert not note.exists()
+
+    # Cache was invalidated: the recycled item no longer appears in the index.
+    assert [item for item in service.list_items() if item.title == "alpha"] == []
+
+
 # ── Task 4: read_image (index/type guarded) ──────────────────────────────
 
 

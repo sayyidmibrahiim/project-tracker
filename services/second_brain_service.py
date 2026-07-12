@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import hashlib
+import logging
 import os
 import re
 import unicodedata
@@ -59,6 +60,8 @@ IMAGE_MIME_TYPES = {
     ".bmp": "image/bmp",
 }
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+
+logger = logging.getLogger(__name__)
 
 #: Task 5: supported Second Brain recent-activity actions.
 ACTIVITY_ACTIONS = frozenset(
@@ -349,6 +352,13 @@ class SecondBrainService:
         renamed item is a folder, every descendant already in the index has
         its persisted pin/favorite/tags entry remapped from the old relative
         path to the new one so metadata survives the move.
+
+        The physical rename is the source of truth: once ``rename_file``
+        succeeds, this method always reports success. A sidecar (pin/
+        favorite/tags) persist failure afterward is best-effort — it is
+        logged, the in-memory remap is kept so this process keeps serving
+        correct flags, and the cache is unconditionally invalidated so the
+        next read reflects the renamed path either way.
         """
         folder = self._require_folder()
         item = self._find_by_path(filepath)
@@ -371,8 +381,10 @@ class SecondBrainService:
                     remap[other.id] = self._stable_id(f"personal/{new_relative}{suffix}")
 
         rename_file(folder, source, destination)
-        self._remap_persisted(remap)
-        self._invalidate()
+        try:
+            self._remap_persisted(remap)
+        finally:
+            self._invalidate()
 
         renamed = self._find_by_path(destination)
         if renamed is None:
@@ -387,6 +399,12 @@ class SecondBrainService:
         tags entries for the removed item — and, for a folder, every indexed
         descendant — are dropped so the sidecar never accumulates metadata
         for paths that no longer exist.
+
+        The physical recycle is the source of truth: once ``delete_target``
+        succeeds, this method always reports success. A sidecar persist
+        failure afterward (dropping the stale entries) is best-effort — it
+        is logged and the cache is unconditionally invalidated so the next
+        read no longer shows the recycled item either way.
         """
         folder = self._require_folder()
         item = self._find_by_path(filepath)
@@ -406,8 +424,10 @@ class SecondBrainService:
 
         delete_target(item.path, base=folder)
         self.record_activity(item.id, "recycled")
-        self._drop_persisted(stale_ids)
-        self._invalidate()
+        try:
+            self._drop_persisted(stale_ids)
+        finally:
+            self._invalidate()
 
     def read_image(self, filepath: Path) -> dict[str, object]:
         """Return a base64 data URI preview for an indexed image item only.
@@ -1157,34 +1177,45 @@ class SecondBrainService:
         return new_name if str(parent) == "." else (parent / new_name).as_posix()
 
     def _remap_persisted(self, remap: dict[str, str]) -> None:
-        """Move persisted flags from old ids to new ids (rename support)."""
+        """Move persisted flags from old ids to new ids (rename support).
+
+        Called only after the physical rename already succeeded, so a sidecar
+        write failure here must not be raised back to the caller (that would
+        misreport the whole rename as failed). The remap is kept in-memory
+        regardless — this process keeps serving the correct flags under the
+        new id — and the disk write is best-effort: a failure is logged and
+        the next successful persist writes the remap through.
+        """
         moves = {old: new for old, new in remap.items() if old in self._persisted}
         if not moves:
             return
-        prior = {key: dict(value) for key, value in self._persisted.items()}
         updated = dict(self._persisted)
         for old_id, new_id in moves.items():
             updated[new_id] = updated.pop(old_id)
         self._persisted = updated
         try:
             self._persist()
-        except Exception:
-            self._persisted = prior
-            raise
+        except Exception as exc:
+            logger.warning("Second Brain sidecar persist failed after rename: %s", exc)
 
     def _drop_persisted(self, item_ids: set[str]) -> None:
-        """Remove persisted flags for ids that no longer resolve (recycle support)."""
+        """Remove persisted flags for ids that no longer resolve (recycle support).
+
+        Called only after the physical recycle already succeeded, so a
+        sidecar write failure here must not be raised back to the caller
+        (the item is already gone from disk regardless). The drop is kept
+        in-memory and the disk write is best-effort: a failure is logged and
+        the next successful persist writes the drop through.
+        """
         if not any(item_id in self._persisted for item_id in item_ids):
             return
-        prior = {key: dict(value) for key, value in self._persisted.items()}
         self._persisted = {
             key: value for key, value in self._persisted.items() if key not in item_ids
         }
         try:
             self._persist()
-        except Exception:
-            self._persisted = prior
-            raise
+        except Exception as exc:
+            logger.warning("Second Brain sidecar persist failed after recycle: %s", exc)
 
     def _folder(self) -> Path | None:
         if self._folder_provider is None:
