@@ -1,6 +1,7 @@
 """Phase C.12 — SecondBrainService foundation tests (TDD: RED first)."""
 
 import json
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -205,6 +206,61 @@ def test_tags_normalize_persist_and_upgrade_v1_sidecar(tmp_path: Path):
     assert reloaded.get_item("note-1").tags == ("Ops", "DB")
 
 
+def test_set_tags_collapses_nfc_and_nfd_duplicates(tmp_path: Path):
+    """Precomposed vs combining-character spellings of one word must dedupe."""
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    service = SecondBrainService(items_provider=_items, folder_provider=lambda: folder)
+
+    nfc_cafe = unicodedata.normalize("NFC", "café")
+    nfd_cafe = unicodedata.normalize("NFD", "café")
+    assert nfc_cafe != nfd_cafe  # sanity: genuinely distinct code point sequences
+
+    updated = service.set_tags("note-1", [nfc_cafe, nfd_cafe])
+
+    assert updated.tags == (nfc_cafe,)
+
+
+def test_related_breaks_equal_scores_by_title_casefold():
+    current = SecondBrainItem(
+        id="current",
+        title="Current",
+        path=Path("/other/current.md"),
+        item_type="note",
+        tags=("ops",),
+    )
+    items = [
+        current,
+        SecondBrainItem(
+            id="b-item", title="Bravo", path=Path("/other/b.md"), item_type="note", tags=("OPS",)
+        ),
+        SecondBrainItem(
+            id="a-item", title="alpha", path=Path("/other/a.md"), item_type="note", tags=("Ops",)
+        ),
+    ]
+    service = SecondBrainService(items_provider=lambda: items)
+
+    related = service.related("current")
+
+    assert [row["item"].id for row in related] == ["a-item", "b-item"]
+    assert related[0]["reason"] == related[1]["reason"] == "shared_tag"
+    assert related[0]["score"] == related[1]["score"]
+
+
+def test_search_invalid_sort_raises_value_error():
+    service = SecondBrainService(items_provider=_items)
+
+    with pytest.raises(ValueError):
+        service.search("", sort="bogus")
+
+
+def test_search_invalid_date_filter_raises_value_error():
+    service = SecondBrainService(items_provider=_items)
+
+    with pytest.raises(ValueError):
+        service.search("", date_filter="not-a-date")
+
+
 def test_search_reports_match_reason_filters_then_sorts():
     items = [
         SecondBrainItem(
@@ -212,7 +268,10 @@ def test_search_reports_match_reason_filters_then_sorts():
             title="Alpha Runbook",
             path=Path("/brain/alpha.md"),
             item_type="note",
-            updated_at=datetime(2026, 1, 2, 8, tzinfo=timezone.utc),
+            # Local noon, converted via .astimezone() the same way production
+            # code's _matches_date() does -- keeps the wall-clock date fixed at
+            # 2026-01-02 on any host timezone (avoids UTC-day-boundary drift).
+            updated_at=datetime(2026, 1, 2, 12, 0, 0).astimezone(),
             excerpt="rollback procedure lives here",
             source="personal",
             open_mode="markdown",

@@ -6,6 +6,7 @@ import json
 import hashlib
 import os
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
@@ -923,7 +924,7 @@ class SecondBrainService:
         for raw in raw_tags:
             if not isinstance(raw, str):
                 continue
-            tag = raw.strip()
+            tag = unicodedata.normalize("NFC", raw.strip())
             key = tag.casefold()
             if tag and key not in seen:
                 seen.add(key)
