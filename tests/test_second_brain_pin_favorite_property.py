@@ -123,3 +123,28 @@ def test_property_pin_favorite_persistence_round_trips(tmp_path: Path) -> None:
                 f"operations={operations}, expected={expected[item_id]['favorite']}, "
                 f"restored={restored.favorite})"
             )
+
+
+def test_property_tag_normalization_and_persistence_round_trips(tmp_path: Path) -> None:
+    for seed in range(100):
+        rng = random.Random(seed)
+        folder = tmp_path / f"tags_{seed}"
+        folder.mkdir()
+        provider = _make_items_provider(["item-0"])
+        raw_tags = [
+            rng.choice([" Ops ", "ops", "DB", "db", "Release", " release ", ""])
+            for _ in range(rng.randint(0, 20))
+        ]
+        expected: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_tags:
+            tag = raw.strip()
+            if tag and tag.casefold() not in seen:
+                seen.add(tag.casefold())
+                expected.append(tag)
+
+        service = SecondBrainService(items_provider=provider, folder_provider=lambda: folder)
+        service.set_tags("item-0", raw_tags)
+        reloaded = SecondBrainService(items_provider=provider, folder_provider=lambda: folder)
+
+        assert reloaded.get_item("item-0").tags == tuple(expected)

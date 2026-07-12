@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime, timezone
 from json import JSONDecodeError
 from pathlib import Path, PurePosixPath
 
@@ -30,7 +31,7 @@ from infrastructure.metadata_store import MetadataStore, atomic_write_json
 #: rebuildable Cache_Db so the pin/favorite metadata travels with the notes
 #: folder and rebuilds trivially (design §13).
 INDEX_FILENAME = ".project_tracker_index.json"
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 MAX_SEARCHABLE_BYTES = 1024 * 1024
 INTERNAL_DIRECTORY_NAMES = frozenset({".git", ".rte", "cicd"})
 INTERNAL_FILE_NAMES = frozenset(
@@ -45,6 +46,7 @@ TEXT_EXTENSIONS = frozenset(
     }
 )
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".bmp"})
+WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 
 @dataclass(frozen=True)
@@ -103,27 +105,41 @@ class SecondBrainService:
         self._personal_root: Path | None = None
         self._project_root: Path | None = None
         self._personal_status = "unset"
-        self._persisted: dict[str, dict[str, bool]] = {}
+        self._persisted: dict[str, dict[str, object]] = {}
         self._persisted_loaded = False
+        self._context_initialized = False
+        self._folder_snapshot: Path | None = None
+        self._root_snapshot: Path | None = None
 
     # ── reads ────────────────────────────────────────────────────────
     def list_items(self) -> list[SecondBrainItem]:
         """Return Second Brain items with persisted pin/favorite applied."""
         return list(self._items())
 
-    def search(self, query: str) -> list[SecondBrainItem]:
-        """Search items by title, path, or complete indexed safe-text content."""
+    def search(
+        self,
+        query: str,
+        date_filter: str = "",
+        sort: str = "newest",
+        type_filter: str = "all",
+        source_filter: str = "all",
+    ) -> list[SecondBrainItem]:
+        """Filter and search the complete cached index, then sort results."""
         normalized = query.strip().casefold()
-        items = self._items()
-        if not normalized:
-            return list(items)
-        return [
+        filtered = [
             item
-            for item in items
-            if normalized in item.title.casefold()
-            or normalized in str(item.path).casefold()
-            or normalized in (self._full_text_by_id or {}).get(item.id, "").casefold()
+            for item in self._items()
+            if self._matches_source(item, source_filter)
+            and self._matches_type(item, type_filter)
+            and self._matches_date(item, date_filter)
         ]
+        matched: list[SecondBrainItem] = []
+        for item in filtered:
+            reason = self._match_reason(item, normalized) if normalized else None
+            if normalized and reason is None:
+                continue
+            matched.append(replace(item, match_reason=reason))
+        return self._sort_items(matched, sort)
 
     def get_item(self, item_id: str) -> SecondBrainItem | None:
         """Return matching item or None."""
@@ -148,6 +164,78 @@ class SecondBrainService:
     def favorite_item(self, item_id: str) -> SecondBrainItem:
         """Toggle the favorite flag and persist it durably."""
         return self._toggle_flag(item_id, "favorite")
+
+    def set_tags(self, item_id: str, tags: list[str]) -> SecondBrainItem:
+        """Replace one item's normalized tags and persist them atomically."""
+        items = self._items_by_id_map()
+        item = items.get(item_id)
+        if item is None:
+            raise KeyError(f"Second Brain item not found: {item_id}")
+        normalized = self._normalize_tags(tags)
+        prior_persisted = {key: dict(value) for key, value in self._persisted.items()}
+        entry = {
+            "pinned": item.pinned,
+            "favorite": item.favorite,
+            "tags": list(item.tags),
+        }
+        entry.update(self._persisted.get(item_id, {}))
+        entry["tags"] = list(normalized)
+        self._persisted[item_id] = entry
+        try:
+            self._persist()
+        except Exception:
+            self._persisted = prior_persisted
+            raise
+        updated = replace(item, tags=normalized)
+        items[item_id] = updated
+        return updated
+
+    def related(self, item_id: str, limit: int = 20) -> list[dict[str, object]]:
+        """Rank wiki, tag, Drone, and project relationships deterministically."""
+        items = self._items_by_id_map()
+        current = items.get(item_id)
+        if current is None:
+            raise KeyError(f"Second Brain item not found: {item_id}")
+        if limit <= 0:
+            return []
+
+        current_wiki_targets = self._wiki_targets(current)
+        current_tags = {tag.casefold() for tag in current.tags}
+        ranked: list[dict[str, object]] = []
+        scores = {"wiki_link": 4, "shared_tag": 3, "same_drone": 2, "same_project": 1}
+        for candidate in items.values():
+            if candidate.id == current.id or candidate.item_type == "folder":
+                continue
+            reason: str | None = None
+            if self._wiki_matches(current_wiki_targets, candidate) or self._wiki_matches(
+                self._wiki_targets(candidate), current
+            ):
+                reason = "wiki_link"
+            elif current_tags.intersection(tag.casefold() for tag in candidate.tags):
+                reason = "shared_tag"
+            elif (
+                current.project_path is not None
+                and current.project_path == candidate.project_path
+                and current.drone_name
+                and current.drone_name == candidate.drone_name
+            ):
+                reason = "same_drone"
+            elif current.project_path is not None and current.project_path == candidate.project_path:
+                reason = "same_project"
+            if reason is not None:
+                ranked.append({"item": candidate, "reason": reason, "score": scores[reason]})
+        ranked.sort(
+            key=lambda row: (
+                -int(row["score"]),
+                str(row["item"].title).casefold(),
+                str(row["item"].path).casefold(),
+            )
+        )
+        return ranked[:limit]
+
+    def invalidate(self) -> None:
+        """Public cache invalidation for mutations and manual refresh."""
+        self._invalidate()
 
     # ── note CRUD ─────────────────────────────────────────────────────
     def create_note(self, parent: Path, filename: str, content: str = "") -> Path:
@@ -228,6 +316,7 @@ class SecondBrainService:
 
     # ── internals ─────────────────────────────────────────────────────
     def _items(self) -> list[SecondBrainItem]:
+        self._sync_context()
         if self._items_by_id is None:
             self._load_persisted()
             indexed_items, full_text = self._build_index()
@@ -237,13 +326,33 @@ class SecondBrainService:
                 if flags is not None:
                     item = replace(
                         item,
-                        pinned=flags["pinned"],
-                        favorite=flags["favorite"],
+                        pinned=bool(flags.get("pinned", False)),
+                        favorite=bool(flags.get("favorite", False)),
+                        tags=self._normalize_tags(flags.get("tags", [])),
                     )
                 built[item.id] = item
             self._items_by_id = built
             self._full_text_by_id = full_text
         return list(self._items_by_id.values())
+
+    def _sync_context(self) -> None:
+        folder = self._folder()
+        root = self._root()
+        if not self._context_initialized:
+            self._context_initialized = True
+            self._folder_snapshot = folder
+            self._root_snapshot = root
+            return
+        folder_changed = folder != self._folder_snapshot
+        root_changed = root != self._root_snapshot
+        if not folder_changed and not root_changed:
+            return
+        self._folder_snapshot = folder
+        self._root_snapshot = root
+        self._invalidate()
+        if folder_changed:
+            self._persisted = {}
+            self._persisted_loaded = False
 
     def _items_by_id_map(self) -> dict[str, SecondBrainItem]:
         self._items()
@@ -258,8 +367,8 @@ class SecondBrainService:
 
     def _build_index(self) -> tuple[list[SecondBrainItem], dict[str, str]]:
         self._warnings = []
-        self._personal_root = self._folder()
-        self._project_root = self._root()
+        self._personal_root = self._folder_snapshot
+        self._project_root = self._root_snapshot
         self._personal_status = self._personal_folder_status(self._personal_root)
 
         if self._items_provider is not None:
@@ -682,6 +791,145 @@ class SecondBrainService:
     def _warn(self, path: Path, exc: BaseException, prefix: str) -> None:
         self._warnings.append(f"{prefix}: {path} ({exc})")
 
+    def _match_reason(self, item: SecondBrainItem, query: str) -> str | None:
+        if query in item.title.casefold():
+            return "title"
+        path_fields = " ".join(
+            (item.path.name, str(item.path), item.relative_path, item.tree_path)
+        ).casefold()
+        if query in path_fields:
+            return "path"
+        if query in (self._full_text_by_id or {}).get(item.id, "").casefold():
+            return "content"
+        if any(query in tag.casefold() for tag in item.tags):
+            return "tag"
+        context = " ".join(
+            value
+            for value in (
+                item.appcode,
+                item.year,
+                item.project_name,
+                item.drone_name,
+                item.project_state,
+            )
+            if value
+        ).casefold()
+        return "context" if query in context else None
+
+    @staticmethod
+    def _matches_source(item: SecondBrainItem, source_filter: str) -> bool:
+        source = source_filter.strip().casefold()
+        return source in {"", "all"} or item.source.casefold() == source
+
+    @staticmethod
+    def _matches_type(item: SecondBrainItem, type_filter: str) -> bool:
+        requested = type_filter.strip().casefold().removeprefix(".")
+        if requested in {"", "all"}:
+            return True
+        return requested in {
+            item.item_type.casefold(),
+            item.open_mode.casefold(),
+            item.file_format.casefold(),
+        }
+
+    @staticmethod
+    def _matches_date(item: SecondBrainItem, date_filter: str) -> bool:
+        requested = date_filter.strip().casefold()
+        if requested in {"", "all"}:
+            return True
+        if item.updated_at is None:
+            return False
+        if requested == "today":
+            target = datetime.now().astimezone().date()
+        else:
+            try:
+                target = date.fromisoformat(requested)
+            except ValueError as exc:
+                raise ValueError("Second Brain date filter must be YYYY-MM-DD, today, or empty") from exc
+        updated = item.updated_at
+        updated_date = updated.astimezone().date() if updated.tzinfo is not None else updated.date()
+        return updated_date == target
+
+    def _sort_items(self, items: list[SecondBrainItem], sort: str) -> list[SecondBrainItem]:
+        requested = sort.strip().casefold() or "newest"
+        if requested == "newest":
+            return sorted(
+                items,
+                key=lambda item: (
+                    self._timestamp(item) is None,
+                    -(self._timestamp(item) or 0.0),
+                    item.title.casefold(),
+                    str(item.path).casefold(),
+                ),
+            )
+        if requested == "oldest":
+            return sorted(
+                items,
+                key=lambda item: (
+                    self._timestamp(item) is None,
+                    self._timestamp(item) or 0.0,
+                    item.title.casefold(),
+                    str(item.path).casefold(),
+                ),
+            )
+        if requested == "az":
+            return sorted(items, key=lambda item: (item.title.casefold(), str(item.path).casefold()))
+        if requested == "type":
+            return sorted(
+                items,
+                key=lambda item: (
+                    (item.file_format or item.item_type).casefold(),
+                    item.title.casefold(),
+                    str(item.path).casefold(),
+                ),
+            )
+        raise ValueError(f"Unsupported Second Brain sort: {sort}")
+
+    @staticmethod
+    def _timestamp(item: SecondBrainItem) -> float | None:
+        updated = item.updated_at
+        if updated is None:
+            return None
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        return updated.timestamp()
+
+    def _wiki_targets(self, item: SecondBrainItem) -> set[str]:
+        content = (self._full_text_by_id or {}).get(item.id, "")
+        return {
+            target.strip().replace("\\", "/").casefold()
+            for target in WIKI_LINK_PATTERN.findall(content)
+            if target.strip()
+        }
+
+    @staticmethod
+    def _wiki_matches(targets: set[str], candidate: SecondBrainItem) -> bool:
+        if not targets:
+            return False
+        names = {
+            candidate.title.casefold(),
+            candidate.path.name.casefold(),
+            candidate.relative_path.replace("\\", "/").casefold(),
+            candidate.tree_path.replace("\\", "/").casefold(),
+        }
+        return bool(targets.intersection(names))
+
+    @staticmethod
+    def _normalize_tags(raw_tags: object) -> tuple[str, ...]:
+        if not isinstance(raw_tags, list | tuple):
+            return ()
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_tags:
+            if not isinstance(raw, str):
+                continue
+            tag = raw.strip()
+            key = tag.casefold()
+            if tag and key not in seen:
+                seen.add(key)
+                normalized.append(tag)
+        return tuple(normalized)
+
     def _toggle_flag(self, item_id: str, flag: str) -> SecondBrainItem:
         items = self._items_by_id_map()
         item = items.get(item_id)
@@ -690,7 +938,7 @@ class SecondBrainService:
 
         new_value = not getattr(item, flag)
         prior_persisted = {key: dict(value) for key, value in self._persisted.items()}
-        entry = {"pinned": item.pinned, "favorite": item.favorite}
+        entry = {"pinned": item.pinned, "favorite": item.favorite, "tags": list(item.tags)}
         entry.update(self._persisted.get(item_id, {}))
         entry[flag] = new_value
         self._persisted[item_id] = entry
@@ -739,12 +987,13 @@ class SecondBrainService:
         items = raw.get("items")
         if not isinstance(items, dict):
             return
-        restored: dict[str, dict[str, bool]] = {}
+        restored: dict[str, dict[str, object]] = {}
         for item_id, flags in items.items():
             if isinstance(flags, dict):
                 restored[str(item_id)] = {
                     "pinned": bool(flags.get("pinned", False)),
                     "favorite": bool(flags.get("favorite", False)),
+                    "tags": list(self._normalize_tags(flags.get("tags", []))),
                 }
         self._persisted = restored
 
