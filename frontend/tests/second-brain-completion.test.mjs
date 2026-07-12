@@ -18,6 +18,25 @@ import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TYPES = readFileSync(resolve(__dirname, "../src/lib/types.ts"), "utf8");
+const NOTES = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrainNotes.svelte"), "utf8");
+
+/** Grab the `<style>…</style>` block of a Svelte component. */
+function styleBlock(source) {
+  const match = source.match(/<style>([\s\S]*?)<\/style>/);
+  assert.ok(match, "component has a scoped <style> block");
+  return match[1];
+}
+
+/** Grab the body of `async function name(` up to the matching brace column. */
+function fnBody(source, name) {
+  const start = source.search(new RegExp(`async function ${name}\\s*\\(`));
+  assert.ok(start >= 0, `function ${name} not found`);
+  // Body runs from the first "{" after the signature to the first "\n  }" (2-space dedent).
+  const open = source.indexOf("{", start);
+  const end = source.indexOf("\n  }", open);
+  assert.ok(end > open, `function ${name} body not delimited`);
+  return source.slice(open, end);
+}
 
 /** Extract the body of `export interface Name { ... }` (non-greedy, first match). */
 function interfaceBody(source, name) {
@@ -251,4 +270,112 @@ test("RteCapabilityLevel, RteSaveStrategy, RteEditorFeature type aliases are unt
     /export type RteSaveStrategy = "markdown" \| "plain_text" \| "html" \| "docx_legacy" \| "docx_pipeline" \| "none";/,
   );
   assert.match(TYPES, /export type RteEditorFeature =/);
+});
+
+// --- Task 8: SecondBrainNotes.svelte source contracts ------------------------
+
+test("SecondBrainNotes imports and mounts the shared NotesEditor unchanged", () => {
+  assert.match(NOTES, /import NotesEditor from "\.\/NotesEditor\.svelte"/);
+  assert.match(NOTES, /<NotesEditor\b/);
+});
+
+test("SecondBrainNotes has no forked editor: no <textarea> and no markdown-toolbar shim", () => {
+  assert.doesNotMatch(NOTES, /<textarea/);
+  assert.doesNotMatch(NOTES, /insertMarkdown/);
+});
+
+test("SecondBrainNotes exposes the public refresh() and flush() API", () => {
+  assert.match(NOTES, /export async function refresh\s*\(/);
+  assert.match(NOTES, /export async function flush\s*\(/);
+});
+
+test("Selection flushes the current editor BEFORE assigning/loading the next item", () => {
+  const body = fnBody(NOTES, "selectItem");
+  const flushIdx = body.search(/flushCurrentEditor\s*\(/);
+  const assignIdx = body.search(/selectedItem\s*=\s*item/);
+  assert.ok(flushIdx >= 0, "selectItem must flush the current editor");
+  assert.ok(assignIdx >= 0, "selectItem must assign the requested item");
+  assert.ok(flushIdx < assignIdx, "flush must run before the selection assignment");
+  // Abort + retain when flush reports a failed save.
+  assert.match(body, /flushed === false/);
+});
+
+test("Selection uses the second-brain-rte interaction lock", () => {
+  assert.match(NOTES, /"second-brain-rte"/);
+  assert.match(NOTES, /app:interaction-lock/);
+});
+
+test("Selection routes docx→rteDocumentOpen, markdown/text→getRteFile, image→second_brain_image", () => {
+  const body = fnBody(NOTES, "selectItem");
+  assert.match(body, /rteDocumentOpen\s*\(/);
+  assert.match(body, /getRteFile\s*\(/);
+  assert.match(body, /"second_brain_image"/);
+});
+
+test("Stale loads are ignored via a monotonic request token", () => {
+  assert.match(NOTES, /\+\+loadSeq/);
+  assert.match(NOTES, /token !== loadSeq/);
+});
+
+test("Search is debounced at 150 ms with a stale-result guard", () => {
+  assert.match(NOTES, /setTimeout\([^,]+,\s*150\)/);
+  assert.match(NOTES, /\+\+searchSeq/);
+  assert.match(NOTES, /seq !== searchSeq/);
+});
+
+test("onSaved records via second_brain_mark_saved (no excerpt duplication)", () => {
+  assert.match(NOTES, /"second_brain_mark_saved"/);
+});
+
+test("Explorer sections use the approved labels", () => {
+  for (const label of ["Search Results", "Pinned", "Favorites", "Personal Notes", "Project Documents"]) {
+    assert.ok(NOTES.includes(label), `explorer missing section label "${label}"`);
+  }
+});
+
+test("Recovery affordances expose Browse folder and Use default folder", () => {
+  assert.match(NOTES, /Browse folder/);
+  assert.match(NOTES, /Use default folder/);
+  assert.match(NOTES, /"second_brain_use_default_folder"/);
+});
+
+test("Context shelf exposes Related and Activity backed by their bridges", () => {
+  assert.match(NOTES, /Related/);
+  assert.match(NOTES, /Activity/);
+  assert.match(NOTES, /"second_brain_related"/);
+  assert.match(NOTES, /"second_brain_activity_list"/);
+});
+
+test("Keyboard affordances: Ctrl+F search, F2 rename, Enter commit, Escape cancel, Delete recycle", () => {
+  assert.match(NOTES, /ctrlKey|metaKey/);
+  assert.match(NOTES, /"F2"/);
+  assert.match(NOTES, /"Enter"/);
+  assert.match(NOTES, /"Escape"/);
+  assert.match(NOTES, /"Delete"/);
+});
+
+test("Inline rename/recycle bridges and pin/favorite/tags sidecar updates exist", () => {
+  assert.match(NOTES, /"second_brain_rename"/);
+  assert.match(NOTES, /"second_brain_recycle"/);
+  assert.match(NOTES, /"second_brain_pin"/);
+  assert.match(NOTES, /"second_brain_favorite"/);
+  assert.match(NOTES, /"second_brain_tags"/);
+});
+
+test("Delete key recycle is gated to Personal items only", () => {
+  // Delete handling must check source === "personal" before arming recycle.
+  assert.match(NOTES, /"Delete"[\s\S]{0,160}source === "personal"/);
+});
+
+test("Scoped CSS uses the approved explorer width clamp, design tokens, reduced motion, responsive shelf", () => {
+  const style = styleBlock(NOTES);
+  assert.match(style, /clamp\(260px,\s*24vw,\s*340px\)/);
+  assert.match(style, /var\(--color-/);
+  assert.match(style, /prefers-reduced-motion/);
+  assert.match(style, /@media/);
+});
+
+test("Scoped CSS uses tokens only — no raw hex literals", () => {
+  const style = styleBlock(NOTES);
+  assert.doesNotMatch(style, /#[0-9a-fA-F]{3,8}\b/);
 });
