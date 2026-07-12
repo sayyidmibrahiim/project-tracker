@@ -93,3 +93,86 @@ def test_pin_and_favorite_missing_item_raise_key_error():
 
     with pytest.raises(KeyError, match="Second Brain item not found: missing"):
         service.favorite_item("missing")
+
+
+@pytest.mark.parametrize(
+    ("folder_factory", "expected"),
+    [
+        (lambda tmp: None, "unset"),
+        (lambda tmp: tmp / "missing", "missing"),
+        (lambda tmp: tmp / "configured-file", "invalid"),
+        (lambda tmp: tmp / "notes", "ready"),
+    ],
+)
+def test_workspace_reports_personal_folder_status(tmp_path: Path, folder_factory, expected: str):
+    folder = folder_factory(tmp_path)
+    if expected == "invalid":
+        assert folder is not None
+        folder.write_text("not a directory", encoding="utf-8")
+    elif expected == "ready":
+        assert folder is not None
+        folder.mkdir()
+
+    service = SecondBrainService(folder_provider=lambda: folder)
+    workspace = service.workspace()
+
+    assert workspace["personal_status"] == expected
+    assert workspace["personal_root"] == folder
+
+
+def test_workspace_reports_unreadable_root_without_fallback(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    original_scandir = __import__("os").scandir
+
+    def fail_root(path):
+        if Path(path) == folder:
+            raise PermissionError("denied")
+        return original_scandir(path)
+
+    monkeypatch.setattr("services.second_brain_service.os.scandir", fail_root)
+    service = SecondBrainService(folder_provider=lambda: folder)
+
+    workspace = service.workspace()
+
+    assert workspace["personal_status"] == "unreadable"
+    assert workspace["personal_root"] == folder
+    assert workspace["items"] == []
+    assert any("denied" in warning.casefold() or "unreadable" in warning.casefold() for warning in workspace["warnings"])
+
+
+def test_full_text_search_is_separate_from_capped_excerpt(tmp_path: Path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / "long.md").write_text("x" * 250 + " deep-keyword", encoding="utf-8")
+    service = SecondBrainService(folder_provider=lambda: folder)
+
+    matches = service.search("deep-keyword")
+
+    assert [item.title for item in matches] == ["long"]
+    assert len(matches[0].excerpt) == 200
+    assert not hasattr(matches[0], "content")
+
+
+def test_unreadable_personal_file_warns_but_keeps_other_items(tmp_path: Path, monkeypatch):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    good = folder / "good.md"
+    bad = folder / "bad.md"
+    good.write_text("green-content-token", encoding="utf-8")
+    bad.write_text("blocked", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def guarded_read_text(self, *args, **kwargs):
+        if self == bad:
+            raise PermissionError("blocked file")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    service = SecondBrainService(folder_provider=lambda: folder)
+
+    workspace = service.workspace()
+
+    assert {item.title for item in workspace["items"]} == {"good", "bad"}
+    assert service.search("green-content-token")[0].title == "good"
+    assert any("bad.md" in warning for warning in workspace["warnings"])

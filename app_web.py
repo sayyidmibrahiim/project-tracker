@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import sys
 import tempfile
@@ -48,7 +47,7 @@ from services.notification_service import NotificationService
 from services.project_service import ProjectService
 from services.report_service import ReportService
 from services.scheduler_service import SchedulerService
-from services.second_brain_service import SecondBrainItem, SecondBrainService
+from services.second_brain_service import SecondBrainService
 from services.teams_service import TeamsMessage, TeamsService
 from web.js_api import JsApi, fail, ok
 
@@ -177,41 +176,6 @@ def create_js_api(
     _linkbank_store = linkbank_store or LinkBankStore()
     _linkbank_service = LinkBankService(_linkbank_store)
 
-    def _second_brain_items_provider() -> list[SecondBrainItem]:
-        """Read-only filesystem index from AppSettings.second_brain_folder."""
-        folder = _settings_store.read().second_brain_folder
-        if folder is None or not folder.is_dir():
-            return []
-
-        items: list[SecondBrainItem] = []
-        for path in folder.rglob("*"):
-            if not path.is_file() or any(part.startswith(".") for part in path.relative_to(folder).parts):
-                continue
-            relative = path.relative_to(folder).as_posix()
-            item_id = hashlib.sha1(relative.encode("utf-8")).hexdigest()[:16]
-            suffix = path.suffix.casefold()
-            excerpt = ""
-            if suffix in {".md", ".txt"}:
-                try:
-                    excerpt = path.read_text(encoding="utf-8", errors="replace")[:200]
-                except OSError:
-                    excerpt = ""
-            try:
-                updated_at = datetime.fromtimestamp(path.stat().st_mtime).astimezone()
-            except OSError:
-                updated_at = None
-            items.append(
-                SecondBrainItem(
-                    id=item_id,
-                    title=path.stem,
-                    path=path,
-                    item_type="note" if suffix in {".md", ".txt"} else "file",
-                    updated_at=updated_at,
-                    excerpt=excerpt,
-                )
-            )
-        return sorted(items, key=lambda item: (item.title.casefold(), str(item.path).casefold()))
-
     class _LiveDashboardService:
         def __init__(self, dashboard: DashboardService, cache: CacheDb, settings_store: SettingsStore, metadata_store: MetadataStore) -> None:
             self._dashboard = dashboard
@@ -259,8 +223,9 @@ def create_js_api(
         project_provider=lambda: dashboard_svc.list_projects(),
     )
     second_brain_svc = SecondBrainService(
-        items_provider=_second_brain_items_provider,
         folder_provider=lambda: _settings_store.read().second_brain_folder,
+        root_provider=lambda: _settings_store.read().root_folder,
+        metadata_store=_metadata_store,
     )
     email_svc = EmailService()
     approval_svc = ApprovalPollingService(
