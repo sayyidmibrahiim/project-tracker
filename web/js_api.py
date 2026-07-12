@@ -410,10 +410,10 @@ class LinkBankDependencyProtocol(Protocol):
     def export_file(self, fmt: str) -> object:
         """Export link bank as JSON or CSV text."""
 
-    def preview_import(self, payload: dict[str, object]) -> object:
+    def preview_import(self, format_name: str, content: str) -> object:
         """Preview an import merge without writing."""
 
-    def merge_import(self, payload: dict[str, object]) -> object:
+    def merge_import(self, format_name: str, content: str) -> object:
         """Apply a confirmed import merge, writing once atomically."""
 
 
@@ -2345,14 +2345,14 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_CATEGORY_RESTORE_FAILED")
 
-    def linkbank_open_link(self, link_id: str) -> dict[str, object]:
+    def linkbank_open(self, link_id: str) -> dict[str, object]:
         """Open a link's URL in the OS default browser through injected dependency."""
         try:
             if self._linkbank_dependency is None:
                 return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
             return ok(_to_frontend_safe(self._linkbank_dependency.open_link(link_id)))
         except Exception as exc:
-            return fail(str(exc), code="LINKBANK_OPEN_LINK_FAILED")
+            return fail(str(exc), code="LINKBANK_OPEN_FAILED")
 
     def linkbank_export_file(self, fmt: str = "json") -> dict[str, object]:
         """Export link bank as JSON/CSV text through injected dependency."""
@@ -2363,23 +2363,23 @@ class JsApi:
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_EXPORT_FILE_FAILED")
 
-    def linkbank_preview_import(self, payload: dict[str, object]) -> dict[str, object]:
+    def linkbank_import_preview(self, format_name: str, content: str) -> dict[str, object]:
         """Preview an import merge (no write) through injected dependency."""
         try:
             if self._linkbank_dependency is None:
                 return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._linkbank_dependency.preview_import(payload)))
+            return ok(_to_frontend_safe(self._linkbank_dependency.preview_import(format_name, content)))
         except Exception as exc:
-            return fail(str(exc), code="LINKBANK_PREVIEW_IMPORT_FAILED")
+            return fail(str(exc), code="LINKBANK_IMPORT_PREVIEW_FAILED")
 
-    def linkbank_merge_import(self, payload: dict[str, object]) -> dict[str, object]:
+    def linkbank_import_merge(self, format_name: str, content: str) -> dict[str, object]:
         """Apply a confirmed import merge (atomic write) through injected dependency."""
         try:
             if self._linkbank_dependency is None:
                 return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._linkbank_dependency.merge_import(payload)))
+            return ok(_to_frontend_safe(self._linkbank_dependency.merge_import(format_name, content)))
         except Exception as exc:
-            return fail(str(exc), code="LINKBANK_MERGE_IMPORT_FAILED")
+            return fail(str(exc), code="LINKBANK_IMPORT_MERGE_FAILED")
 
     def automation_list_rules(self) -> dict[str, object]:
         """Return automation rules."""

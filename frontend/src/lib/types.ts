@@ -319,16 +319,15 @@ export interface LinkImportPreview {
 
 /** Mirrors LinkBankService.merge_import() — confirmed, atomic merge outcome. */
 export interface LinkImportResult {
-  add: number;
-  update: number;
-  conflict: number;
+  added: number;
+  updated: number;
+  conflicts: number;
   invalid: number;
-  bank: LinkBankData;
 }
 
 /** Mirrors LinkBankService.export_file() — payload for the native util_save_file dialog. */
 export interface LinkExportPayload {
-  filename: string;
+  suggested_name: string;
   content: string;
   format: "json" | "csv";
 }

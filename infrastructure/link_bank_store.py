@@ -23,6 +23,12 @@ class LinkBank:
         categories = data.get("categories", [])
         links = data.get("links", [])
         archived_categories = data.get("archived_categories", [])
+        if not isinstance(categories, list):
+            categories = []
+        if not isinstance(links, list):
+            links = []
+        if not isinstance(archived_categories, list):
+            archived_categories = []
         return cls(
             categories=[str(category) for category in categories if isinstance(category, str)],
             links=[_normalize_link(link) for link in links if isinstance(link, dict)],
@@ -63,12 +69,21 @@ def _normalize_link(link: dict[Any, Any]) -> dict[str, str]:
         "details": details,
         "tags": tags,
         "category": str(link.get("category", link.get("category_id", ""))),
-        "archived": str(link.get("archived", "false")).lower(),
-        "pinned": str(link.get("pinned", "false")).lower(),
-        "favorite": str(link.get("favorite", "false")).lower(),
+        "archived": _normalize_bool(link.get("archived", False)),
+        "pinned": _normalize_bool(link.get("pinned", False)),
+        "favorite": _normalize_bool(link.get("favorite", False)),
         "created_at": str(link.get("created_at", "")),
         "updated_at": str(link.get("updated_at", "")),
     }
+
+
+def _normalize_bool(value: object) -> str:
+    """Normalize legacy JSON/CSV flag values to the storage contract."""
+    if value is True or value == 1:
+        return "true"
+    if isinstance(value, str) and value.strip().casefold() in {"true", "1", "yes", "on"}:
+        return "true"
+    return "false"
 
 
 class LinkBankStore:
@@ -82,11 +97,14 @@ class LinkBankStore:
 
         try:
             with self.path.open("r", encoding="utf-8") as file:
-                data: dict[str, Any] = json.load(file)
+                data: object = json.load(file)
         except JSONDecodeError:
             self.warnings.append(f"Corrupt JSON: {self.path}")
             return LinkBank()
 
+        if not isinstance(data, dict):
+            self.warnings.append(f"Invalid schema: {self.path}")
+            return LinkBank()
         return LinkBank.from_dict(data)
 
     def write(self, bank: LinkBank) -> None:

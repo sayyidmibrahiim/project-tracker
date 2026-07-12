@@ -100,20 +100,18 @@ def test_create_js_api_wires_linkbank_export_and_preview_merge(tmp_path: Path) -
     exported = api.linkbank_export_file("csv")
     assert exported["ok"] is True
     assert exported["data"]["format"] == "csv"
+    assert exported["data"]["suggested_name"] == "link-bank.csv"
     assert (
         "id,name,url,category,tags,description,pinned,favorite,archived,created_at,updated_at"
         in exported["data"]["content"]
     )
 
-    payload = {
-        "format": "json",
-        "content": json.dumps({"links": [{"name": "New", "url": "https://new.example.test"}]}),
-    }
-    preview = api.linkbank_preview_import(payload)
+    content = json.dumps({"links": [{"name": "New", "url": "https://new.example.test"}]})
+    preview = api.linkbank_import_preview("json", content)
     assert preview["ok"] is True
-    assert preview["data"]["added"] == 1
+    assert preview["data"]["add"] == 1
 
-    merged = api.linkbank_merge_import(payload)
+    merged = api.linkbank_import_merge("json", content)
     assert merged["ok"] is True
     assert merged["data"]["added"] == 1
 

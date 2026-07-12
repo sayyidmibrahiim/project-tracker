@@ -21,10 +21,10 @@ import uuid
 import webbrowser
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 from core.models import local_now
-from infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_link
+from infrastructure.link_bank_store import LinkBank, LinkBankStore, _normalize_bool, _normalize_link
 
 #: CSV column order (Task 6 rule 2 / design doc §15.3).
 CSV_COLUMNS = [
@@ -47,11 +47,17 @@ def _now() -> str:
 
 
 def _normalize_url(url: str) -> str:
-    return url.strip().rstrip("/").casefold()
+    parsed = urlsplit(url.strip())
+    path = parsed.path.rstrip("/")
+    return urlunsplit((parsed.scheme.casefold(), parsed.netloc.casefold(), path, parsed.query, ""))
 
 
 def _is_http_url(url: str) -> bool:
-    return urlparse(url).scheme in {"http", "https"}
+    try:
+        parsed = urlsplit(url.strip())
+        return parsed.scheme.casefold() in {"http", "https"} and bool(parsed.hostname)
+    except ValueError:
+        return False
 
 
 class LinkBankService:
@@ -76,17 +82,33 @@ class LinkBankService:
         target = self._find_link(bank, link_id)
         if target is None:
             raise ValueError(f"Link not found: {link_id}")
-        for key in ("name", "url", "notes", "details", "tags", "category", "archived", "pinned", "favorite"):
+
+        updated = dict(target)
+        if "name" in data:
+            name = str(data["name"]).strip()
+            if not name:
+                raise ValueError("Link name is required")
+            updated["name"] = name
+        if "url" in data:
+            url = str(data["url"]).strip()
+            if not _is_http_url(url):
+                raise ValueError("Link url must use http or https")
+            updated["url"] = url
+        for key in ("notes", "details", "tags"):
             if key in data:
-                target[key] = str(data[key])
+                updated[key] = str(data[key])
         if "details" in data and "notes" not in data:
-            target["notes"] = str(data["details"])
+            updated["notes"] = str(data["details"])
         if "notes" in data and "details" not in data:
-            target["details"] = str(data["notes"])
-        old_category = target.get("category", "")
-        if old_category and old_category not in bank.categories:
-            bank.categories.append(old_category)
-        target["updated_at"] = _now()
+            updated["details"] = str(data["notes"])
+        if "category" in data:
+            updated["category"] = self._canonical_category(bank, str(data["category"]), create=True)
+        for key in ("archived", "pinned", "favorite"):
+            if key in data:
+                updated[key] = _normalize_bool(data[key])
+        updated["updated_at"] = _now()
+        target.clear()
+        target.update(updated)
         self._store.write(bank)
         return dict(target)
 
@@ -101,6 +123,8 @@ class LinkBankService:
         details = str(data.get("details", data.get("notes", "")))
         now = _now()
         bank = self._store.read()
+        category = self._canonical_category(bank, str(data.get("category", "")), create=True)
+        category_is_archived = self._find_category(bank.archived_categories, category) is not None
         link = {
             "id": uuid.uuid4().hex,
             "name": name,
@@ -108,17 +132,14 @@ class LinkBankService:
             "notes": details,
             "details": details,
             "tags": str(data.get("tags", "")),
-            "category": str(data.get("category", "")),
-            "archived": "false",
-            "pinned": str(data.get("pinned", "false")).lower(),
-            "favorite": str(data.get("favorite", "false")).lower(),
+            "category": category,
+            "archived": "true" if category_is_archived else "false",
+            "pinned": _normalize_bool(data.get("pinned", False)),
+            "favorite": _normalize_bool(data.get("favorite", False)),
             "created_at": now,
             "updated_at": now,
         }
         bank.links.append(link)
-        category = link["category"]
-        if category and category not in bank.categories:
-            bank.categories.append(category)
         self._store.write(bank)
         return dict(link)
 
@@ -135,7 +156,11 @@ class LinkBankService:
         if not category:
             raise ValueError("Category name is required")
         bank = self._store.read()
-        if category not in bank.categories:
+        if self._find_category(bank.categories, category) is not None:
+            return bank.to_dict()
+        if self._find_category(bank.archived_categories, category) is not None:
+            return bank.to_dict()
+        if category:
             bank.categories.append(category)
         self._store.write(bank)
         return bank.to_dict()
@@ -146,15 +171,28 @@ class LinkBankService:
         if not old or not new:
             raise ValueError("Old and new category names are required")
         bank = self._store.read()
-        bank.categories = [new if cat == old else cat for cat in bank.categories]
-        bank.archived_categories = [new if cat == old else cat for cat in bank.archived_categories]
+        old_active = self._find_category(bank.categories, old)
+        old_archived = self._find_category(bank.archived_categories, old)
+        canonical_old = old_active or old_archived
+        if canonical_old is None:
+            raise ValueError(f"Category not found: {old}")
+
+        existing_new = self._find_category(
+            [*bank.categories, *bank.archived_categories], new
+        )
+        canonical_new = new if existing_new is None or existing_new == canonical_old else existing_new
+        bank.categories = [cat for cat in bank.categories if cat.casefold() != canonical_old.casefold()]
+        bank.archived_categories = [
+            cat for cat in bank.archived_categories if cat.casefold() != canonical_old.casefold()
+        ]
+        destination = bank.categories if old_active is not None else bank.archived_categories
+        if self._find_category([*bank.categories, *bank.archived_categories], canonical_new) is None:
+            destination.append(canonical_new)
         now = _now()
         for link in bank.links:
-            if link.get("category") == old:
-                link["category"] = new
+            if link.get("category", "").casefold() == canonical_old.casefold():
+                link["category"] = canonical_new
                 link["updated_at"] = now
-        if new not in bank.categories:
-            bank.categories.append(new)
         self._store.write(bank)
         return bank.to_dict()
 
@@ -172,7 +210,11 @@ class LinkBankService:
         target = self._find_link(bank, link_id)
         if target is None:
             raise ValueError(f"Link not found: {link_id}")
-        self._opener(target["url"])
+        url = target.get("url", "")
+        if not _is_http_url(url):
+            raise ValueError("Link url must use http or https")
+        if self._opener(url) is False:
+            raise RuntimeError("Could not open link")
         return dict(target)
 
     def export_json(self) -> dict[str, Any]:
@@ -194,22 +236,26 @@ class LinkBankService:
             content = self._to_csv(bank)
         else:
             raise ValueError(f"Unsupported export format: {fmt}")
-        return {"format": fmt_normalized, "content": content}
+        return {
+            "format": fmt_normalized,
+            "content": content,
+            "suggested_name": f"link-bank.{fmt_normalized}",
+        }
 
     # ── preview / merge import (stateless: same payload for both calls) ─
 
-    def preview_import(self, payload: dict[str, object]) -> dict[str, Any]:
+    def preview_import(self, format_name: str, content: str) -> dict[str, Any]:
         """Parse + reconcile against current data; never writes (rule 3)."""
-        rows = self._parse_rows(payload)
+        rows, active_categories, archived_categories = self._parse_import(format_name, content)
         bank = self._store.read()
-        diff = self._reconcile(bank, rows)
-        return self._diff_summary(diff)
+        diff = self._reconcile(bank, rows, active_categories, archived_categories)
+        return self._preview_summary(diff)
 
-    def merge_import(self, payload: dict[str, object]) -> dict[str, Any]:
+    def merge_import(self, format_name: str, content: str) -> dict[str, Any]:
         """Apply a confirmed import: single atomic write (rule 11)."""
-        rows = self._parse_rows(payload)
+        rows, active_categories, archived_categories = self._parse_import(format_name, content)
         bank = self._store.read()
-        diff = self._reconcile(bank, rows)
+        diff = self._reconcile(bank, rows, active_categories, archived_categories)
         now = _now()
         for row in diff["to_add"]:
             bank.links.append(self._row_to_link(row, now))
@@ -218,10 +264,17 @@ class LinkBankService:
             if target is not None:
                 self._apply_row(target, row, now)
         for category in diff["new_categories"]:
-            if category not in bank.categories:
+            if self._find_category([*bank.categories, *bank.archived_categories], category) is None:
                 bank.categories.append(category)
-        self._store.write(bank)
-        return self._diff_summary(diff)
+        for category in diff["new_archived_categories"]:
+            if self._find_category([*bank.categories, *bank.archived_categories], category) is None:
+                bank.archived_categories.append(category)
+        if any(
+            diff[key]
+            for key in ("to_add", "to_update", "new_categories", "new_archived_categories")
+        ):
+            self._store.write(bank)
+        return self._merge_summary(diff)
 
     # ── internals: archive/restore ──────────────────────────────────────
 
@@ -243,19 +296,26 @@ class LinkBankService:
         if not category:
             raise ValueError("Category name is required")
         bank = self._store.read()
+        source = bank.categories if archived else bank.archived_categories
+        canonical = self._find_category(source, category)
+        if canonical is None:
+            raise ValueError(f"Category not found: {category}")
         now = _now()
         for link in bank.links:
-            if link.get("category") == category:
+            if link.get("category", "").casefold() == canonical.casefold():
+                link["category"] = canonical
                 link["archived"] = "true" if archived else "false"
                 link["updated_at"] = now
         if archived:
-            bank.categories = [cat for cat in bank.categories if cat != category]
-            if category not in bank.archived_categories:
-                bank.archived_categories.append(category)
+            bank.categories = [cat for cat in bank.categories if cat.casefold() != canonical.casefold()]
+            if self._find_category(bank.archived_categories, canonical) is None:
+                bank.archived_categories.append(canonical)
         else:
-            bank.archived_categories = [cat for cat in bank.archived_categories if cat != category]
-            if category not in bank.categories:
-                bank.categories.append(category)
+            bank.archived_categories = [
+                cat for cat in bank.archived_categories if cat.casefold() != canonical.casefold()
+            ]
+            if self._find_category(bank.categories, canonical) is None:
+                bank.categories.append(canonical)
         self._store.write(bank)
         return bank.to_dict()
 
@@ -264,6 +324,24 @@ class LinkBankService:
     @staticmethod
     def _find_link(bank: LinkBank, link_id: str) -> dict[str, str] | None:
         return next((link for link in bank.links if link.get("id") == link_id), None)
+
+    @staticmethod
+    def _find_category(categories: list[str], name: str) -> str | None:
+        key = name.strip().casefold()
+        if not key:
+            return None
+        return next((category for category in categories if category.casefold() == key), None)
+
+    def _canonical_category(self, bank: LinkBank, name: str, *, create: bool) -> str:
+        category = name.strip()
+        if not category:
+            return ""
+        existing = self._find_category([*bank.categories, *bank.archived_categories], category)
+        if existing is not None:
+            return existing
+        if create:
+            bank.categories.append(category)
+        return category
 
     @staticmethod
     def _to_csv(bank: LinkBank) -> str:
@@ -290,17 +368,16 @@ class LinkBankService:
 
     # ── internals: import parsing ────────────────────────────────────────
 
-    def _parse_rows(self, payload: dict[str, object]) -> list[dict[str, str]]:
-        if not isinstance(payload, dict):
-            raise ValueError("Import payload must be an object with 'format' and 'content'")
-        fmt = str(payload.get("format", "json")).strip().lower()
-        content = payload.get("content", "")
+    def _parse_import(
+        self, format_name: str, content: str
+    ) -> tuple[list[dict[str, str]], list[str], list[str]]:
+        fmt = str(format_name).strip().lower()
         if not isinstance(content, str) or not content.strip():
             raise ValueError("Import content is required")
         if fmt == "csv":
-            return self._parse_csv_rows(content)
+            return self._parse_csv_rows(content), [], []
         if fmt == "json":
-            return self._parse_json_rows(content)
+            return self._parse_json(content)
         raise ValueError(f"Unsupported import format: {fmt}")
 
     @staticmethod
@@ -308,18 +385,37 @@ class LinkBankService:
         reader = csv.DictReader(io.StringIO(content))
         if reader.fieldnames is None:
             raise ValueError("CSV import has no header row")
+        missing = {"name", "url"}.difference(reader.fieldnames)
+        if missing:
+            raise ValueError(f"CSV import missing required columns: {', '.join(sorted(missing))}")
         return [{key: ("" if value is None else str(value)) for key, value in raw.items()} for raw in reader]
 
     @staticmethod
-    def _parse_json_rows(content: str) -> list[dict[str, str]]:
+    def _parse_json(content: str) -> tuple[list[dict[str, str]], list[str], list[str]]:
         try:
             data = json.loads(content)
         except json.JSONDecodeError as exc:
             raise ValueError(f"Malformed JSON import: {exc}") from exc
         if isinstance(data, dict):
-            rows_data = data.get("links", [])
+            if "links" not in data:
+                raise ValueError("JSON import object must contain 'links'")
+            rows_data = data["links"]
+            categories_data = data.get("categories", [])
+            archived_data = data.get("archived_categories", [])
+            categories = (
+                [category.strip() for category in categories_data if isinstance(category, str) and category.strip()]
+                if isinstance(categories_data, list)
+                else []
+            )
+            archived_categories = (
+                [category.strip() for category in archived_data if isinstance(category, str) and category.strip()]
+                if isinstance(archived_data, list)
+                else []
+            )
         elif isinstance(data, list):
             rows_data = data
+            categories = []
+            archived_categories = []
         else:
             raise ValueError("JSON import must be an object with 'links' or a list of links")
         if not isinstance(rows_data, list):
@@ -349,15 +445,43 @@ class LinkBankService:
                     "updated_at": str(item.get("updated_at", "")),
                 }
             )
-        return rows
+        return rows, categories, archived_categories
 
     # ── internals: reconciliation (rules 4-8) ────────────────────────────
 
-    def _reconcile(self, bank: LinkBank, rows: list[dict[str, str]]) -> dict[str, Any]:
+    def _reconcile(
+        self,
+        bank: LinkBank,
+        rows: list[dict[str, str]],
+        imported_categories: list[str],
+        imported_archived_categories: list[str],
+    ) -> dict[str, Any]:
         existing_by_id = {link["id"]: link for link in bank.links}
-        existing_url_to_id = {_normalize_url(link.get("url", "")): link["id"] for link in bank.links}
-        existing_categories_cf = {cat.casefold(): cat for cat in bank.categories}
+        existing_url_to_id = {
+            _normalize_url(link.get("url", "")): link["id"]
+            for link in bank.links
+            if link.get("id") and _is_http_url(link.get("url", ""))
+        }
+        canonical_categories_cf: dict[str, str] = {}
+        for category in [*bank.categories, *bank.archived_categories]:
+            canonical_categories_cf.setdefault(category.casefold(), category)
+
         new_categories_cf: dict[str, str] = {}
+        new_archived_categories_cf: dict[str, str] = {}
+        for category in imported_categories:
+            key = category.casefold()
+            if key not in canonical_categories_cf:
+                canonical_categories_cf[key] = category
+                new_categories_cf[key] = category
+        for category in imported_archived_categories:
+            key = category.casefold()
+            if key not in canonical_categories_cf:
+                canonical_categories_cf[key] = category
+                new_archived_categories_cf[key] = category
+
+        archived_category_keys = {
+            category.casefold() for category in [*bank.archived_categories, *new_archived_categories_cf.values()]
+        }
 
         seen_ids: set[str] = set()
         seen_urls: set[str] = set()
@@ -389,8 +513,10 @@ class LinkBankService:
                 continue
 
             row["category"] = self._resolve_category(
-                str(row.get("category", "")), existing_categories_cf, new_categories_cf
+                str(row.get("category", "")), canonical_categories_cf, new_categories_cf
             )
+            if row["category"].casefold() in archived_category_keys:
+                row["archived"] = "true"
 
             if row_id and row_id in existing_by_id:
                 owner_id = existing_url_to_id.get(norm_url)
@@ -416,6 +542,7 @@ class LinkBankService:
             "conflicts": conflicts,
             "invalid": invalid,
             "new_categories": list(new_categories_cf.values()),
+            "new_archived_categories": list(new_archived_categories_cf.values()),
         }
 
     @staticmethod
@@ -435,13 +562,22 @@ class LinkBankService:
         return category
 
     @staticmethod
-    def _diff_summary(diff: dict[str, Any]) -> dict[str, Any]:
+    def _preview_summary(diff: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "add": len(diff["to_add"]),
+            "update": len(diff["to_update"]),
+            "conflict": len(diff["conflicts"]),
+            "invalid": len(diff["invalid"]),
+            "skipped": [*diff["conflicts"], *diff["invalid"]],
+        }
+
+    @staticmethod
+    def _merge_summary(diff: dict[str, Any]) -> dict[str, int]:
         return {
             "added": len(diff["to_add"]),
             "updated": len(diff["to_update"]),
             "conflicts": len(diff["conflicts"]),
             "invalid": len(diff["invalid"]),
-            "skipped": [*diff["conflicts"], *diff["invalid"]],
         }
 
     def _row_to_link(self, row: dict[str, str], now: str) -> dict[str, str]:
@@ -477,5 +613,5 @@ class LinkBankService:
         for flag in ("pinned", "favorite", "archived"):
             value = row.get(flag, "")
             if value:
-                target[flag] = str(value).strip().lower()
+                target[flag] = _normalize_bool(value)
         target["updated_at"] = now

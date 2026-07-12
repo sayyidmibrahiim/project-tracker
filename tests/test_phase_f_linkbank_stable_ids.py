@@ -47,6 +47,16 @@ class TestNormalizeLinkIds:
         result = _normalize_link(link)
         assert result["archived"] == "true"
 
+    @pytest.mark.parametrize("raw", [True, "true", "TRUE", 1, "1", "yes", "on"])
+    def test_truthy_flags_normalize_to_true(self, raw):
+        result = _normalize_link({"name": "Test", "url": "https://x.com", "pinned": raw})
+        assert result["pinned"] == "true"
+
+    @pytest.mark.parametrize("raw", [False, "false", "FALSE", 0, "0", "no", "off", "unexpected"])
+    def test_other_flags_normalize_to_false(self, raw):
+        result = _normalize_link({"name": "Test", "url": "https://x.com", "favorite": raw})
+        assert result["favorite"] == "false"
+
 
 # ── Unit: LinkBankStore round-trip ─────────────────────────────────────
 
@@ -224,6 +234,12 @@ class TestArchivedCategoriesSchema:
         bank = LinkBank.from_dict({"archived_categories": ["ok", 5, None, "also-ok"]})
         assert bank.archived_categories == ["ok", "also-ok"]
 
+    def test_from_dict_treats_non_list_collections_as_empty(self):
+        bank = LinkBank.from_dict(
+            {"categories": "dev", "links": {"name": "not-a-list"}, "archived_categories": "old"}
+        )
+        assert bank.to_dict() == {"categories": [], "links": [], "archived_categories": []}
+
 
 # ── Task 6: LinkBankService CRUD parity with the former adapter ───────
 
@@ -252,6 +268,31 @@ class TestLinkBankServiceCrudParity:
         service = self._service(tmp_path)
         with pytest.raises(ValueError, match="http"):
             service.add_link({"name": "FTP", "url": "ftp://files.example.com"})
+
+    def test_add_link_requires_absolute_http_url(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="http"):
+            service.add_link({"name": "Relative", "url": "https:relative"})
+
+    def test_update_validates_name_and_url_before_writing(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link({"name": "Docs", "url": "https://docs.example.com"})
+        before = service.get_linkbank()
+
+        with pytest.raises(ValueError, match="http"):
+            service.update_linkbank({"id": link["id"], "url": "javascript:alert(1)"})
+
+        assert service.get_linkbank() == before
+
+    def test_add_and_update_reuse_category_spelling_case_insensitively(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        first = service.add_link({"name": "A", "url": "https://a.example.com", "category": "DevOps"})
+        second = service.add_link({"name": "B", "url": "https://b.example.com", "category": "devops"})
+        updated = service.update_linkbank({"id": first["id"], "category": "DEVOPS"})
+
+        assert second["category"] == "DevOps"
+        assert updated["category"] == "DevOps"
+        assert service.get_linkbank()["categories"] == ["DevOps"]
 
 
 # ── Task 6: link/category archive + restore ────────────────────────────
@@ -292,6 +333,23 @@ class TestLinkAndCategoryArchiveRestore:
         assert "ops" not in restored_bank["archived_categories"]
         assert all(link["archived"] == "false" for link in restored_bank["links"] if link["category"] == "ops")
 
+    def test_category_crud_is_case_insensitive_and_preserves_canonical_spelling(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "A", "url": "https://a.com", "category": "DevOps"})
+
+        assert service.category_create("devops")["categories"] == ["DevOps"]
+        archived = service.category_archive("DEVOPS")
+        assert archived["archived_categories"] == ["DevOps"]
+        assert archived["links"][0]["archived"] == "true"
+        restored = service.category_restore("devops")
+        assert restored["categories"] == ["DevOps"]
+        assert restored["links"][0]["archived"] == "false"
+
+    def test_category_rename_requires_existing_category(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        with pytest.raises(ValueError, match="not found"):
+            service.category_rename("missing", "new")
+
 
 # ── Task 6: case-insensitive category merge on import ──────────────────
 
@@ -305,13 +363,10 @@ class TestCategoryCaseInsensitiveMerge:
     def test_merge_import_preserves_existing_category_spelling(self, tmp_path: Path):
         service = self._service(tmp_path)
         service.add_link({"name": "Existing", "url": "https://existing.example.com", "category": "DevOps"})
-        payload = {
-            "format": "json",
-            "content": json.dumps(
-                {"links": [{"name": "New", "url": "https://new.example.com", "category": "devops"}]}
-            ),
-        }
-        result = service.merge_import(payload)
+        content = json.dumps(
+            {"links": [{"name": "New", "url": "https://new.example.com", "category": "devops"}]}
+        )
+        result = service.merge_import("json", content)
         assert result["added"] == 1
         bank = service.get_linkbank()
         assert bank["categories"].count("DevOps") == 1
@@ -336,6 +391,7 @@ class TestExportFormats:
 
         exported = service.export_file("json")
         assert exported["format"] == "json"
+        assert exported["suggested_name"] == "link-bank.json"
         data = json.loads(exported["content"])
         assert data["archived_categories"] == ["x"]
         assert data["links"][0]["archived"] == "true"
@@ -348,6 +404,7 @@ class TestExportFormats:
 
         exported = service.export_file("csv")
         assert exported["format"] == "csv"
+        assert exported["suggested_name"] == "link-bank.csv"
         reader = csv.DictReader(io.StringIO(exported["content"]))
         assert reader.fieldnames == [
             "id",
@@ -380,9 +437,7 @@ class TestPreviewMergeImport:
     def test_preview_reports_counts_without_writing(self, tmp_path: Path):
         service = self._service(tmp_path)
         existing = service.add_link({"name": "Existing", "url": "https://existing.example.com"})
-        payload = {
-            "format": "json",
-            "content": json.dumps(
+        content = json.dumps(
                 {
                     "links": [
                         {"id": existing["id"], "name": "Existing Updated", "url": "https://existing.example.com"},
@@ -390,15 +445,14 @@ class TestPreviewMergeImport:
                         {"name": "", "url": "not-a-url"},
                     ]
                 }
-            ),
-        }
+            )
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["updated"] == 1
-        assert preview["added"] == 1
+        assert preview["update"] == 1
+        assert preview["add"] == 1
         assert preview["invalid"] == 1
-        assert preview["conflicts"] == 0
+        assert preview["conflict"] == 0
         assert len(preview["skipped"]) == 1
         bank = service.get_linkbank()
         assert len(bank["links"]) == 1
@@ -408,91 +462,76 @@ class TestPreviewMergeImport:
         service = self._service(tmp_path)
         a = service.add_link({"name": "A", "url": "https://a.example.com"})
         service.add_link({"name": "B", "url": "https://b.example.com"})
-        payload = {
-            "format": "json",
-            "content": json.dumps(
+        content = json.dumps(
                 {"links": [{"id": a["id"], "name": "A2", "url": "https://b.example.com"}]}
-            ),
-        }
+            )
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["conflicts"] == 1
-        assert preview["updated"] == 0
+        assert preview["conflict"] == 1
+        assert preview["update"] == 0
 
     def test_new_id_unique_url_adds(self, tmp_path: Path):
         service = self._service(tmp_path)
-        payload = {
-            "format": "json",
-            "content": json.dumps(
+        content = json.dumps(
                 {"links": [{"id": "brand-new-id", "name": "New", "url": "https://new.example.com"}]}
-            ),
-        }
+            )
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["added"] == 1
+        assert preview["add"] == 1
 
     def test_same_url_another_id_conflicts(self, tmp_path: Path):
         service = self._service(tmp_path)
         service.add_link({"name": "A", "url": "https://dup.example.com"})
-        payload = {
-            "format": "json",
-            "content": json.dumps({"links": [{"id": "other-id", "name": "Dup", "url": "https://dup.example.com"}]}),
-        }
+        content = json.dumps({"links": [{"id": "other-id", "name": "Dup", "url": "https://dup.example.com"}]})
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["conflicts"] == 1
-        assert preview["added"] == 0
+        assert preview["conflict"] == 1
+        assert preview["add"] == 0
 
     def test_duplicate_ids_within_import_conflict(self, tmp_path: Path):
         service = self._service(tmp_path)
-        payload = {
-            "format": "json",
-            "content": json.dumps(
+        content = json.dumps(
                 {
                     "links": [
                         {"id": "dup-id", "name": "First", "url": "https://first.example.com"},
                         {"id": "dup-id", "name": "Second", "url": "https://second.example.com"},
                     ]
                 }
-            ),
-        }
+            )
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["added"] == 1
-        assert preview["conflicts"] == 1
+        assert preview["add"] == 1
+        assert preview["conflict"] == 1
 
     def test_duplicate_urls_within_import_conflict(self, tmp_path: Path):
         service = self._service(tmp_path)
-        payload = {
-            "format": "json",
-            "content": json.dumps(
+        content = json.dumps(
                 {
                     "links": [
                         {"name": "First", "url": "https://same.example.com"},
                         {"name": "Second", "url": "https://same.example.com"},
                     ]
                 }
-            ),
-        }
+            )
 
-        preview = service.preview_import(payload)
+        preview = service.preview_import("json", content)
 
-        assert preview["added"] == 1
-        assert preview["conflicts"] == 1
+        assert preview["add"] == 1
+        assert preview["conflict"] == 1
 
     def test_malformed_json_performs_no_write(self, tmp_path: Path):
         service = self._service(tmp_path)
         service.add_link({"name": "A", "url": "https://a.example.com"})
-        payload = {"format": "json", "content": "{not valid json"}
+        content = "{not valid json"
 
         with pytest.raises(ValueError):
-            service.preview_import(payload)
+            service.preview_import("json", content)
         with pytest.raises(ValueError):
-            service.merge_import(payload)
+            service.merge_import("json", content)
 
         bank = service.get_linkbank()
         assert len(bank["links"]) == 1
@@ -508,12 +547,9 @@ class TestPreviewMergeImport:
             return original_write(self, bank)
 
         monkeypatch.setattr(LinkBankStore, "write", spy_write)
-        payload = {
-            "format": "json",
-            "content": json.dumps({"links": [{"name": "New", "url": "https://new.example.com"}]}),
-        }
+        content = json.dumps({"links": [{"name": "New", "url": "https://new.example.com"}]})
 
-        result = service.merge_import(payload)
+        result = service.merge_import("json", content)
 
         assert result["added"] == 1
         assert len(write_calls) == 1
@@ -524,12 +560,10 @@ class TestPreviewMergeImport:
             "id,name,url,category,tags,description,pinned,favorite,archived,created_at,updated_at\n"
             ",CSV Link,https://csv.example.com,ops,tag1,CSV desc,false,false,false,,\n"
         )
-        payload = {"format": "csv", "content": csv_content}
+        preview = service.preview_import("csv", csv_content)
+        assert preview["add"] == 1
 
-        preview = service.preview_import(payload)
-        assert preview["added"] == 1
-
-        result = service.merge_import(payload)
+        result = service.merge_import("csv", csv_content)
         assert result["added"] == 1
 
         bank = service.get_linkbank()
@@ -537,6 +571,50 @@ class TestPreviewMergeImport:
         assert link["name"] == "CSV Link"
         assert link["category"] == "ops"
         assert link["notes"] == "CSV desc"
+
+    def test_url_normalization_preserves_case_sensitive_path(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        service.add_link({"name": "Upper", "url": "https://Example.COM/Case/"})
+        content = json.dumps(
+            {
+                "links": [
+                    {"name": "Same", "url": "https://example.com/Case#fragment"},
+                    {"name": "Different", "url": "https://example.com/case"},
+                ]
+            }
+        )
+
+        preview = service.preview_import("json", content)
+
+        assert preview["conflict"] == 1
+        assert preview["add"] == 1
+
+    def test_json_merge_restores_archived_categories(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        content = json.dumps(
+            {
+                "categories": ["Active"],
+                "archived_categories": ["Legacy"],
+                "links": [
+                    {
+                        "id": "legacy-link",
+                        "name": "Legacy docs",
+                        "url": "https://legacy.example.com",
+                        "category": "legacy",
+                        "archived": True,
+                    }
+                ],
+            }
+        )
+
+        result = service.merge_import("json", content)
+        bank = service.get_linkbank()
+
+        assert result == {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0}
+        assert bank["archived_categories"] == ["Legacy"]
+        assert "Legacy" not in bank["categories"]
+        assert bank["links"][0]["category"] == "Legacy"
+        assert bank["links"][0]["archived"] == "true"
 
 
 # ── Task 6: OS browser open via injected opener ─────────────────────────
@@ -561,3 +639,14 @@ class TestOpenLinkOpener:
         service = LinkBankService(store, opener=lambda url: None)
         with pytest.raises(ValueError, match="not found"):
             service.open_link("missing")
+
+    def test_open_link_rejects_invalid_stored_url(self, tmp_path: Path):
+        store = LinkBankStore(path=tmp_path / "links.json")
+        store.write(LinkBank(links=[{"id": "bad", "name": "Bad", "url": "file:///tmp/secret"}]))
+        opened: list[str] = []
+        service = LinkBankService(store, opener=opened.append)
+
+        with pytest.raises(ValueError, match="http"):
+            service.open_link("bad")
+
+        assert opened == []

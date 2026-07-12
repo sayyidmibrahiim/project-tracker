@@ -68,15 +68,15 @@ class FakeLinkBankDependency:
 
     def export_file(self, fmt: str) -> dict[str, object]:
         self.calls.append(("export_file", (fmt,)))
-        return {"format": fmt, "content": "..."}
+        return {"format": fmt, "content": "...", "suggested_name": f"link-bank.{fmt}"}
 
-    def preview_import(self, payload: dict[str, object]) -> dict[str, object]:
-        self.calls.append(("preview_import", (payload,)))
-        return {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0, "skipped": []}
+    def preview_import(self, format_name: str, content: str) -> dict[str, object]:
+        self.calls.append(("preview_import", (format_name, content)))
+        return {"add": 1, "update": 0, "conflict": 0, "invalid": 0, "skipped": []}
 
-    def merge_import(self, payload: dict[str, object]) -> dict[str, object]:
-        self.calls.append(("merge_import", (payload,)))
-        return {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0, "skipped": []}
+    def merge_import(self, format_name: str, content: str) -> dict[str, object]:
+        self.calls.append(("merge_import", (format_name, content)))
+        return {"added": 1, "updated": 0, "conflicts": 0, "invalid": 0}
 
 
 class ExplodingSettingsDependency(FakeSettingsDependency):
@@ -167,24 +167,28 @@ def test_linkbank_new_facades_delegate_and_convert_results():
 
     restored = api.linkbank_restore_link("l-1")
     cat_restored = api.linkbank_category_restore("Ops")
-    opened = api.linkbank_open_link("l-1")
+    opened = api.linkbank_open("l-1")
     exported = api.linkbank_export_file("csv")
-    previewed = api.linkbank_preview_import({"format": "json", "content": "{}"})
-    merged = api.linkbank_merge_import({"format": "json", "content": "{}"})
+    previewed = api.linkbank_import_preview("json", "{}")
+    merged = api.linkbank_import_merge("json", "{}")
 
     assert restored == {"ok": True, "data": {"restored": True, "id": "l-1"}, "error": None}
     assert cat_restored == {"ok": True, "data": {"restored": True, "name": "Ops"}, "error": None}
     assert opened == {"ok": True, "data": {"opened": True, "id": "l-1"}, "error": None}
-    assert exported == {"ok": True, "data": {"format": "csv", "content": "..."}, "error": None}
-    assert previewed["data"]["added"] == 1
+    assert exported == {
+        "ok": True,
+        "data": {"format": "csv", "content": "...", "suggested_name": "link-bank.csv"},
+        "error": None,
+    }
+    assert previewed["data"]["add"] == 1
     assert merged["data"]["added"] == 1
     assert service.calls == [
         ("restore_link", ("l-1",)),
         ("category_restore", ("Ops",)),
         ("open_link", ("l-1",)),
         ("export_file", ("csv",)),
-        ("preview_import", ({"format": "json", "content": "{}"},)),
-        ("merge_import", ({"format": "json", "content": "{}"},)),
+        ("preview_import", ("json", "{}")),
+        ("merge_import", ("json", "{}")),
     ]
 
 
@@ -193,10 +197,10 @@ def test_linkbank_new_facades_missing_dependency_returns_service_unavailable():
 
     assert api.linkbank_restore_link("l-1")["error"]["code"] == "SERVICE_UNAVAILABLE"
     assert api.linkbank_category_restore("Ops")["error"]["code"] == "SERVICE_UNAVAILABLE"
-    assert api.linkbank_open_link("l-1")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_open("l-1")["error"]["code"] == "SERVICE_UNAVAILABLE"
     assert api.linkbank_export_file()["error"]["code"] == "SERVICE_UNAVAILABLE"
-    assert api.linkbank_preview_import({})["error"]["code"] == "SERVICE_UNAVAILABLE"
-    assert api.linkbank_merge_import({})["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_import_preview("json", "{}")["error"]["code"] == "SERVICE_UNAVAILABLE"
+    assert api.linkbank_import_merge("json", "{}")["error"]["code"] == "SERVICE_UNAVAILABLE"
 
 
 def test_missing_dependencies_return_service_unavailable():

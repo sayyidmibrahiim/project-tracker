@@ -205,17 +205,17 @@ test("LinkImportPreview reports add/update/conflict/invalid counts and skipped r
   assert.match(body, /skipped:/);
 });
 
-test("LinkImportResult reflects the confirmed merge outcome and the merged bank", () => {
+test("LinkImportResult reflects the confirmed merge outcome", () => {
   const body = interfaceBody(TYPES, "LinkImportResult");
-  for (const field of ["add", "update", "conflict", "invalid"]) {
+  for (const field of ["added", "updated", "conflicts", "invalid"]) {
     assert.match(body, new RegExp(`\\b${field}:\\s*number`), `LinkImportResult missing count field ${field}`);
   }
-  assert.match(body, /bank:\s*LinkBankData/);
+  assert.doesNotMatch(body, /bank\??:/);
 });
 
-test("LinkExportPayload carries a filename + content pair usable with util_save_file", () => {
+test("LinkExportPayload carries a suggested name + content pair usable with util_save_file", () => {
   const body = interfaceBody(TYPES, "LinkExportPayload");
-  assert.match(body, /filename:\s*string/);
+  assert.match(body, /suggested_name:\s*string/);
   assert.match(body, /content:\s*string/);
   assert.match(body, /format:/);
   assert.match(body, /"json"/);
