@@ -350,6 +350,22 @@ class TestLinkAndCategoryArchiveRestore:
         with pytest.raises(ValueError, match="not found"):
             service.category_rename("missing", "new")
 
+    @pytest.mark.parametrize("destination_archived", [False, True])
+    def test_category_rename_rejects_existing_destination(
+        self, tmp_path: Path, destination_archived: bool
+    ):
+        service = self._service(tmp_path)
+        service.add_link({"name": "Source", "url": "https://source.example.com", "category": "source"})
+        service.add_link({"name": "Target", "url": "https://target.example.com", "category": "target"})
+        if destination_archived:
+            service.category_archive("target")
+        before = service.get_linkbank()
+
+        with pytest.raises(ValueError, match="already exists"):
+            service.category_rename("source", "TARGET")
+
+        assert service.get_linkbank() == before
+
 
 # ── Fix Round 1, Finding 2: reserved rail keywords rejected ─────────────
 
@@ -420,6 +436,22 @@ class TestExportFormats:
         data = json.loads(exported["content"])
         assert data["archived_categories"] == ["x"]
         assert data["links"][0]["archived"] == "true"
+
+    def test_exported_json_merge_preserves_updated_at_for_new_link(self, tmp_path: Path):
+        source = self._service(tmp_path / "source")
+        source.add_link({"name": "A", "url": "https://a.example.com"})
+        exported = source.export_file("json")
+        exported_updated_at = json.loads(exported["content"])["links"][0]["updated_at"]
+        destination = self._service(tmp_path / "destination")
+
+        destination.merge_import("json", exported["content"])
+
+        assert destination.get_linkbank()["links"][0]["updated_at"] == exported_updated_at
+
+    def test_legacy_full_bank_replace_is_not_exposed_by_service(self, tmp_path: Path):
+        service = LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+
+        assert not hasattr(service, "import_json")
 
     def test_export_csv_has_expected_columns(self, tmp_path: Path):
         service = self._service(tmp_path)

@@ -404,9 +404,6 @@ class LinkBankDependencyProtocol(Protocol):
     def export_json(self) -> object:
         """Export full link bank JSON."""
 
-    def import_json(self, data: dict[str, object]) -> object:
-        """Import full link bank JSON."""
-
     def export_file(self, fmt: str) -> object:
         """Export link bank as JSON or CSV text."""
 
@@ -2361,14 +2358,6 @@ class JsApi:
             return ok(_to_frontend_safe(self._linkbank_dependency.export_json()))
         except Exception as exc:
             return fail(str(exc), code="LINKBANK_EXPORT_FAILED")
-
-    def linkbank_import(self, data: dict[str, object]) -> dict[str, object]:
-        try:
-            if self._linkbank_dependency is None:
-                return fail("linkbank dependency is not configured", code="SERVICE_UNAVAILABLE")
-            return ok(_to_frontend_safe(self._linkbank_dependency.import_json(data)))
-        except Exception as exc:
-            return fail(str(exc), code="LINKBANK_IMPORT_FAILED")
 
     def linkbank_restore_link(self, link_id: str) -> dict[str, object]:
         """Restore an archived link through injected dependency."""

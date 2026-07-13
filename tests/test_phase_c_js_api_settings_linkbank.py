@@ -203,6 +203,12 @@ def test_linkbank_new_facades_missing_dependency_returns_service_unavailable():
     assert api.linkbank_import_merge("json", "{}")["error"]["code"] == "SERVICE_UNAVAILABLE"
 
 
+def test_legacy_full_bank_replace_bridge_is_not_public():
+    api = JsApi(dashboard_service=None, linkbank_service=FakeLinkBankDependency())
+
+    assert not hasattr(api, "linkbank_import")
+
+
 def test_missing_dependencies_return_service_unavailable():
     api = JsApi(dashboard_service=None)
 

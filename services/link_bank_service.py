@@ -5,9 +5,8 @@ live inline in ``app_web._LinkBankAdapter``, plus the Task 6 additions:
 category archive/restore parity, browser open through an injectable opener,
 and a stateless preview -> confirm -> atomic-merge import flow for CSV/JSON.
 
-``import_json``/``export_json`` remain a blunt, backward-compatible full-bank
-replace/read (unchanged behavior). ``preview_import``/``merge_import`` are the
-new deterministic-merge pathway (design doc 2026-07-12 §4.5/§15.3): parse,
+``preview_import``/``merge_import`` provide the deterministic-merge pathway
+(design doc 2026-07-12 §4.5/§15.3): parse,
 validate, preview add/update/conflict/invalid counts, then a single atomic
 write on confirm. Malformed input never reaches ``LinkBankStore.write``.
 """
@@ -20,6 +19,7 @@ import json
 import uuid
 import webbrowser
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -192,7 +192,9 @@ class LinkBankService:
         existing_new = self._find_category(
             [*bank.categories, *bank.archived_categories], new
         )
-        canonical_new = new if existing_new is None or existing_new == canonical_old else existing_new
+        if existing_new is not None and existing_new.casefold() != canonical_old.casefold():
+            raise ValueError(f"Category already exists: {existing_new}")
+        canonical_new = new
         bank.categories = [cat for cat in bank.categories if cat.casefold() != canonical_old.casefold()]
         bank.archived_categories = [
             cat for cat in bank.archived_categories if cat.casefold() != canonical_old.casefold()
@@ -231,12 +233,6 @@ class LinkBankService:
 
     def export_json(self) -> dict[str, Any]:
         return self._store.read().to_dict()
-
-    def import_json(self, data: dict[str, object]) -> dict[str, Any]:
-        """Full-bank replace (legacy, blunt overwrite - kept for backward compat)."""
-        bank = LinkBank.from_dict(data)
-        self._store.write(bank)
-        return bank.to_dict()
 
     def export_file(self, fmt: str = "json") -> dict[str, Any]:
         """Export the complete link bank as JSON or CSV text (rules 1-2)."""
@@ -613,6 +609,11 @@ class LinkBankService:
     def _row_to_link(self, row: dict[str, str], now: str) -> dict[str, str]:
         link_id = str(row.get("id", "")).strip() or uuid.uuid4().hex
         description = row.get("description", "")
+        updated_at = str(row.get("updated_at", "")).strip()
+        try:
+            datetime.fromisoformat(updated_at)
+        except ValueError:
+            updated_at = now
         return _normalize_link(
             {
                 "id": link_id,
@@ -626,7 +627,7 @@ class LinkBankService:
                 "favorite": row.get("favorite", "false"),
                 "archived": row.get("archived", "false"),
                 "created_at": row.get("created_at") or now,
-                "updated_at": now,
+                "updated_at": updated_at,
             }
         )
 
