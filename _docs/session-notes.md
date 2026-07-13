@@ -8,6 +8,20 @@
 
 ---
 
+## 2026-07-13 (Second Brain completion — branch `second-brain/complete-menu`)
+
+**Now:** Tasks 1–10 plus final whole-branch review fixes are implemented. Automated Task 11 gate is green: focused backend 301 passed; Second Brain frontend contract 93/93; full frontend 281/281; svelte-check 0 errors / 13 baseline warnings; focused Python compile and `git diff --check` clean. Branch is not merged.
+
+**Implemented:** fresh unset settings create and persist `Documents\Project Tracker\Second Brain`, while existing external overrides remain untouched. One cached filesystem index covers Personal Notes plus eligible CR/Non-CR/Drone files and excludes CICD, hidden/internal/default metadata, and `project_data.json`. Notes mounts existing Project Details `NotesEditor.svelte` unchanged against original files; Personal allows guarded structural CRUD, while Project Documents disables create/rename/recycle and follows the shared editor capability/project lock for file content. Atomic `.project_tracker_index.json` stores pin/favorite/tags; capped SQLite activity is disposable/best-effort. `LinkBankService` owns atomic `link_bank.json`, stable IDs, soft archive/restore, browser open, and JSON/CSV export plus preview-confirmed atomic merge import. D-0017.
+
+**Next:** Confirm app is closed and user approves production build; build from repo root, restart from repo root, then run the mandatory live checklist across default/override, explorer/editor safety, Link Bank workflows, controls, and required window sizes. Fix one failed behavior per round. Merge only after every live check passes and user explicitly approves.
+
+**Blocked:** production build waits for app closure + user approval. Slice completion/merge waits for user live verification.
+
+**active_menu:** second-brain
+
+---
+
 ## 2026-07-11 (Root folder bootstrap + appcode first-run — branch `general/root-folder-bootstrap`)
 
 **Now:** User verified full fresh-install flow and approved merge to `main`.

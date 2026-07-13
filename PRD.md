@@ -139,7 +139,6 @@ tailwindcss>=3.4 (npm)
 
 # Optional — requires confirmation before adding
 watchdog>=4.0.0
-marked.js (npm, for markdown preview)
 ```
 
 ---
@@ -528,7 +527,7 @@ Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTra
   "startup_behavior": "current_year_dashboard",
   "auto_refresh_interval_seconds": 0,
   "t10_threshold_days": 10,
-  "second_brain_folder": "%APPDATA%\\ProjectTrackerDBS\\SecondBrain",
+  "second_brain_folder": "C:\\Users\\<user>\\Documents\\Project Tracker\\Second Brain",
   "file_template_folder": "",
   "ui": {
     "last_active_page": "dashboard",
@@ -574,28 +573,20 @@ Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTra
 
 ```json
 {
-  "version": 1,
-  "categories": [
-    {
-      "id": "cat-1",
-      "name": "CR & ITSM Tools",
-      "archived": false,
-      "created_at": "2026-01-01T09:00:00+07:00",
-      "updated_at": "2026-01-01T09:00:00+07:00"
-    }
-  ],
+  "categories": ["CR & ITSM Tools"],
+  "archived_categories": [],
   "links": [
     {
-      "id": "link-1",
-      "category_id": "cat-1",
-      "title": "CR Portal",
+      "id": "<stable-uuid>",
+      "name": "CR Portal",
       "url": "https://example.local/",
-      "tags": ["Portal", "PROD", "Working"],
+      "category": "CR & ITSM Tools",
+      "tags": "Portal,PROD,Working",
+      "notes": "Daily CR work portal.",
       "details": "Daily CR work portal.",
-      "pinned": false,
-      "favorite": false,
-      "archived": false,
-      "last_opened_at": null,
+      "pinned": "false",
+      "favorite": "false",
+      "archived": "false",
       "created_at": "2026-01-01T09:00:00+07:00",
       "updated_at": "2026-01-01T09:00:00+07:00"
     }
@@ -603,7 +594,7 @@ Stored at `%APPDATA%\ProjectTrackerDBS\settings.json` (Windows) or `~/ProjectTra
 }
 ```
 
-Tags are user-defined free-form strings (hashtags). No fixed list. Stored inline in each link’s `tags` array.
+`LinkBankService` owns validation and CRUD over this atomic JSON store. IDs remain stable across edits and imports; archive/restore is soft delete. Tags are user-defined comma-separated strings with no fixed list. Legacy list-valued tags and older field aliases are normalized when read/imported.
 
 ---
 
@@ -1233,7 +1224,7 @@ User is in POSTPONED or CANCELED project
 
 ### 13.1 Purpose
 
-Local personal knowledge workspace: markdown notes, project documents discovery, operational playbooks, and reusable link library.
+Local knowledge workspace combining Personal Notes with indexed Project Documents. Fresh installs use `Documents\Project Tracker\Second Brain`; Settings may override that location with an external folder, and startup never moves or replaces an existing override. Project Documents disable structural create/rename/recycle in this workspace; file editing follows the same capability and project-state locks as Project Details.
 
 ### 13.2 Header
 
@@ -1242,7 +1233,7 @@ Header: "Second Brain." | DateTime | [🔄]
 Tab Bar: [Notes] [Link Bank]
 ```
 
-Tab bar follows the pill-style pattern from `second_brain_redesign.py`.
+Notes is the initial tab. Switching tabs flushes the active editor first and aborts when save fails; each mounted tab keeps its workspace state.
 
 ### 13.3 Notes Tab Layout
 
@@ -1269,23 +1260,30 @@ Flow Status: [Ready · select note or search]
 
 ### 13.4 Supported File Modes
 
-| Extensions                                                                                                                                                    | Mode                             |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `.md`, `.txt`, `.py`, `.sh`, `.ps1`, `.sql`, `.json`, `.csv`, `.log`, `.yml`, `.yaml`, `.xml`, `.toml`, `.ini`, `.cfg`, `.env`, `.ts`, `.js`, `.html`, `.css` | Editable in-app                  |
-| `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`                                                                                                                       | Preview only in-app              |
-| `.pdf`, `.docx`, `.xlsx`, `.zip`, and all others                                                                                                              | Open externally (default OS app) |
+Second Brain mounts the existing Project Details `NotesEditor.svelte` directly and does not implement a second editor or alternate save path. Markdown, plain-text, and DOCX capability, formatting, autosave/status, undo/redo, links, images, tables, zoom, fullscreen, locking, and DOCX pipeline behavior therefore stay identical to Project Details.
+
+| Extensions                                                                                                                                                    | Mode                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `.md`, `.txt`, `.py`, `.sh`, `.ps1`, `.sql`, `.json`, `.csv`, `.log`, `.yml`, `.yaml`, `.xml`, `.toml`, `.ini`, `.cfg`, `.env`, `.ts`, `.js`, `.html`, `.css` | Existing NotesEditor capability contract  |
+| `.docx`                                                                                                                                                       | Existing NotesEditor DOCX pipeline        |
+| `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`                                                                                                                       | Guarded in-app image preview               |
+| `.pdf`, `.xlsx`, `.zip`, and all others                                                                                                                       | Open externally with default OS app        |
 
 ### 13.5 User Flow — Browse Notes Tree
 
 ```
 User opens Second Brain → Notes tab
   → Tree renders: Pinned | Favorites | Second Brain Notes | Project Documents
-  → Project Documents shows all files in all project/subproject paths under root_folder
+  → Personal Notes indexes the configured Second Brain folder
+  → Project Documents indexes eligible files from CR, Non-CR, and Drone hierarchy under root_folder
+  → Hidden/dot paths, CICD, app internals, default metadata, `project_data.json`, `appcode.json`, `.rte`, and `.project_tracker_index.json` never appear
   → User expands folders
   → User clicks a file
-    → Editable file → load in editor
+    → NotesEditor-capable file → load the original file in the shared editor
     → Image file → show inline preview
     → External file → show "Open with default app" message + button
+  → Personal files/folders allow create, rename, and Recycle Bin operations
+  → Project Documents cannot be created, renamed, or recycled here; content editing follows shared-editor capability and project-state locks
 ```
 
 ### 13.6 User Flow — Search Notes
@@ -1293,28 +1291,34 @@ User opens Second Brain → Notes tab
 ```
 User types in search field
   → Debounce 150ms
-  → Query runs against in-memory precomputed index (title, body, tags, path, content)
+  → Query runs against one cached filesystem index (title, path, tags, project context, and full content of eligible text files up to the 1 MiB safety cap)
   → Results appear under "Search Results" group in tree (above other groups)
-  → Date filter: user clicks 📅 → unclipped popup calendar → sets YYYYMMDD filter
+  → Date filter uses `YYYY-MM-DD`; source and type filters work with or without query text
   → Sort: Newest | Oldest | A-Z | Type
   → User clicks result → open in editor
-  → Clearing search removes "Search Results" group from tree
+  → Clearing query and filters removes "Search Results" group from tree
+  → Refresh flushes dirty content, forces a filesystem reindex, and preserves safety on failure
 ```
 
 ### 13.7 User Flow — Create Note/Folder
 
 ```
 User clicks Add Folder:
-  → If item selected in tree → create child folder
-  → If nothing selected → create root folder in Second Brain path
-  → Inline rename starts immediately in tree
+  → If a Personal folder/file is selected → create in that folder or its parent
+  → If nothing selected → create under configured Personal Notes root
+  → Project Documents never become a mutation target
+  → Inline name input starts in tree
   → Enter or click-out commits name
 
 User clicks Add File:
-  → Create new empty file with selected type (default: .md)
-  → Inline rename starts in tree
-  → On commit: determine open_mode from extension
-  → Load into editor (if editable)
+  → Create new empty text-like file; append `.md` when no extension is entered
+  → Reject unsupported extensions and path escape
+  → Refresh index and select/load the new file
+
+Rename or Recycle:
+  → Flush dirty editor before physical mutation
+  → Validation/persistence failure leaves the user on a safe state
+  → Recycle uses `send2trash`; hard delete is unavailable
 ```
 
 ### 13.8 User Flow — Pin / Favorite
@@ -1326,22 +1330,17 @@ User opens a note
     → Pin indicator visible on tree item
   → Clicks Favorite (⭐) button
     → Note appears under "Favorites" group in tree
-Pin/Favorite status stored in note metadata (SQLite or frontmatter in .md)
+Pin/Favorite/tags stored atomically in hidden `{second_brain_folder}/.project_tracker_index.json`; metadata follows a Personal rename and survives index rebuild/restart.
 ```
 
-### 13.9 User Flow — Markdown Edit/Preview
+### 13.9 User Flow — Shared NotesEditor
 
 ```
-User is in Edit mode (default):
-  → Textarea is editable
-  → Toolbar inserts markdown syntax at cursor
-  → Autosave: 1000ms debounce → write to .md file
-  → Status shows "Saving..." / "Saved"
-
-User clicks Preview:
-  → Content rendered as HTML via marked.js
-  → Textarea becomes read-only
-  → Switch back to Edit to continue writing
+User selects a NotesEditor-capable file:
+  → Mount existing `NotesEditor.svelte` with the original file path and capability metadata
+  → Use the same Tiptap/Markdown/plain-text/DOCX load and save logic as Project Details, unchanged
+  → Successful shared-editor save callbacks update the Second Brain index/activity cache; forced refresh reindexes original files
+  → File or tab switching waits for flush; a failed save blocks the switch and preserves current content
 ```
 
 ### 13.10 Backlinks & Related Notes
@@ -1352,8 +1351,7 @@ Below editor, Related Notes panel shows:
   → Wiki-style [[NoteTitle.md]] references
   → Same project file context
 → Click related item → open in editor
-Production: built from tags, note titles, links, file metadata
-Prototype: static examples
+Built from tags, note titles, wiki links, Drone/project metadata, and deterministic ranking.
 ```
 
 ### 13.11 Recent Activity
@@ -1364,7 +1362,7 @@ Recent Activity panel shows last-touched notes/files:
   → Opened document
   → Created note
 → Click to resume work
-Production: local activity history stored in SQLite
+Activity is a capped, disposable, best-effort SQLite cache. Filesystem content and sidecar metadata remain canonical; activity failure never blocks file operations.
 ```
 
 ---
@@ -1373,7 +1371,7 @@ Production: local activity history stored in SQLite
 
 ### 14.1 Purpose
 
-Reusable work link library grouped by category with search, tags, and quick copy.
+Reusable local work-link library grouped by category with search, tags, quick copy/open, pin/favorite, and soft archive. `LinkBankService` is the business layer over atomically written `link_bank.json`; the UI never owns persistence rules.
 
 ### 14.2 Layout
 
@@ -1410,6 +1408,7 @@ User opens Second Brain → Link Bank tab
     → Shows: URL (clickable), tags, details, category, path, date, status
   → Click URL in detail panel → opens in default OS browser
   → Click Copy URL → copies to clipboard
+  → Only validated HTTP/HTTPS URLs can be saved or opened
 ```
 
 ### 14.4 User Flow — Add Link
@@ -1420,7 +1419,7 @@ User fills Add/Edit Link panel:
   → Right side: Description textarea
   → Bottom-right: [Pin] [⭐] [Save]
   → Click Save → add new link to selected category
-  → Prototype: in-memory; Production: save to link_bank.json
+  → Service assigns a stable ID and timestamps, then atomically saves `link_bank.json`
 ```
 
 ### 14.5 User Flow — Edit Link
@@ -1437,7 +1436,7 @@ User selects a link card
 
 ```
 User selects link → clicks Remove → confirmation → link archived
-User right-clicks category → Archive → confirmation → category + links hidden
+User selects category → Archive → confirmation → category + links archived
 Archived items visible in "Archived" section → user can Restore
 Hard delete not available; archive is the soft delete
 ```
@@ -1447,7 +1446,6 @@ Hard delete not available; archive is the soft delete
 ```
 User types in left panel search field
   → Case-insensitive, searches: title, URL, tags, details, category
-  → Date filter available (same calendar popup pattern)
   → Sort: Newest | Oldest | A-Z | Favorite | Pinned
   → Results show across categories
   → Clicking result selects its category and highlights link
@@ -1456,8 +1454,17 @@ User types in left panel search field
 ### 14.8 User Flow — Import/Export
 
 ```
-Export: → choose local file path → save link_bank.json or CSV
-Import: → browse local file → validate format → merge with confirmation
+Export:
+  → Choose JSON or CSV
+  → JSON serializes the complete Link Bank including category-only state
+  → CSV serializes link rows only; empty/category-only groups are not representable
+  → Native save dialog chooses destination
+
+Import:
+  → Browse JSON/CSV file and parse content without writing
+  → Preview summary counts for added, updated, conflicting, and invalid rows; conflicting/invalid rows are skipped
+  → Cancel or malformed input writes nothing
+  → Confirm performs one atomic merge while preserving stable IDs and soft-archive state
 ```
 
 ### 14.9 Link Card Content
@@ -1944,10 +1951,11 @@ User opens Settings
 
 | Field           | Type                 | Default                     |
 | --------------- | -------------------- | --------------------------- |
-| Root Folder     | Text + Browse button | —                           |
 | Display Name    | Text input           | empty                       |
 | Language        | Dropdown: en, id     | en                          |
 | Datetime Format | Text input           | `ddd, dd MMM yyyy HH:mm:ss` |
+
+Root Folder is fixed to `Documents\Project Tracker` by D-0016 and is not user-editable in Settings.
 
 #### Behavior Card
 
@@ -1959,10 +1967,12 @@ User opens Settings
 
 #### Paths Card
 
-| Field                | Type                 | Default                                   |
-| -------------------- | -------------------- | ----------------------------------------- |
-| Second Brain Folder  | Text + Browse button | `%APPDATA%\ProjectTrackerDBS\SecondBrain` |
-| File Template Folder | Text + Browse button | empty                                     |
+| Field                | Type                 | Default                                            |
+| -------------------- | -------------------- | -------------------------------------------------- |
+| Second Brain Folder  | Text + Browse button | `Documents\Project Tracker\Second Brain`          |
+| File Template Folder | Text + Browse button | empty                                              |
+
+Second Brain Folder is an optional override after bootstrap. An unset fresh-install value is created and persisted at the default above; an existing configured external path is kept as-is and never migrated with the project root.
 
 **Note:** Automation settings (email categories, Teams configs, Rules Engine) are managed within the Automations page, not Settings. Theme is fixed (Utilitarian + Modern Minimalist, single enterprise palette) — no theme switcher.
 
@@ -2314,34 +2324,47 @@ All methods callable from Svelte frontend via `window.pywebview.api.*`.
 
 ### 21.9 Second Brain
 
-| Method                | Params                           | Returns                    |
-| --------------------- | -------------------------------- | -------------------------- |
-| `brain_get_tree`      | `path`                           | Folder/file tree structure |
-| `brain_search`        | `query, date_filter, sort`       | Search results list        |
-| `brain_create_folder` | `parent_path, name`              | Create folder              |
-| `brain_create_file`   | `parent_path, filename, content` | Create file                |
-| `brain_read_file`     | `filepath`                       | File content               |
-| `brain_save_file`     | `filepath, content`              | Atomic write               |
-| `brain_delete`        | `path`                           | Recycle Bin                |
-| `brain_rename`        | `path, new_name`                 | Rename                     |
-| `brain_pin`           | `filepath, pinned: bool`         | Update pin metadata        |
-| `brain_favorite`      | `filepath, favorite: bool`       | Update favorite metadata   |
+| Method                         | Params                                  | Returns                                      |
+| ------------------------------ | --------------------------------------- | -------------------------------------------- |
+| `second_brain_workspace`       | —                                       | Cached Personal + Project workspace          |
+| `second_brain_refresh`         | —                                       | Forced reindex + fresh workspace             |
+| `second_brain_search`          | `query, {date, sort, item_type, source}` | Filtered/ranked indexed items                |
+| `second_brain_get`             | `item_id`                               | Indexed item                                 |
+| `second_brain_related`         | `item_id`                               | Ranked wiki/tag/Drone/project relations      |
+| `second_brain_tags`            | `item_id, tags[]`                       | Item with atomically replaced tags           |
+| `second_brain_pin`             | `item_id`                               | Item with toggled pin metadata               |
+| `second_brain_favorite`        | `item_id`                               | Item with toggled favorite metadata          |
+| `second_brain_create`          | `target, name`                          | New guarded Personal text-like file          |
+| `second_brain_folder_create`   | `parent, name`                          | New guarded Personal folder                  |
+| `second_brain_rename`          | `filepath, new_name`                    | Renamed Personal item                        |
+| `second_brain_recycle`         | `filepath`                              | Personal item sent to Recycle Bin            |
+| `second_brain_image`           | `filepath`                              | Guarded image data URI                       |
+| `second_brain_mark_saved`      | `filepath`                              | Index invalidation after shared-editor save  |
+| `second_brain_activity_record` | `item_id, action`                       | Best-effort cached activity entry            |
+| `second_brain_activity_list`   | `item_id?`                              | Capped recent activity                       |
+| `second_brain_use_default_folder` | —                                    | Created/persisted default Personal root      |
+
+Legacy `second_brain_list`, `second_brain_note_create`, `second_brain_file_create`, `second_brain_note_write`, and `second_brain_note_delete` remain compatibility bridge methods and route through the same service guards.
 
 ### 21.10 Link Bank
 
-| Method                  | Params                     | Returns                   |
-| ----------------------- | -------------------------- | ------------------------- |
-| `link_get_all`          | —                          | All categories + links    |
-| `link_category_create`  | `name`                     | New category              |
-| `link_category_rename`  | `category_id, new_name`    | Rename                    |
-| `link_category_archive` | `category_id`              | Archive                   |
-| `link_create`           | `data`                     | New link                  |
-| `link_update`           | `link_id, data`            | Update link               |
-| `link_archive`          | `link_id`                  | Soft delete               |
-| `link_restore`          | `link_id`                  | Restore from archive      |
-| `link_search`           | `query, date_filter, sort` | Search results            |
-| `link_export`           | `output_path, format`      | JSON or CSV export        |
-| `link_import`           | `file_path`                | Import + validate + merge |
+| Method                       | Params                      | Returns                                      |
+| ---------------------------- | --------------------------- | -------------------------------------------- |
+| `linkbank_get`               | —                           | Active/archived categories + stable-ID links |
+| `linkbank_add_link`          | `data`                      | Atomically persisted link                    |
+| `linkbank_update`            | `data` including `id`       | Atomically updated link                      |
+| `linkbank_archive_link`      | `link_id`                   | Soft-archived link                           |
+| `linkbank_restore_link`      | `link_id`                   | Restored link                                |
+| `linkbank_category_create`   | `name`                      | Updated Link Bank                            |
+| `linkbank_category_rename`   | `old_name, new_name`        | Updated Link Bank                            |
+| `linkbank_category_archive`  | `name`                      | Category + links soft-archived               |
+| `linkbank_category_restore`  | `name`                      | Category + links restored                    |
+| `linkbank_open`              | `link_id`                   | Link opened through default OS browser       |
+| `linkbank_export_file`       | `json | csv`                | Format, content, suggested filename          |
+| `linkbank_import_preview`    | `format_name, content`      | Add/update/conflict/invalid preview; no write |
+| `linkbank_import_merge`      | `format_name, content`      | Confirmed atomic merge result                |
+
+`linkbank_export` remains a compatibility JSON-object export. Import preview and merge receive the same payload so cancellation and parse/validation failure cannot mutate the store.
 
 ### 21.11 Notifications
 
@@ -2353,11 +2376,10 @@ All methods callable from Svelte frontend via `window.pywebview.api.*`.
 
 ### 21.12 Settings
 
-| Method                      | Params    | Returns                        |
-| --------------------------- | --------- | ------------------------------ |
-| `settings_get`              | —         | Full settings.json content     |
-| `settings_save`             | `data`    | Validate + write settings.json |
-| `settings_restore_defaults` | `section` | Reset section to defaults      |
+| Method            | Params | Returns                                   |
+| ----------------- | ------ | ----------------------------------------- |
+| `settings_get`    | —      | Full settings.json content                |
+| `settings_update` | `data` | Validate + atomically write settings.json |
 
 ### 21.13 Automations
 
@@ -2580,8 +2602,9 @@ On first run:
 1. Create `%APPDATA%\ProjectTrackerDBS\` directory if not exists.
 1. Create default `settings.json`.
 1. Set `root_folder` to `C:\Users\<user>\Documents\Project Tracker\` and create that folder.
-1. Create default `link_bank.json`.
-1. Create `SecondBrain\` directory.
+1. Initialize the Link Bank store; `link_bank.json` is written atomically on the first mutation or confirmed import.
+1. If `second_brain_folder` is unset, create and persist `Documents\Project Tracker\Second Brain`.
+1. If `second_brain_folder` already points to an external location, leave that path and its contents unchanged.
 1. Create `cache.db` SQLite database.
 1. Show AppcodeSetup popup until at least one appcode is added.
 1. For each added appcode, create `appcode.json`, `CICD\`, and `{YEAR}\CR\{UAT_PREPARE, PROD_READY, IMPLEMENTED, POSTPONED, CANCELED}\` plus `{YEAR}\Non-CR\`.
@@ -2676,7 +2699,7 @@ Cover:
 - Auto PROD_READY trigger on state change.
 - Sub project table + Drone ticket management.
 - File management.
-- Notes autosave (marked.js for preview).
+- Notes autosave through the shared Tiptap/Markdown capability pipeline (D-0007/D-0012).
 - History panel.
 - REOPEN flow.
 - All locking rules applied.
@@ -2689,14 +2712,15 @@ Build: Second Brain Notes tab, Link Bank tab, Report page.
 
 Cover:
 
-- Notes tree: Pinned, Favorites, Second Brain Notes, Project Documents.
-- Notes search index: in-memory precomputed, debounced, date-filterable.
-- Notes CRUD: create, read, edit, delete (Recycle Bin), rename, pin, favorite.
-- markdown.js integration for preview.
-- Link Bank: category CRUD, link CRUD, search, archive/restore, import/export.
+- Zero-config Personal Notes at `Documents\Project Tracker\Second Brain`, with Settings external-folder override preserved in place.
+- One cached filesystem index: Pinned, Favorites, Personal Notes, and eligible CR/Non-CR/Drone Project Documents; exclude CICD, hidden/internal paths, default app metadata, and `project_data.json`.
+- Reuse Project Details `NotesEditor.svelte` unchanged against original files; no alternate editor/save path.
+- Personal-only structural create/rename/Recycle Bin plus atomic pin/favorite/tag sidecar metadata; Project Documents disable structural mutations while content follows shared-editor capability and project locks.
+- Full-content/path/tag/project search, related-note ranking, guarded image/external modes, and capped disposable activity cache.
+- Link Bank service: category/link CRUD, search, pin/favorite, soft archive/restore, browser open/copy, JSON/CSV export, preview-confirmed atomic JSON/CSV merge import.
 - Report: filters, summary rows, table, CSV export with file dialog.
 
-Verify: search behavior, persistence, CSV output format.
+Verify: default/override safety, editor parity and flush failure, hierarchy/exclusions, metadata persistence, Link Bank JSON/CSV workflows, responsive/control states, and Report CSV output.
 
 ### Phase G — Automations
 
@@ -2747,6 +2771,9 @@ Verify: app installs and runs on clean Windows machine.
 | 8   | Missing subfolder mapping for Drone ticket shows warning without crash.                     |
 | 9   | SQLite deletion triggers rebuild from filesystem without data loss.                         |
 | 10  | Settings persist across app restarts under app data folder.                                 |
+| 11  | Fresh install creates `Documents\Project Tracker\Second Brain`; an existing external override is never moved or replaced. |
+| 12  | Second Brain file content remains canonical; pin/favorite/tags use atomic hidden sidecar metadata and activity remains disposable cache. |
+| 13  | Link Bank JSON writes and confirmed import merges are atomic; preview/cancel/malformed import never writes. |
 
 ### 26.2 State Machine
 
@@ -2793,6 +2820,10 @@ Verify: app installs and runs on clean Windows machine.
 | 8   | Teams automation defaults to paste-only mode.                                   |
 | 9   | Scheduler entries persist across restarts and trigger at configured times.      |
 | 10  | Rules Engine executes ordered actions on condition match.                       |
+| 11  | Second Brain uses Project Details `NotesEditor.svelte` unchanged; save failure blocks file/tab switching. |
+| 12  | Personal Notes supports guarded create/rename/Recycle Bin; Project Documents disable structural mutation while content follows shared-editor capability and project locks. |
+| 13  | CICD, hidden/internal/default metadata, `project_data.json`, and app sidecars never appear in Project Documents. |
+| 14  | Link Bank JSON/CSV export and preview-confirmed merge import preserve stable IDs and soft archive state. |
 
 ### 26.5 Platform & Safety
 
@@ -2825,7 +2856,8 @@ These are runtime-calibration items confirmed during Windows manual testing. The
 | 5   | Outlook COM contacts folder structure (different Outlook versions) | Phase G Windows test |
 | 6   | Whether notification history in-memory is sufficient for MVP       | Phase H review       |
 | 7   | Whether watchdog is needed or auto-refresh polling is sufficient   | Phase E review       |
-| 8   | Whether Link Bank import should support CSV in addition to JSON    | Phase F review       |
+
+Resolved 2026-07-12: Link Bank import/export supports both JSON and CSV. Every import is previewed before a confirmed atomic merge.
 
 ---
 
