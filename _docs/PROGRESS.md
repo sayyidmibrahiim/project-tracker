@@ -6,9 +6,9 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `second-brain/complete-menu`. Second Brain completion Tasks 1–10 and final review-fix rounds are implemented. Automated Task 11 gate is green; production build and mandatory user live checklist are pending. No merge until live checks pass and user explicitly approves. D-0017.
+Active branch: `second-brain/complete-menu`. Second Brain completion Tasks 1–10 and final review-fix rounds are implemented. Automated Task 11 gate and production build are green; app relaunched for the mandatory user live checklist. No merge until live checks pass and user explicitly approves. D-0017.
 
-**Second Brain completion (`second-brain/complete-menu`)**: zero-config Personal Notes defaults to `Documents\Project Tracker\Second Brain` while existing external overrides stay untouched. One cached filesystem index covers Personal plus eligible CR/Non-CR/Drone files and excludes CICD/internal/default metadata. Notes mounts Project Details `NotesEditor.svelte` unchanged; Personal supports guarded structural CRUD, while Project Documents disables create/rename/recycle but retains the shared editor's file capability and project-state locks. Pin/favorite/tags persist in atomic hidden sidecar metadata; activity is capped disposable SQLite cache. Link Bank now uses `LinkBankService` over atomic `link_bank.json`, stable IDs, soft archive/restore, and JSON/CSV export plus preview-confirmed atomic merge import. Build/live gate remains open; branch is not merged.
+**Second Brain completion (`second-brain/complete-menu`)**: zero-config Personal Notes defaults to `Documents\Project Tracker\Second Brain` while existing external overrides stay untouched. One cached filesystem index covers Personal plus eligible CR/Non-CR/Drone files and excludes CICD/internal/default metadata. Notes mounts Project Details `NotesEditor.svelte` unchanged; Personal supports guarded structural CRUD, while Project Documents disables create/rename/recycle but retains the shared editor's file capability and project-state locks. Pin/favorite/tags persist in atomic hidden sidecar metadata; activity is capped disposable SQLite cache. Link Bank now uses `LinkBankService` over atomic `link_bank.json`, stable IDs, soft archive/restore, and JSON/CSV export plus preview-confirmed atomic merge import. Production build is green; live verification remains open and branch is not merged.
 
 **Root folder bootstrap + appcode first-run (`general/root-folder-bootstrap`)**: user-verified and merged to `main` 2026-07-11. Backend `bootstrap_root()` runs before `create_js_api`: `root_folder=None` creates `Path.home()/Documents/Project Tracker`; non-default existing roots are force-moved to that default path; in-root absolute paths are rewritten in `settings.json`, `appcode.json` `cicd_shared_path`, and SQLite `notifications`/`approval_polling_jobs`; rebuildable cache tables (`project_index`, `drone_tickets`, `scan_warnings`) are cleared and rescanned; missing old roots create an empty default and clear cache; migration failure keeps the old root. `SettingsStore.write()` no longer creates legacy `{root}/{year}/{states}` folders. Frontend replaces FirstRunSetup with AppcodeSetup (min 1 appcode, no skip); existing `appcode_add` creates full worktree (`appcode.json`, `CICD/`, `{YEAR}/CR/{5 states}/Non-CR/`). Root Folder field removed from Settings; WelcomeGuide deleted after it overlapped first-run appcode popup. Verification: `test_bootstrap_service.py` 17 passed; related backend 23 passed; frontend 188 passed; svelte-check 0 errors/13 known warnings; build clean (chunk-size warning only); user confirmed all manual checks pass.
 
@@ -49,7 +49,7 @@ full frontend suite: 281 passed / 0 failed
 svelte-check: 0 errors, 13 known a11y warnings
 focused Python compile: ✓
 git diff --check: ✓
-production build: pending app closure + user approval
+production build: ✓ (256 modules; known a11y/chunk-size warnings only)
 user live checklist: pending
 ```
 
@@ -82,7 +82,7 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 | UX feature pack     | Done, pending user verify |
 | Global App Plan     | Done, pending user verify |
 | Report              | Done, pending user verify |
-| Second Brain        | Implemented + automated green; build/live gate pending |
+| Second Brain        | Implemented + automated/build green; user live gate pending |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
 | Piece B CR docs RTE | ✅ User-verified + merged 2026-07-04 |
