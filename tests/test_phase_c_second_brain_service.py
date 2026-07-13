@@ -263,6 +263,51 @@ def test_search_invalid_date_filter_raises_value_error():
         service.search("", date_filter="not-a-date")
 
 
+def test_search_document_type_includes_non_image_files_but_not_images_or_folders():
+    items = [
+        SecondBrainItem(
+            id="markdown",
+            title="Markdown",
+            path=Path("/notes/note.md"),
+            item_type="note",
+            open_mode="markdown",
+        ),
+        SecondBrainItem(
+            id="docx",
+            title="DOCX",
+            path=Path("/notes/brief.docx"),
+            item_type="file",
+            open_mode="docx",
+        ),
+        SecondBrainItem(
+            id="pdf",
+            title="PDF",
+            path=Path("/notes/brief.pdf"),
+            item_type="file",
+            open_mode="external",
+        ),
+        SecondBrainItem(
+            id="image",
+            title="Image",
+            path=Path("/notes/image.png"),
+            item_type="file",
+            open_mode="image",
+        ),
+        SecondBrainItem(
+            id="folder",
+            title="Folder",
+            path=Path("/notes/folder"),
+            item_type="folder",
+            open_mode="external",
+        ),
+    ]
+    service = SecondBrainService(items_provider=lambda: items)
+
+    result = service.search("", type_filter="document")
+
+    assert {item.id for item in result} == {"docx", "pdf"}
+
+
 def test_search_reports_match_reason_filters_then_sorts():
     items = [
         SecondBrainItem(

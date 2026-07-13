@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from core.enums import CRState, DroneState, ProjectState
 from infrastructure.cache_db import CacheDb, CachedDroneTicketRow, CachedProjectRow
 
@@ -541,22 +543,24 @@ def test_list_second_brain_activity_orders_newest_first_by_timestamp_then_id(tmp
     assert ordered == ["note-2", "note-3", "note-1"]
 
 
-def test_append_second_brain_activity_dedupes_same_item_and_action_and_moves_to_newest(
+@pytest.mark.parametrize("action", ["opened", "opened_externally"])
+def test_append_second_brain_activity_dedupes_repeated_opens_and_moves_to_newest(
     tmp_path: Path,
+    action: str,
 ) -> None:
     cache = CacheDb(tmp_path / "cache.sqlite3")
     cache.initialize()
     cache.append_second_brain_activity(
-        _activity_row(item_id="note-1", action="opened", ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+        _activity_row(item_id="note-1", action=action, ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
     )
     cache.append_second_brain_activity(
-        _activity_row(item_id="note-2", action="opened", ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
+        _activity_row(item_id="note-2", action=action, ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
     )
 
     # note-1 opened again, later than note-2 — should update in place, not duplicate.
     cache.append_second_brain_activity(
         _activity_row(
-            item_id="note-1", action="opened", ts=datetime(2026, 7, 3, tzinfo=timezone.utc), title="A renamed"
+            item_id="note-1", action=action, ts=datetime(2026, 7, 3, tzinfo=timezone.utc), title="A renamed"
         )
     )
 
@@ -580,6 +584,24 @@ def test_append_second_brain_activity_keeps_distinct_actions_for_same_item(tmp_p
 
     assert {row.action for row in rows} == {"created", "opened"}
     assert len(rows) == 2
+
+
+@pytest.mark.parametrize("action", ["edited", "renamed"])
+def test_append_second_brain_activity_preserves_repeated_mutations(
+    tmp_path: Path, action: str
+) -> None:
+    cache = CacheDb(tmp_path / "cache.sqlite3")
+    cache.initialize()
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action=action, ts=datetime(2026, 7, 1, tzinfo=timezone.utc))
+    )
+    cache.append_second_brain_activity(
+        _activity_row(item_id="note-1", action=action, ts=datetime(2026, 7, 2, tzinfo=timezone.utc))
+    )
+
+    rows = cache.list_second_brain_activity(item_id="note-1")
+
+    assert [row.action for row in rows] == [action, action]
 
 
 def test_append_second_brain_activity_caps_at_200_newest_rows(tmp_path: Path) -> None:

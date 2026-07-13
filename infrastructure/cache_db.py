@@ -590,19 +590,22 @@ class CacheDb:
 
     # ── Task 5: second_brain_activity (capped recent-activity ledger) ──────
     def append_second_brain_activity(self, row: SecondBrainActivityRow) -> SecondBrainActivityRow:
-        """Append one activity row, deduped by ``(item_id, action)``.
+        """Append one activity row, deduping repeated opens.
 
-        A repeat of the same item+action updates the existing row in place
+        A repeated open of the same item updates the existing row in place
         (path/title/source/timestamp) so it moves to the newest position on
-        the next read instead of creating a duplicate. The table is trimmed
-        to the newest ``SECOND_BRAIN_ACTIVITY_CAP`` rows after every write.
+        the next read instead of creating a duplicate. Other actions preserve
+        their event history. The table is trimmed to the newest
+        ``SECOND_BRAIN_ACTIVITY_CAP`` rows after every write.
         """
         item_id, path, title, source, action, timestamp = self._activity_values(row)
         with self._connect() as connection:
-            existing = connection.execute(
-                "SELECT id FROM second_brain_activity WHERE item_id = ? AND action = ?",
-                (item_id, action),
-            ).fetchone()
+            existing = None
+            if action in {"opened", "opened_externally"}:
+                existing = connection.execute(
+                    "SELECT id FROM second_brain_activity WHERE item_id = ? AND action = ?",
+                    (item_id, action),
+                ).fetchone()
             if existing is not None:
                 row_id = int(existing[0])
                 connection.execute(

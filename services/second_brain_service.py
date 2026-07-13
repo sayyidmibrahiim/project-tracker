@@ -1042,6 +1042,8 @@ class SecondBrainService:
         requested = type_filter.strip().casefold().removeprefix(".")
         if requested in {"", "all"}:
             return True
+        if requested == "document":
+            return item.item_type.casefold() == "file" and item.open_mode.casefold() != "image"
         return requested in {
             item.item_type.casefold(),
             item.open_mode.casefold(),
