@@ -6,9 +6,9 @@
 
 Phase labels are deprecated for active work. Work now follows `{menu}/{desc}` branches from `main`.
 
-Active branch: `second-brain/complete-menu`. Second Brain completion Tasks 1–10 and final review-fix rounds are implemented. Automated Task 11 gate and production build are green; app relaunched for the mandatory user live checklist. No merge until live checks pass and user explicitly approves. D-0017.
+Active branch: `main` (after merge). Second Brain completion `second-brain/complete-menu` merged to `main` 2026-07-13 (user-verified + approved; branch kept per user rule). D-0017.
 
-**Second Brain completion (`second-brain/complete-menu`)**: zero-config Personal Notes defaults to `Documents\Project Tracker\Second Brain` while existing external overrides stay untouched. One cached filesystem index covers Personal plus eligible CR/Non-CR/Drone files and excludes CICD/internal/default metadata. Notes mounts Project Details `NotesEditor.svelte` unchanged; Personal supports guarded structural CRUD, while Project Documents disables create/rename/recycle but retains the shared editor's file capability and project-state locks. Pin/favorite/tags persist in atomic hidden sidecar metadata; activity is capped disposable SQLite cache. Link Bank now uses `LinkBankService` over atomic `link_bank.json`, stable IDs, soft archive/restore, and JSON/CSV export plus preview-confirmed atomic merge import. Production build is green; live verification remains open and branch is not merged.
+**Second Brain completion (merged to `main` 2026-07-13, branch `second-brain/complete-menu` kept)**: zero-config Personal Notes defaults to `Documents\Project Tracker\Second Brain` while existing external overrides stay untouched. One cached filesystem index covers Personal plus eligible CR/Non-CR/Drone files and excludes CICD/internal/default metadata. Notes mounts Project Details `NotesEditor.svelte` unchanged; Personal supports guarded structural CRUD, while Project Documents disables create/rename/recycle but retains the shared editor's file capability and project-state locks. Pin/favorite/tags persist in atomic hidden sidecar metadata; activity is capped disposable SQLite cache. Link Bank now uses `LinkBankService` over atomic `link_bank.json`, stable IDs, soft archive/restore, and JSON/CSV export plus preview-confirmed atomic merge import. User-verified live (incl. RTE height fix `971079b`); fast-forward merge to `main`, pushed to GitHub.
 
 **RTE height fix (2026-07-13, `971079b`)**: Second Brain RTE textarea was too short — didn't fill the editor column (empty space hung below). Root cause: `NotesEditor.svelte:1137` `.ne-root` is `display:flex` only with no `flex:1`/`min-height:0`, so it took content-height and the shared `.ne-textarea` cap (`max-height:300px` at line 1185) stayed in effect. Fix: scoped override in `SecondBrainNotes.svelte` `<style>` chaining `.sb-editor .ne-root -> .ne-editor-host -> .ne-textarea` to `flex:1 1 auto` with `max-height:none`. Selector `.sb-editor` only exists in `SecondBrainNotes.svelte`, so Project Details / other menus keep the 300px cap. Single file, +6 lines; NotesEditor.svelte, ProjectDetails.svelte, styles.css untouched. User manual PASS.
 
@@ -67,6 +67,7 @@ Master plan: `_docs/specs/superpowers/plans/2026-07-04-completion-master-plan.md
 | 3 | `automations/approval-polling` | Piece C approval automation + Automation System epic Slices 1–5 | ✅ Merged 2026-07-08 |
 | 4 | `general/cicd-bitbucket` | Piece D CICD Workbench v2 (link-only clone, editing, safe git) | Merged to `main` 2026-07-09 (manual check passed) |
 | 4a | `general/window-responsive-fixes` | Native frameless window behavior + responsive/table overflow fixes | ✅ Merged 2026-07-11 (user-verified; branch kept) |
+| SB | `second-brain/complete-menu` | Second Brain completion: Personal Notes zero-config, FS index, Project Documents locks, pin/fav/tags sidecar, LinkBankService, RTE height fix | ✅ Merged to `main` 2026-07-13 (fast-forward; user-verified + approved; branch kept) |
 | 5 | `general/professional-polish` | Remaining color hygiene, a11y floor, Phase D test debt, avatar initials | Planned |
 | 6 | `general/packaging` | Windows verify sweep + PyInstaller (PRD Phase H) | Planned |
 
@@ -84,7 +85,7 @@ Locked decisions 2026-07-04: per-format RTE strategy (md/txt direct; docx pipeli
 | UX feature pack     | Done, pending user verify |
 | Global App Plan     | Done, pending user verify |
 | Report              | Done, pending user verify |
-| Second Brain        | Implemented + automated/build green; user live gate pending |
+| Second Brain        | ✅ User-verified + merged 2026-07-13 |
 | Automations         | Done, pending user verify |
 | Settings            | Done, pending user verify |
 | Piece B CR docs RTE | ✅ User-verified + merged 2026-07-04 |

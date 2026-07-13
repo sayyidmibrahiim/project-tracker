@@ -8,6 +8,20 @@
 
 ---
 
+## 2026-07-13 (Second Brain merge — `second-brain/complete-menu` → `main`)
+
+**Now:** User approved merge after live checklist + RTE height fix passed. Fast-forward merge `2aebc925..8cbeab5d` (35 commits) into `main`, pushed to GitHub (`f6bef5ea..8cbeab5d`). Branch kept per user rule.
+
+**Merged scope:** Second Brain completion Tasks 1–10 + final review-fix rounds + RTE height fix (`971079b`). Personal Notes zero-config, FS index, Project Documents locks, pin/fav/tags sidecar, LinkBankService (atomic `link_bank.json`, stable IDs, soft archive/restore, JSON/CSV export, preview-confirmed atomic merge import). D-0017.
+
+**Final gate (live-verified):** focused backend 301 pass · Second Brain frontend contract 93/93 · full frontend 281/281 · svelte-check 0 errors / 13 baseline · production build green (256 modules) · user manual PASS (incl. RTE fills editor column).
+
+**Next:** Roadmap → #5 `general/professional-polish` (color hygiene, a11y floor, Phase D test debt, avatar initials) or #6 `general/packaging` (Windows verify sweep + PyInstaller).
+
+**active_menu:** (idle — awaiting next slice pick)
+
+---
+
 ## 2026-07-13 (Second Brain RTE height fix — branch `second-brain/complete-menu`)
 
 **Now:** User live-checked Second Brain and reported the RTE textarea was still too short (didn't fill the editor column — empty space hung below it). Fix committed `971079b`. User confirmed PASS.
