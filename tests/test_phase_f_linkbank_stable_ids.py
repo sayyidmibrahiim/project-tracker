@@ -837,6 +837,81 @@ class TestApplyRowPreservesOptionalTextFields:
         assert updated["notes"] == "old description"
         assert updated["details"] == "old description"
 
+    @pytest.mark.parametrize("format_name", ["json", "csv"])
+    def test_merge_update_explicit_blank_flags_normalize_to_false(
+        self, tmp_path: Path, format_name: str
+    ):
+        service = self._service(tmp_path)
+        link = service.add_link(
+            {
+                "name": "Old Name",
+                "url": "https://example.com",
+                "pinned": "true",
+                "favorite": "true",
+                "archived": "true",
+            }
+        )
+        if format_name == "json":
+            content = json.dumps(
+                {
+                    "links": [
+                        {
+                            "id": link["id"],
+                            "name": "New Name",
+                            "url": "https://example.com",
+                            "pinned": "",
+                            "favorite": "",
+                            "archived": "",
+                        }
+                    ]
+                }
+            )
+        else:
+            content = (
+                "id,name,url,pinned,favorite,archived\n"
+                f'{link["id"]},New Name,https://example.com,,,\n'
+            )
+
+        service.merge_import(format_name, content)
+
+        updated = next(
+            item for item in service.get_linkbank()["links"] if item["id"] == link["id"]
+        )
+        assert updated["pinned"] == "false"
+        assert updated["favorite"] == "false"
+        assert updated["archived"] == "false"
+
+
+class TestMergeImportArchivedCategoryInvariant:
+    """A stable-ID update cannot reactivate a link inside an archived category."""
+
+    def test_update_omitting_archived_category_keeps_link_archived(self, tmp_path: Path):
+        service = LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
+        link = service.add_link(
+            {"name": "Old Name", "url": "https://example.com", "category": "ops"}
+        )
+        service.category_archive("ops")
+        content = json.dumps(
+            {
+                "links": [
+                    {
+                        "id": link["id"],
+                        "name": "New Name",
+                        "url": "https://example.com",
+                        "archived": False,
+                    }
+                ]
+            }
+        )
+
+        service.merge_import("json", content)
+
+        updated = next(
+            item for item in service.get_linkbank()["links"] if item["id"] == link["id"]
+        )
+        assert updated["category"] == "ops"
+        assert updated["archived"] == "true"
+
 
 # ── Fix Round 2, Finding C: update_linkbank archived-category parity ────
 

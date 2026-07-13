@@ -515,15 +515,16 @@ class LinkBankService:
             category.casefold() for category in [*bank.archived_categories, *new_archived_categories_cf.values()]
         }
 
-        def resolve_row_category(row: dict[str, str]) -> None:
+        def resolve_row_category(row: dict[str, str], fallback_category: str = "") -> None:
             # ponytail: only called at classification-success points (add/update),
             # so a conflicting row never registers its novel category (Finding A).
             if "category" in row:
                 row["category"] = self._resolve_category(
                     str(row["category"]), canonical_categories_cf, new_categories_cf
                 )
-                if row["category"].casefold() in archived_category_keys:
-                    row["archived"] = "true"
+            effective_category = row.get("category", fallback_category)
+            if effective_category.casefold() in archived_category_keys:
+                row["archived"] = "true"
 
         seen_ids: set[str] = set()
         seen_urls: set[str] = set()
@@ -566,7 +567,7 @@ class LinkBankService:
                 if owner_id is not None and owner_id != row_id:
                     conflicts.append({"row": raw_row, "reason": "url belongs to another id"})
                     continue
-                resolve_row_category(row)
+                resolve_row_category(row, existing_by_id[row_id].get("category", ""))
                 to_update.append((row_id, row))
                 seen_ids.add(row_id)
                 seen_urls.add(norm_url)
@@ -663,7 +664,6 @@ class LinkBankService:
             target["notes"] = description
             target["details"] = description
         for flag in ("pinned", "favorite", "archived"):
-            value = row.get(flag, "")
-            if value:
-                target[flag] = _normalize_bool(value)
+            if flag in row:
+                target[flag] = _normalize_bool(row[flag])
         target["updated_at"] = now
