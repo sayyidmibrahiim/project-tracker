@@ -119,6 +119,10 @@ test("SecondBrainItem keeps existing fields and adds all Task 2 index fields", (
   assert.match(body, /tags:\s*string\[\]/);
 });
 
+test("SecondBrainActivity id mirrors backend integer primary key", () => {
+  assert.match(interfaceBody(TYPES, "SecondBrainActivity"), /\bid:\s*number\s*;/);
+});
+
 // --- SecondBrainWorkspace: mirrors workspace() from Task 2 -------------------
 
 test("SecondBrainWorkspace mirrors workspace() { items, warnings, personal_root, project_root, personal_status }", () => {
@@ -360,6 +364,44 @@ test("Search is debounced at 150 ms with a stale-result guard", () => {
   assert.match(NOTES, /seq !== searchSeq/);
 });
 
+test("Filters run without search text and date uses the backend YYYY-MM-DD contract", () => {
+  const searchBody = fnBody(NOTES, "runSearch");
+  const filterBody = fnBody(NOTES, "onFiltersChanged");
+  assert.match(NOTES, /type="date"\s+bind:value=\{dateFilter\}/);
+  assert.match(NOTES, /function hasActiveFilters\s*\(/);
+  assert.match(searchBody, /!query\s*&&\s*!hasActiveFilters\s*\(\)/);
+  assert.match(filterBody, /void\s+runSearch\s*\(\)/);
+});
+
+test("Clearing search invalidates any in-flight stale request", () => {
+  const body = fnBody(NOTES, "runSearch");
+  const seqIdx = body.search(/const\s+seq\s*=\s*\+\+searchSeq/);
+  const emptyIdx = body.search(/if\s*\(\s*!query\s*&&/);
+  assert.ok(seqIdx >= 0 && seqIdx < emptyIdx, "request token must advance before empty-search early return");
+});
+
+test("Tree identity is source-scoped so Personal and Project paths cannot collide", () => {
+  const body = fnBody(NOTES, "buildTree");
+  assert.match(NOTES, /function treeKey\s*\(source:\s*SecondBrainSource/);
+  assert.match(body, /treeKey\(it\.source,\s*it\.tree_path\)/);
+  assert.match(body, /treeKey\(node\.item\.source,\s*node\.item\.parent_path\)/);
+});
+
+test("Source ribbon exposes breadcrumb, file type, and capability state", () => {
+  assert.match(NOTES, /sb-ribbon-breadcrumb/);
+  assert.match(NOTES, /selectedItem\.tree_path/);
+  assert.match(NOTES, /selectedItem\.file_format/);
+  assert.match(NOTES, /Editable|Read-only|Preview|External/);
+});
+
+test("External-open activity records only after file_open succeeds", () => {
+  const body = fnBody(NOTES, "openExternal");
+  const openIdx = body.search(/await\s+callBridge\s*\(\s*"file_open"/);
+  const okIdx = body.search(/if\s*\(\s*!resp\.ok\s*\)/);
+  const activityIdx = body.search(/"opened_externally"/);
+  assert.ok(openIdx >= 0 && okIdx > openIdx && activityIdx > okIdx);
+});
+
 test("onSaved records via second_brain_mark_saved (no excerpt duplication)", () => {
   assert.match(NOTES, /"second_brain_mark_saved"/);
 });
@@ -431,6 +473,51 @@ test("commitCreate clears creating + createName BEFORE the create bridge call (d
   assert.ok(nameIdx < bridgeIdx, "createName must clear before the bridge await (blur re-entry no-ops)");
 });
 
+// --- Final review fix: explorer hierarchy + complete Personal create flows ---
+
+test("buildTree keys nodes by logical tree_path and synthesizes missing project ancestors", () => {
+  const body = fnBody(NOTES, "buildTree");
+  assert.match(body, /treeKey\(it\.source,\s*it\.tree_path\)/, "real nodes must be keyed by source + logical tree_path");
+  assert.match(body, /while\s*\(parentPath\)/, "missing ancestor chain must be synthesized");
+  assert.match(body, /id:\s*`tree:/, "synthetic project folders need stable UI-only IDs");
+  assert.match(body, /node\.item\.parent_path/, "tree attachment must use logical parent_path");
+});
+
+test("Personal Notes exposes separate File and Folder create actions", () => {
+  assert.match(NOTES, /beginCreate\(\s*"file"\s*\)/);
+  assert.match(NOTES, /beginCreate\(\s*"folder"\s*\)/);
+  assert.match(NOTES, />\+ File<|>Add File</);
+  assert.match(NOTES, />\+ Folder<|>Add Folder</);
+});
+
+test("commitCreate defaults extensionless files to .md and routes folders separately", () => {
+  const body = fnBody(NOTES, "commitCreate");
+  assert.match(body, /(?:createKind|kind)\s*===\s*"file"/);
+  assert.match(body, /`\$\{name\}\.md`/, "extensionless Personal files must default to .md");
+  assert.match(body, /"second_brain_create"/);
+  assert.match(body, /"second_brain_folder_create"/);
+});
+
+test("new Personal file refreshes the index then selects the returned created path", () => {
+  const body = fnBody(NOTES, "commitCreate");
+  const refreshIdx = body.search(/await loadWorkspace\(true\)/);
+  const findIdx = body.indexOf("workspace?.items.find((it) => it.path === createdPath)");
+  const selectIdx = body.search(/await selectItem\(createdItem\)/);
+  assert.ok(refreshIdx >= 0, "create must refresh the filesystem index");
+  assert.ok(findIdx > refreshIdx, "created item lookup must use the refreshed workspace");
+  assert.ok(selectIdx > findIdx, "created file must be selected after lookup");
+});
+
+test("project items cannot enter rename or recycle flows", () => {
+  const renameBody = fnBody(NOTES, "beginRename");
+  const recycleBody = fnBody(NOTES, "confirmRecycle");
+  const keyBody = fnBody(NOTES, "onKeydown");
+  assert.match(renameBody, /item\.source\s*!==\s*"personal"[^\n]*return/);
+  assert.match(recycleBody, /item\.source\s*!==\s*"personal"[^\n]*return/);
+  assert.match(keyBody, /e\.key\s*===\s*"F2"\s*&&\s*selectedItem\.source\s*===\s*"personal"/);
+  assert.match(NOTES, /disabled=\{selectedItem\.source\s*!==\s*"personal"\}[^>]*>Rename<|>Rename<[^\n]*disabled=\{selectedItem\.source\s*!==\s*"personal"\}/);
+});
+
 test("recordOpen records \"opened\" for inline-loaded/previewed selections, nothing for external", () => {
   const body = fnBody(NOTES, "recordOpen");
   assert.match(body, /item\.open_mode === "external"/, "recordOpen must special-case external items");
@@ -456,8 +543,9 @@ test("saveTagsFromInput guards against Enter+blur double-fire (one commit per ed
   assert.ok(guardSetIdx < bridgeIdx, "guard must be set before the await (blur re-entry no-ops)");
 });
 
-test("+ New create button is disabled while the personal folder is not ready", () => {
-  assert.match(NOTES, /disabled=\{personalMissing\}[^>]*onclick=\{beginCreate\}/);
+test("Personal create buttons are disabled while the personal folder is not ready", () => {
+  const disabledButtons = NOTES.match(/<button[^>]*disabled=\{personalMissing\}[^>]*onclick=\{\(\) => beginCreate\("(?:file|folder)"\)\}[^>]*>/g) || [];
+  assert.equal(disabledButtons.length, 2);
 });
 
 test("Related reason and Activity action labels use a global underscore-to-space replace", () => {

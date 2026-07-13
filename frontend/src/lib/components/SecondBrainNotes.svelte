@@ -61,6 +61,7 @@
   // Personal-only create target (a personal folder path, or null → personal_root).
   let personalCreateTarget: string | null = $state(null);
   let creating: boolean = $state(false);
+  let createKind: "file" | "folder" = $state("file");
   let createName: string = $state("");
   let createInputEl: HTMLInputElement | null = $state(null);
   let renamingPath: string | null = $state(null);
@@ -81,13 +82,59 @@
   const personalMissing = $derived.by(() => !!workspace && workspace.personal_status !== "ready");
   const tagText = $derived.by(() => (selectedItem?.tags ?? []).join(", "));
 
-  /** Nest a flat item list into a folder tree using parent_path. */
+  function normalizeTreePath(path: string | null): string {
+    return (path ?? "").replaceAll("\\", "/").split("/").filter(Boolean).join("/");
+  }
+
+  function treeKey(source: SecondBrainSource, path: string | null): string {
+    return `${source}:${normalizeTreePath(path)}`;
+  }
+
+  function parentTreePath(path: string): string | null {
+    const normalized = normalizeTreePath(path);
+    const slash = normalized.lastIndexOf("/");
+    return slash < 0 ? null : normalized.slice(0, slash);
+  }
+
+  /** Nest by logical tree_path; synthesize project ancestors the backend does not emit. */
   function buildTree(list: SecondBrainItem[]): TreeNode[] {
-    const byPath = new Map<string, TreeNode>();
-    for (const it of list) byPath.set(it.path, { item: it, children: [] });
+    const byTree = new Map<string, TreeNode>();
+    for (const it of list) byTree.set(treeKey(it.source, it.tree_path), { item: it, children: [] });
+
+    for (const it of list) {
+      if (it.source !== "project") continue;
+      let parentPath = normalizeTreePath(it.parent_path);
+      while (parentPath) {
+        const parentKey = treeKey(it.source, parentPath);
+        if (!byTree.has(parentKey)) {
+          const syntheticItem: SecondBrainItem = {
+            ...it,
+            id: `tree:${it.source}:${parentPath}`,
+            title: parentPath.slice(parentPath.lastIndexOf("/") + 1),
+            path: `tree:${it.source}:${parentPath}`,
+            item_type: "folder",
+            updated_at: null,
+            pinned: false,
+            favorite: false,
+            excerpt: undefined,
+            relative_path: parentPath,
+            tree_path: parentPath,
+            parent_path: parentTreePath(parentPath),
+            open_mode: "external",
+            file_format: "",
+            tags: [],
+            match_reason: null,
+          };
+          byTree.set(parentKey, { item: syntheticItem, children: [] });
+        }
+        parentPath = parentTreePath(parentPath) ?? "";
+      }
+    }
+
     const roots: TreeNode[] = [];
-    for (const node of byPath.values()) {
-      const parent = node.item.parent_path ? byPath.get(node.item.parent_path) : undefined;
+    for (const node of byTree.values()) {
+      const parentPath = normalizeTreePath(node.item.parent_path);
+      const parent = parentPath ? byTree.get(treeKey(node.item.source, node.item.parent_path)) : undefined;
       if (parent) parent.children.push(node);
       else roots.push(node);
     }
@@ -218,9 +265,13 @@
     void loadActivity();
   }
 
-  function openExternal(item: SecondBrainItem) {
-    void callBridge("file_open", item.path);
-    void callBridge("second_brain_activity_record", item.id, "opened_externally");
+  async function openExternal(item: SecondBrainItem) {
+    const resp = await callBridge("file_open", item.path);
+    if (!resp.ok) {
+      addToast(resp.error.message, "error");
+      return;
+    }
+    await callBridge("second_brain_activity_record", item.id, "opened_externally");
   }
 
   // ── Search (150 ms debounce + stale-result guard) ──
@@ -229,13 +280,17 @@
     searchTimer = setTimeout(runSearch, 150);
   }
 
+  function hasActiveFilters(): boolean {
+    return !!dateFilter || !!typeFilter || !!sourceFilter || sortMode !== "newest";
+  }
+
   async function runSearch() {
     const query = searchText.trim();
-    if (!query) {
+    const seq = ++searchSeq;
+    if (!query && !hasActiveFilters()) {
       searchResults = null;
       return;
     }
-    const seq = ++searchSeq;
     const resp = await callBridge<SecondBrainItem[]>("second_brain_search", query, {
       sort: sortMode,
       source: sourceFilter,
@@ -247,7 +302,14 @@
   }
 
   function onFiltersChanged() {
-    if (searchText.trim()) void runSearch();
+    void runSearch();
+  }
+
+  function capabilityLabel(item: SecondBrainItem): string {
+    if (item.locked) return "Read-only";
+    if (item.open_mode === "image") return "Preview";
+    if (item.open_mode === "external") return "External";
+    return "Editable";
   }
 
   // ── Explorer: folder toggle + create/rename/recycle ──
@@ -262,12 +324,21 @@
       expanded = next;
       if (node.item.source === "personal") personalCreateTarget = node.item.path;
     } else {
-      if (node.item.source === "personal") personalCreateTarget = node.item.parent_path;
+      if (node.item.source === "personal") {
+        const parentPath = normalizeTreePath(node.item.parent_path);
+        const parent = items.find((it) =>
+          it.source === "personal"
+          && it.item_type === "folder"
+          && normalizeTreePath(it.tree_path) === parentPath
+        );
+        personalCreateTarget = parent?.path ?? workspace?.personal_root ?? null;
+      }
       void selectItem(node.item);
     }
   }
 
-  async function beginCreate() {
+  async function beginCreate(kind: "file" | "folder") {
+    createKind = kind;
     creating = true;
     createName = "";
     await tick();
@@ -281,6 +352,7 @@
 
   async function commitCreate() {
     const name = createName.trim();
+    const kind = createKind;
     // Clear the guard + name synchronously BEFORE the await: unmounting the
     // `{#if creating}` input fires its onblur → commitCreate re-entry, which
     // must see an already-empty createName and no-op (mirrors commitRename).
@@ -288,15 +360,32 @@
     createName = "";
     if (!name) return;
     const target = personalCreateTarget ?? workspace?.personal_root ?? "";
-    const resp = await callBridge("second_brain_create", target, name);
+    const flushed = await flushCurrentEditor();
+    if (flushed === false) {
+      addToast("Save failed — create cancelled.", "error");
+      return;
+    }
+    const fileName = kind === "file" && !/\.[^./\\]+$/.test(name) ? `${name}.md` : name;
+    const resp = kind === "folder"
+      ? await callBridge("second_brain_folder_create", target, name)
+      : await callBridge("second_brain_create", target, fileName);
     if (!resp.ok) {
       addToast(resp.error.message, "error");
       return;
     }
-    await refresh();
+    const createdPath = typeof resp.data === "string" ? resp.data : "";
+    await loadWorkspace(true);
+    if (kind === "folder" && createdPath) {
+      personalCreateTarget = createdPath;
+      expanded = new Set(expanded).add(createdPath);
+      return;
+    }
+    const createdItem = workspace?.items.find((it) => it.path === createdPath);
+    if (createdItem) await selectItem(createdItem);
   }
 
   function beginRename(item: SecondBrainItem) {
+    if (item.source !== "personal") return;
     renamingPath = item.path;
     renameName = item.title;
   }
@@ -327,7 +416,7 @@
   async function confirmRecycle() {
     const item = pendingRecycle;
     pendingRecycle = null;
-    if (!item) return;
+    if (!item || item.source !== "personal") return;
     const flushed = await flushCurrentEditor();
     if (flushed === false) {
       addToast("Save failed — recycle cancelled.", "error");
@@ -417,7 +506,7 @@
     const target = e.target as HTMLElement | null;
     const typing = !!target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
     if (typing || !selectedItem) return;
-    if (e.key === "F2") {
+    if (e.key === "F2" && selectedItem.source === "personal") {
       e.preventDefault();
       beginRename(selectedItem);
     } else if (e.key === "Delete" && selectedItem.source === "personal") {
@@ -507,7 +596,7 @@
     </div>
     <label class="sb-field">
       <span>Date</span>
-      <input class="sb-control" type="month" bind:value={dateFilter} onchange={onFiltersChanged} />
+      <input class="sb-control" type="date" bind:value={dateFilter} onchange={onFiltersChanged} />
     </label>
     <label class="sb-field">
       <span>Type</span>
@@ -602,7 +691,10 @@
         <div class="sb-section">
           <div class="sb-section-head">
             <h3 class="sb-section-title">Personal Notes</h3>
-            <button class="sb-mini-btn" type="button" disabled={personalMissing} onclick={beginCreate} title="New note in the selected folder">+ New</button>
+            <div class="sb-create-actions">
+              <button class="sb-mini-btn" type="button" disabled={personalMissing} onclick={() => beginCreate("file")} title="New file in the selected folder">+ File</button>
+              <button class="sb-mini-btn" type="button" disabled={personalMissing} onclick={() => beginCreate("folder")} title="New folder in the selected folder">+ Folder</button>
+            </div>
           </div>
           {#if personalMissing}
             <div class="sb-recovery">
@@ -617,7 +709,7 @@
               <input
                 bind:this={createInputEl}
                 class="sb-inline-input"
-                placeholder="New note name…"
+                placeholder={createKind === "folder" ? "New folder name…" : "New file name…"}
                 bind:value={createName}
                 onkeydown={(e) => { if (e.key === "Enter") commitCreate(); else if (e.key === "Escape") cancelCreate(); }}
                 onblur={commitCreate}
@@ -652,12 +744,22 @@
       {:else}
         <div class="sb-ribbon">
           <span class="sb-source-badge" class:project={selectedItem.source === "project"}>{selectedItem.source === "project" ? "Project" : "Personal"}</span>
-          <span class="sb-ribbon-title" title={selectedItem.path}>{selectedItem.title}</span>
-          {#if selectedItem.locked}<span class="sb-lock">Read-only</span>{/if}
+          <div class="sb-ribbon-heading">
+            <span class="sb-ribbon-title" title={selectedItem.path}>{selectedItem.title}</span>
+            <span class="sb-ribbon-breadcrumb" title={selectedItem.tree_path}>{selectedItem.tree_path.replaceAll("/", " › ").replaceAll("\\", " › ")}</span>
+          </div>
+          <span class="sb-ribbon-meta">{selectedItem.file_format || selectedItem.item_type}</span>
+          <span class="sb-ribbon-meta" class:locked={selectedItem.locked}>{capabilityLabel(selectedItem)}</span>
           <div class="sb-ribbon-actions">
             <button class="sb-mini-btn" type="button" onclick={() => selectedItem && togglePin(selectedItem)}>{selectedItem.pinned ? "Unpin" : "Pin"}</button>
             <button class="sb-mini-btn" type="button" onclick={() => selectedItem && toggleFavorite(selectedItem)}>{selectedItem.favorite ? "Unfavorite" : "Favorite"}</button>
-            <button class="sb-mini-btn" type="button" onclick={() => selectedItem && beginRename(selectedItem)} title="Rename (F2)">Rename</button>
+            <button
+              class="sb-mini-btn"
+              type="button"
+              onclick={() => selectedItem && beginRename(selectedItem)}
+              title={selectedItem.source === "personal" ? "Rename (F2)" : "Project documents cannot be renamed here"}
+              disabled={selectedItem.source !== "personal"}
+            >Rename</button>
           </div>
         </div>
         <label class="sb-tags">
@@ -699,7 +801,7 @@
           {#key selectedItem.path}
             <NotesEditor
               onReady={setRteEditorApi}
-              projectPath={selectedItem.project_path ?? ""}
+              projectPath={selectedItem.project_path ?? workspace?.personal_root ?? ""}
               filePath={selectedItem.path}
               fileFormat={rteContent.format}
               initialNotes={rteContent.content}
@@ -817,6 +919,7 @@
 
   .sb-section { display:flex; flex-direction:column; gap:5px; }
   .sb-section-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .sb-create-actions { display:flex; align-items:center; gap:5px; }
   .sb-section-title { margin:0; font-family:var(--font-display); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--color-muted); }
   .sb-count { font-size:10px; font-weight:800; color:var(--color-muted-light); }
 
@@ -845,8 +948,11 @@
   .sb-ribbon { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:8px; border-bottom:1px solid var(--color-hairline); }
   .sb-source-badge { flex:0 0 auto; padding:2px 8px; border-radius:999px; font-size:9.5px; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; background:var(--color-soft-pink-surface); color:var(--color-dbs-red); border:1px solid var(--color-soft-pink-border); }
   .sb-source-badge.project { background:var(--tag-green-bg); color:var(--tag-green-ink); border-color:var(--tag-green-bg); }
+  .sb-ribbon-heading { display:flex; flex:1; min-width:0; flex-direction:column; gap:1px; }
   .sb-ribbon-title { flex:1; min-width:0; font-size:14px; font-weight:800; color:var(--color-ink-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .sb-lock { flex:0 0 auto; font-size:10px; font-weight:800; color:var(--tag-amber-ink); }
+  .sb-ribbon-breadcrumb { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9.5px; color:var(--color-muted); }
+  .sb-ribbon-meta { flex:0 0 auto; font-size:9.5px; font-weight:800; color:var(--color-muted); text-transform:uppercase; }
+  .sb-ribbon-meta.locked { color:var(--tag-amber-ink); }
   .sb-ribbon-actions { display:flex; gap:6px; flex-wrap:wrap; }
 
   .sb-tags { display:flex; align-items:center; gap:8px; }

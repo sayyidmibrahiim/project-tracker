@@ -262,7 +262,7 @@ export interface SecondBrainRelated {
 
 /** Mirrors SecondBrainActivityRow(id, item_id, path, title, source, action, timestamp). */
 export interface SecondBrainActivity {
-  id: string;
+  id: number;
   item_id: string;
   path: string;
   title: string;
