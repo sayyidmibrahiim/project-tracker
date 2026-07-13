@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from core.exceptions import InvalidFileNameError
 from services.second_brain_service import SecondBrainService
 from web.js_api import JsApi
 
@@ -59,6 +60,18 @@ def test_service_create_folder_rejects_escape(tmp_path):
     with pytest.raises(Exception):
         # name with traversal must not escape the root
         svc.create_folder(root, "../escape")
+
+
+@pytest.mark.parametrize("name", ["nested/child", r"nested\child"])
+def test_service_create_folder_rejects_path_separators_before_creation(tmp_path, name):
+    root = tmp_path / "sb"
+    root.mkdir()
+    svc = _service_with_root(root)
+
+    with pytest.raises(InvalidFileNameError):
+        svc.create_folder(root, name)
+
+    assert list(root.iterdir()) == []
 
 
 # ── service: create_file (generic text) ──────────────────────────────────────

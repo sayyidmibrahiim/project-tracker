@@ -29,6 +29,7 @@ from infrastructure.filesystem import (
     discover_drone_paths,
     rename_file,
     scan_appcode_year,
+    validate_file_name,
 )
 from infrastructure.metadata_store import MetadataStore, atomic_write_json
 from services.bootstrap_service import default_second_brain
@@ -285,6 +286,7 @@ class SecondBrainService:
         silent reuse) so the UI can surface "already exists" honestly.
         """
         folder = self._require_folder()
+        validate_file_name(name)
         target = (parent / name).resolve()
         assert_within(folder, target)
         if target.exists():

@@ -294,6 +294,19 @@ class LinkBankService:
         target = self._find_link(bank, link_id)
         if target is None:
             raise ValueError(f"Link not found: {link_id}")
+        if not archived:
+            category = self._find_category(
+                bank.archived_categories, target.get("category", "")
+            )
+            if category is not None:
+                bank.archived_categories = [
+                    item
+                    for item in bank.archived_categories
+                    if item.casefold() != category.casefold()
+                ]
+                if self._find_category(bank.categories, category) is None:
+                    bank.categories.append(category)
+                target["category"] = category
         target["archived"] = "true" if archived else "false"
         target["updated_at"] = _now()
         self._store.write(bank)
@@ -434,27 +447,32 @@ class LinkBankService:
         for item in rows_data:
             if not isinstance(item, dict):
                 raise ValueError("Each imported link must be an object")
-            tags_value = item.get("tags", "")
-            if isinstance(tags_value, list):
-                tags = ",".join(str(tag).strip() for tag in tags_value if str(tag).strip())
-            else:
-                tags = str(tags_value)
-            description = str(item.get("description", item.get("details", item.get("notes", ""))))
-            rows.append(
-                {
-                    "id": str(item.get("id", "")),
-                    "name": str(item.get("name", "")),
-                    "url": str(item.get("url", "")),
-                    "category": str(item.get("category", "")),
-                    "tags": tags,
-                    "description": description,
-                    "pinned": str(item.get("pinned", "false")),
-                    "favorite": str(item.get("favorite", "false")),
-                    "archived": str(item.get("archived", "false")),
-                    "created_at": str(item.get("created_at", "")),
-                    "updated_at": str(item.get("updated_at", "")),
-                }
-            )
+            row = {
+                "id": str(item.get("id", "")),
+                "name": str(item.get("name", "")),
+                "url": str(item.get("url", "")),
+                "created_at": str(item.get("created_at", "")),
+                "updated_at": str(item.get("updated_at", "")),
+            }
+            for key in ("pinned", "favorite", "archived"):
+                if key in item:
+                    row[key] = str(item[key])
+            if "category" in item:
+                row["category"] = str(item["category"])
+            if "tags" in item:
+                tags_value = item["tags"]
+                row["tags"] = (
+                    ",".join(
+                        str(tag).strip() for tag in tags_value if str(tag).strip()
+                    )
+                    if isinstance(tags_value, list)
+                    else str(tags_value)
+                )
+            for key in ("description", "details", "notes"):
+                if key in item:
+                    row["description"] = str(item[key])
+                    break
+            rows.append(row)
         return rows, categories, archived_categories
 
     # ── internals: reconciliation (rules 4-8) ────────────────────────────
@@ -500,11 +518,12 @@ class LinkBankService:
         def resolve_row_category(row: dict[str, str]) -> None:
             # ponytail: only called at classification-success points (add/update),
             # so a conflicting row never registers its novel category (Finding A).
-            row["category"] = self._resolve_category(
-                str(row.get("category", "")), canonical_categories_cf, new_categories_cf
-            )
-            if row["category"].casefold() in archived_category_keys:
-                row["archived"] = "true"
+            if "category" in row:
+                row["category"] = self._resolve_category(
+                    str(row["category"]), canonical_categories_cf, new_categories_cf
+                )
+                if row["category"].casefold() in archived_category_keys:
+                    row["archived"] = "true"
 
         seen_ids: set[str] = set()
         seen_urls: set[str] = set()
@@ -635,10 +654,12 @@ class LinkBankService:
     def _apply_row(target: dict[str, str], row: dict[str, str], now: str) -> None:
         target["name"] = row.get("name") or target.get("name", "")
         target["url"] = row.get("url") or target.get("url", "")
-        target["category"] = row.get("category") or target.get("category", "")
-        target["tags"] = row.get("tags") or target.get("tags", "")
-        description = row.get("description", "")
-        if description:
+        if "category" in row:
+            target["category"] = row["category"]
+        if "tags" in row:
+            target["tags"] = row["tags"]
+        if "description" in row:
+            description = row["description"]
             target["notes"] = description
             target["details"] = description
         for flag in ("pinned", "favorite", "archived"):

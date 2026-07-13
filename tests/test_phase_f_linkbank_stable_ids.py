@@ -318,6 +318,22 @@ class TestLinkAndCategoryArchiveRestore:
         with pytest.raises(ValueError, match="not found"):
             service.restore_link("missing")
 
+    def test_restore_link_reactivates_category_without_restoring_sibling_links(
+        self, tmp_path: Path
+    ):
+        service = self._service(tmp_path)
+        first = service.add_link({"name": "A", "url": "https://a.com", "category": "ops"})
+        second = service.add_link({"name": "B", "url": "https://b.com", "category": "ops"})
+        service.category_archive("ops")
+
+        restored = service.restore_link(first["id"])
+        bank = service.get_linkbank()
+
+        assert restored["archived"] == "false"
+        assert bank["categories"] == ["ops"]
+        assert bank["archived_categories"] == []
+        assert next(link for link in bank["links"] if link["id"] == second["id"])["archived"] == "true"
+
     def test_category_archive_then_restore_reactivates_links(self, tmp_path: Path):
         service = self._service(tmp_path)
         service.add_link({"name": "A", "url": "https://a.com", "category": "ops"})
@@ -716,8 +732,8 @@ class TestMergeImportConflictCategoryLeak:
 # ── Fix Round 2, Finding B: merge-update must not wipe category/tags ─────
 
 
-class TestApplyRowPreservesCategoryAndTags:
-    """Merge-update with no category/tags in the source row keeps existing values."""
+class TestApplyRowPreservesOptionalTextFields:
+    """Absent optional text fields preserve values; explicit blanks clear them."""
 
     def _service(self, tmp_path: Path) -> LinkBankService:
         return LinkBankService(LinkBankStore(path=tmp_path / "links.json"))
@@ -725,7 +741,15 @@ class TestApplyRowPreservesCategoryAndTags:
     def test_merge_update_without_category_or_tags_preserves_existing(self, tmp_path: Path):
         service = self._service(tmp_path)
         link = service.add_link(
-            {"name": "Old Name", "url": "https://example.com", "category": "ops", "tags": "a,b"}
+            {
+                "name": "Old Name",
+                "url": "https://example.com",
+                "category": "ops",
+                "tags": "a,b",
+                "details": "old description",
+                "pinned": "true",
+                "favorite": "true",
+            }
         )
         content = json.dumps(
             {"links": [{"id": link["id"], "name": "New Name", "url": "https://example.com"}]}
@@ -739,6 +763,79 @@ class TestApplyRowPreservesCategoryAndTags:
         assert updated["name"] == "New Name"
         assert updated["category"] == "ops"
         assert updated["tags"] == "a,b"
+        assert updated["notes"] == "old description"
+        assert updated["details"] == "old description"
+        assert updated["pinned"] == "true"
+        assert updated["favorite"] == "true"
+
+    @pytest.mark.parametrize("format_name", ["json", "csv"])
+    def test_merge_update_explicit_blanks_clear_optional_text_fields(
+        self, tmp_path: Path, format_name: str
+    ):
+        service = self._service(tmp_path)
+        link = service.add_link(
+            {
+                "name": "Old Name",
+                "url": "https://example.com",
+                "category": "ops",
+                "tags": "a,b",
+                "details": "old description",
+            }
+        )
+        if format_name == "json":
+            content = json.dumps(
+                {
+                    "links": [
+                        {
+                            "id": link["id"],
+                            "name": "New Name",
+                            "url": "https://example.com",
+                            "category": "",
+                            "tags": "",
+                            "description": "",
+                        }
+                    ]
+                }
+            )
+        else:
+            content = (
+                "id,name,url,category,tags,description\n"
+                f'{link["id"]},New Name,https://example.com,,,\n'
+            )
+
+        result = service.merge_import(format_name, content)
+
+        assert result["updated"] == 1
+        updated = next(
+            item for item in service.get_linkbank()["links"] if item["id"] == link["id"]
+        )
+        assert updated["category"] == ""
+        assert updated["tags"] == ""
+        assert updated["notes"] == ""
+        assert updated["details"] == ""
+
+    def test_csv_merge_update_without_optional_columns_preserves_existing(self, tmp_path: Path):
+        service = self._service(tmp_path)
+        link = service.add_link(
+            {
+                "name": "Old Name",
+                "url": "https://example.com",
+                "category": "ops",
+                "tags": "a,b",
+                "details": "old description",
+            }
+        )
+        content = "id,name,url\n" f'{link["id"]},New Name,https://example.com\n'
+
+        service.merge_import("csv", content)
+
+        updated = next(
+            item for item in service.get_linkbank()["links"] if item["id"] == link["id"]
+        )
+        assert updated["category"] == "ops"
+        assert updated["tags"] == "a,b"
+        assert updated["notes"] == "old description"
+        assert updated["details"] == "old description"
 
 
 # ── Fix Round 2, Finding C: update_linkbank archived-category parity ────
