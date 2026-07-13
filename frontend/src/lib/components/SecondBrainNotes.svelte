@@ -926,6 +926,12 @@
   .sb-explorer, .sb-editor, .sb-shelf { min-width:0; min-height:0; background:var(--color-workspace-panel); border:1px solid var(--color-border); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05); overflow-y:auto; }
   .sb-explorer, .sb-shelf { padding:12px; display:flex; flex-direction:column; gap:14px; }
   .sb-editor { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  /* RTE mengisi tinggi kolom editor penuh di Second Brain saja.
+     .sb-editor class hanya ada di sini -> ProjectDetails/NotesEditor asli aman.
+     Rantai: .ne-root fill .sb-editor -> .ne-editor-host fill root -> .ne-textarea fill host. */
+  :global(.sb-editor .ne-root) { flex:1 1 auto; min-height:0; }
+  :global(.sb-editor .ne-editor-host) { flex:1 1 auto; min-height:0; display:flex; }
+  :global(.sb-editor .ne-editor-host .ne-textarea) { flex:1 1 auto; min-height:280px; max-height:none; }
 
   .sb-section { display:flex; flex-direction:column; gap:5px; }
   .sb-section-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
