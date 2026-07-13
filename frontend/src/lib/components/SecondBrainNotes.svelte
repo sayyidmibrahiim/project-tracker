@@ -33,6 +33,7 @@
   let errorMessage: string = $state("");
   let workspace: SecondBrainWorkspace | null = $state(null);
   let selectedItem: SecondBrainItem | null = $state(null);
+  let rootEl: HTMLElement | null = $state(null);
 
   // ── Editor payload for the current selection ──
   let rteContent: RteFileContent | null = $state(null);
@@ -132,6 +133,7 @@
       editorError = "Save failed — kept the current document open.";
       return;
     }
+    if (token !== loadSeq) return;
     // 4: assign the requested item and clear the old payload.
     selectedItem = item;
     rteContent = null;
@@ -308,32 +310,36 @@
     const path = renamingPath;
     renamingPath = null;
     if (!path || !name) return;
+    const flushed = await flushCurrentEditor();
+    if (flushed === false) {
+      addToast("Save failed — rename cancelled.", "error");
+      return;
+    }
     const resp = await callBridge("second_brain_rename", path, name);
     if (!resp.ok) {
       addToast(resp.error.message, "error");
       return;
     }
-    await refresh();
+    clearSelection();
+    await loadWorkspace(true);
   }
 
   async function confirmRecycle() {
     const item = pendingRecycle;
     pendingRecycle = null;
     if (!item) return;
+    const flushed = await flushCurrentEditor();
+    if (flushed === false) {
+      addToast("Save failed — recycle cancelled.", "error");
+      return;
+    }
     const resp = await callBridge("second_brain_recycle", item.path);
     if (!resp.ok) {
       addToast(resp.error.message, "error");
       return;
     }
-    if (selectedItem?.path === item.path) {
-      selectedItem = null;
-      rteContent = null;
-      rteDocPayload = null;
-      imagePreview = null;
-      related = [];
-      activity = [];
-    }
-    await refresh();
+    clearSelection();
+    await loadWorkspace(true);
   }
 
   // ── Sidecar metadata: pin / favorite / tags ──
@@ -402,13 +408,14 @@
 
   // ── Keyboard: Ctrl+F focus · F2 rename · Delete recycle ──
   function onKeydown(e: KeyboardEvent) {
+    if (!rootEl || rootEl.offsetParent === null) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
       e.preventDefault();
       searchInputEl?.focus();
       return;
     }
     const target = e.target as HTMLElement | null;
-    const typing = !!target && (target.tagName === "INPUT" || target.isContentEditable);
+    const typing = !!target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
     if (typing || !selectedItem) return;
     if (e.key === "F2") {
       e.preventDefault();
@@ -420,14 +427,26 @@
   }
 
   // ── Public API (Task 10 shell drives these) ──
-  export async function refresh(): Promise<void> {
+  function clearSelection() {
+    selectedItem = null;
+    rteContent = null;
+    rteDocPayload = null;
+    imagePreview = null;
+    related = [];
+    activity = [];
+    rteEditorFlush = undefined;
+  }
+
+  async function loadWorkspace(force: boolean): Promise<void> {
     loadState = "loading";
     if (!isPywebviewReady() && !(await waitForPywebviewReady())) {
       loadState = "error";
       errorMessage = "pywebview bridge unavailable.";
       return;
     }
-    const resp = await callBridge<SecondBrainWorkspace>("second_brain_workspace");
+    const resp = await callBridge<SecondBrainWorkspace>(
+      force ? "second_brain_refresh" : "second_brain_workspace",
+    );
     if (!resp.ok) {
       loadState = "error";
       errorMessage = resp.error.message;
@@ -439,6 +458,21 @@
     if (selectedItem && workspace) {
       const updated = workspace.items.find((it) => it.path === selectedItem!.path);
       if (updated) selectedItem = updated;
+      else clearSelection();
+    }
+  }
+
+  export async function refresh(): Promise<void> {
+    setInteractionLock(true);
+    try {
+      const flushed = await flushCurrentEditor();
+      if (flushed === false) {
+        addToast("Save failed — refresh cancelled.", "error");
+        return;
+      }
+      await loadWorkspace(true);
+    } finally {
+      setInteractionLock(false);
     }
   }
 
@@ -458,7 +492,7 @@
   });
 </script>
 
-<section class="sb-notes" aria-label="Second Brain notes workspace">
+<section bind:this={rootEl} class="sb-notes" aria-label="Second Brain notes workspace">
   <div class="sb-command">
     <div class="sb-search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>

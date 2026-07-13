@@ -302,6 +302,41 @@ test("Selection flushes the current editor BEFORE assigning/loading the next ite
   assert.match(body, /flushed === false/);
 });
 
+test("Selection rechecks its monotonic token after async flush before assigning", () => {
+  const body = fnBody(NOTES, "selectItem");
+  const flushIdx = body.search(/await\s+flushCurrentEditor\s*\(/);
+  const tokenCheckIdx = body.search(/if\s*\(\s*token\s*!==\s*loadSeq\s*\)\s*return/);
+  const assignIdx = body.search(/selectedItem\s*=\s*item/);
+  assert.ok(flushIdx >= 0 && tokenCheckIdx > flushIdx, "token must be rechecked after flush");
+  assert.ok(assignIdx > tokenCheckIdx, "stale selection must return before assignment");
+});
+
+test("Hidden mounted Notes ignores global shortcuts", () => {
+  const body = fnBody(NOTES, "onKeydown");
+  assert.match(body, /rootEl\.offsetParent\s*===\s*null/);
+  assert.match(NOTES, /bind:this=\{rootEl\}/);
+});
+
+for (const functionName of ["commitRename", "confirmRecycle"]) {
+  test(`${functionName} flushes dirty editor and aborts before filesystem mutation on failure`, () => {
+    const body = fnBody(NOTES, functionName);
+    const flushIdx = body.search(/await\s+flushCurrentEditor\s*\(/);
+    const abortIdx = body.search(/flushed\s*===\s*false[\s\S]*?return/);
+    const bridgeIdx = body.search(/await\s+callBridge[\s\S]*?"second_brain_(?:rename|recycle)"/);
+    assert.ok(flushIdx >= 0, `${functionName} must flush first`);
+    assert.ok(abortIdx > flushIdx && bridgeIdx > abortIdx, `${functionName} must abort before bridge mutation`);
+  });
+}
+
+test("Public Notes refresh flushes then forces backend reindex", () => {
+  const body = fnBody(NOTES, "refresh");
+  const flushIdx = body.search(/await\s+flushCurrentEditor\s*\(/);
+  const refreshIdx = body.search(/await\s+loadWorkspace\s*\(true\)/);
+  assert.ok(flushIdx >= 0 && refreshIdx > flushIdx);
+  assert.match(body, /flushed\s*===\s*false/);
+  assert.match(fnBody(NOTES, "loadWorkspace"), /force\s*\?\s*"second_brain_refresh"/);
+});
+
 test("Selection uses the second-brain-rte interaction lock", () => {
   assert.match(NOTES, /"second-brain-rte"/);
   assert.match(NOTES, /app:interaction-lock/);
