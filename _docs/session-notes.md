@@ -8,6 +8,28 @@
 
 ---
 
+## 2026-07-13 (Second Brain RTE height fix — branch `second-brain/complete-menu`)
+
+**Now:** User live-checked Second Brain and reported the RTE textarea was still too short (didn't fill the editor column — empty space hung below it). Fix committed `971079b`. User confirmed PASS.
+
+**Root cause:** `NotesEditor.svelte:1137` `.ne-root` is `display:flex; flex-direction:column` only — no `flex:1`, no `min-height:0`. Round 1 override hit `.ne-editor-host` + `.ne-textarea` but skipped `.ne-root`, so the root took content-height and the textarea never got the column's leftover space. The shared `.ne-textarea` cap (`max-height:300px` at `NotesEditor.svelte:1185`) stayed in effect.
+
+**Fix (single file, +6 lines):** `frontend/src/lib/components/SecondBrainNotes.svelte` `<style>` block — scoped override chaining the whole RTE mount to fill `.sb-editor`:
+```css
+:global(.sb-editor .ne-root) { flex:1 1 auto; min-height:0; }
+:global(.sb-editor .ne-editor-host) { flex:1 1 auto; min-height:0; display:flex; }
+:global(.sb-editor .ne-editor-host .ne-textarea) { flex:1 1 auto; min-height:280px; max-height:none; }
+```
+Selector `.sb-editor` only exists in `SecondBrainNotes.svelte:928`, so Project Details / other menus keep the 300px cap. NotesEditor.svelte, ProjectDetails.svelte, styles.css, backend, bridge — untouched.
+
+**Verify:** svelte-check 0 errors / 13 baseline warnings; production build green (256 modules, known warnings only); app confirmed closed before build per RTE safety rule. Pre-commit: svelte-check PASS, pytest `--lf` hit known baseline `test_project_list_returns_converted_rows` (non-blocking). User manual PASS.
+
+**Next:** Continue the rest of the Second Brain live checklist; merge only after all checks pass and user explicitly approves.
+
+**active_menu:** second-brain
+
+---
+
 ## 2026-07-13 (Second Brain completion — branch `second-brain/complete-menu`)
 
 **Now:** Tasks 1–10 plus final whole-branch review fixes are implemented. Automated Task 11 gate is green: focused backend 301 passed; Second Brain frontend contract 93/93; full frontend 281/281; svelte-check 0 errors / 13 baseline warnings; focused Python compile and `git diff --check` clean. Production build is clean (256 modules; known warnings only), and the app is relaunched for user live verification. Branch is not merged.
