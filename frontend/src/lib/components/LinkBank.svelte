@@ -285,7 +285,11 @@
       return;
     }
     newCategoryName = "";
-    const canonical = resp.data?.categories.find((category) => category.toLocaleLowerCase() === name.toLocaleLowerCase()) ?? name;
+    const returnedCategories = [
+      ...(resp.data?.categories ?? []),
+      ...(resp.data?.archived_categories ?? []),
+    ];
+    const canonical = returnedCategories.find((category) => category.toLocaleLowerCase() === name.toLocaleLowerCase()) ?? name;
     categoryFilter = canonical;
     await refresh();
   }

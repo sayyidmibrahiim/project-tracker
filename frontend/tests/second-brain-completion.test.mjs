@@ -591,6 +591,7 @@ test("LinkBank exposes the public refresh(): Promise<void> API", () => {
 test("Category create selects canonical backend spelling", () => {
   const body = fnBody(LINKBANK, "createCategory");
   assert.match(body, /resp\.data\??\.categories/);
+  assert.match(body, /resp\.data\??\.archived_categories/);
   assert.match(body, /categoryFilter\s*=\s*canonical/);
 });
 
