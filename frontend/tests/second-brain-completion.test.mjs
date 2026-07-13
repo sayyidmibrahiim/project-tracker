@@ -21,6 +21,7 @@ const TYPES = readFileSync(resolve(__dirname, "../src/lib/types.ts"), "utf8");
 const NOTES = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrainNotes.svelte"), "utf8");
 const LINKBANK = readFileSync(resolve(__dirname, "../src/lib/components/LinkBank.svelte"), "utf8");
 const SHELL = readFileSync(resolve(__dirname, "../src/lib/components/SecondBrain.svelte"), "utf8");
+const SETTINGS = readFileSync(resolve(__dirname, "../src/lib/components/Settings.svelte"), "utf8");
 
 /** Grab the `<style>…</style>` block of a Svelte component. */
 function styleBlock(source) {
@@ -416,6 +417,12 @@ test("Recovery affordances expose Browse folder and Use default folder", () => {
   assert.match(NOTES, /Browse folder/);
   assert.match(NOTES, /Use default folder/);
   assert.match(NOTES, /"second_brain_use_default_folder"/);
+});
+
+test("Settings shows the approved Documents default while retaining folder override", () => {
+  assert.match(SETTINGS, /Documents\\Project Tracker\\Second Brain/);
+  assert.doesNotMatch(SETTINGS, /%APPDATA%\\ProjectTrackerDBS\\SecondBrain/);
+  assert.match(SETTINGS, /browseFolder\("second_brain_folder"\)/);
 });
 
 test("Context shelf exposes Related and Activity backed by their bridges", () => {
