@@ -58,6 +58,7 @@
 
   // ── Explorer interaction state ──
   let expanded: Set<string> = $state(new Set());
+  let treeFocusItem: SecondBrainItem | null = $state(null);
   // Personal-only create target (a personal folder path, or null → personal_root).
   let personalCreateTarget: string | null = $state(null);
   let creating: boolean = $state(false);
@@ -182,6 +183,7 @@
     }
     if (token !== loadSeq) return;
     // 4: assign the requested item and clear the old payload.
+    treeFocusItem = item;
     selectedItem = item;
     rteContent = null;
     rteDocPayload = null;
@@ -317,6 +319,7 @@
   // reassign `selectedItem`, so an open (possibly dirty) editor is never unmounted
   // without going through the flush contract in selectItem().
   function onNodeActivate(node: TreeNode) {
+    treeFocusItem = node.item;
     if (node.item.item_type === "folder") {
       const next = new Set(expanded);
       if (next.has(node.item.path)) next.delete(node.item.path);
@@ -409,7 +412,6 @@
       addToast(resp.error.message, "error");
       return;
     }
-    clearSelection();
     await loadWorkspace(true);
   }
 
@@ -427,7 +429,6 @@
       addToast(resp.error.message, "error");
       return;
     }
-    clearSelection();
     await loadWorkspace(true);
   }
 
@@ -505,13 +506,15 @@
     }
     const target = e.target as HTMLElement | null;
     const typing = !!target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
-    if (typing || !selectedItem) return;
-    if (e.key === "F2" && selectedItem.source === "personal") {
+    if (typing) return;
+    const mutationTarget = treeFocusItem ?? selectedItem;
+    if (!mutationTarget || mutationTarget.source !== "personal") return;
+    if (e.key === "F2") {
       e.preventDefault();
-      beginRename(selectedItem);
-    } else if (e.key === "Delete" && selectedItem.source === "personal") {
+      beginRename(mutationTarget);
+    } else if (e.key === "Delete") {
       e.preventDefault();
-      pendingRecycle = selectedItem;
+      pendingRecycle = mutationTarget;
     }
   }
 
@@ -548,6 +551,12 @@
       const updated = workspace.items.find((it) => it.path === selectedItem!.path);
       if (updated) selectedItem = updated;
       else clearSelection();
+    }
+    if (treeFocusItem && workspace) {
+      treeFocusItem = workspace.items.find((it) => it.path === treeFocusItem!.path) ?? null;
+    }
+    if (searchResults !== null || searchText.trim() || hasActiveFilters()) {
+      await runSearch();
     }
   }
 
@@ -875,6 +884,7 @@
         class:selected={node.item.item_type === "folder" ? personalCreateTarget === node.item.path : selectedItem?.path === node.item.path}
         style="padding-left:{8 + depth * 12}px"
         type="button"
+        title={node.item.source === "personal" ? `${node.item.title} — F2 rename, Delete recycle` : node.item.title}
         onclick={() => onNodeActivate(node)}
       >
         <span class="sb-row-icon" aria-hidden="true">
@@ -892,7 +902,7 @@
 {#if pendingRecycle}
   <ConfirmModal
     title="Move to recycle bin?"
-    actionLabel="Recycle note"
+      actionLabel="Recycle item"
     targetName={pendingRecycle.title}
     reversible={true}
     onConfirm={confirmRecycle}

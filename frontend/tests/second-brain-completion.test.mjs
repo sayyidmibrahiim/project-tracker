@@ -342,6 +342,12 @@ test("Public Notes refresh flushes then forces backend reindex", () => {
   assert.match(fnBody(NOTES, "loadWorkspace"), /force\s*\?\s*"second_brain_refresh"/);
 });
 
+test("Workspace reindex reruns active search/filter results", () => {
+  const body = fnBody(NOTES, "loadWorkspace");
+  assert.match(body, /searchResults\s*!==\s*null|hasActiveFilters\s*\(\)/);
+  assert.match(body, /await\s+runSearch\s*\(\)/);
+});
+
 test("Selection uses the second-brain-rte interaction lock", () => {
   assert.match(NOTES, /"second-brain-rte"/);
   assert.match(NOTES, /app:interaction-lock/);
@@ -449,8 +455,10 @@ test("Inline rename/recycle bridges and pin/favorite/tags sidecar updates exist"
 });
 
 test("Delete key recycle is gated to Personal items only", () => {
-  // Delete handling must check source === "personal" before arming recycle.
-  assert.match(NOTES, /"Delete"[\s\S]{0,160}source === "personal"/);
+  const body = fnBody(NOTES, "onKeydown");
+  const guardIdx = body.search(/mutationTarget\.source\s*!==\s*"personal"/);
+  const deleteIdx = body.search(/e\.key\s*===\s*"Delete"/);
+  assert.ok(guardIdx >= 0 && deleteIdx > guardIdx);
 });
 
 test("Scoped CSS uses the approved explorer width clamp, design tokens, reduced motion, responsive shelf", () => {
@@ -521,8 +529,17 @@ test("project items cannot enter rename or recycle flows", () => {
   const keyBody = fnBody(NOTES, "onKeydown");
   assert.match(renameBody, /item\.source\s*!==\s*"personal"[^\n]*return/);
   assert.match(recycleBody, /item\.source\s*!==\s*"personal"[^\n]*return/);
-  assert.match(keyBody, /e\.key\s*===\s*"F2"\s*&&\s*selectedItem\.source\s*===\s*"personal"/);
+  assert.match(keyBody, /mutationTarget\.source\s*!==\s*"personal"[^\n]*return/);
   assert.match(NOTES, /disabled=\{selectedItem\.source\s*!==\s*"personal"\}[^>]*>Rename<|>Rename<[^\n]*disabled=\{selectedItem\.source\s*!==\s*"personal"\}/);
+});
+
+test("Personal folders become the focused F2/Delete mutation target", () => {
+  assert.match(NOTES, /let\s+treeFocusItem:\s*SecondBrainItem\s*\|\s*null/);
+  assert.match(fnBody(NOTES, "onNodeActivate"), /treeFocusItem\s*=\s*node\.item/);
+  const keyboard = fnBody(NOTES, "onKeydown");
+  assert.match(keyboard, /treeFocusItem/);
+  assert.match(keyboard, /beginRename\(mutationTarget\)/);
+  assert.match(keyboard, /pendingRecycle\s*=\s*mutationTarget/);
 });
 
 test("recordOpen records \"opened\" for inline-loaded/previewed selections, nothing for external", () => {
@@ -569,6 +586,12 @@ test("Related reason and Activity action labels use a global underscore-to-space
 
 test("LinkBank exposes the public refresh(): Promise<void> API", () => {
   assert.match(LINKBANK, /export async function refresh\s*\(\s*\)\s*:\s*Promise<void>/);
+});
+
+test("Category create selects canonical backend spelling", () => {
+  const body = fnBody(LINKBANK, "createCategory");
+  assert.match(body, /resp\.data\??\.categories/);
+  assert.match(body, /categoryFilter\s*=\s*canonical/);
 });
 
 test("LinkBank references every link-bank bridge facade by exact name", () => {

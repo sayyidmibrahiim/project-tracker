@@ -285,7 +285,8 @@
       return;
     }
     newCategoryName = "";
-    categoryFilter = name;
+    const canonical = resp.data?.categories.find((category) => category.toLocaleLowerCase() === name.toLocaleLowerCase()) ?? name;
+    categoryFilter = canonical;
     await refresh();
   }
 
